@@ -2,6 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Make split gutter handles more visible */
+.gutter {
+  @apply bg-slate-700 hover:bg-slate-600 transition-colors cursor-col-resize;
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.1) 2px,
+    rgba(255, 255, 255, 0.1) 4px
+  );
+}
+
+.gutter.gutter-horizontal {
+  @apply cursor-col-resize;
+}
+
+.gutter.gutter-vertical {
+  @apply cursor-row-resize;
+}
+
+/* Hide scrollbars globally */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
 html,
 body,
 #root {

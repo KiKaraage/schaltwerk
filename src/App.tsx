@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import './App.css'
 import { Sidebar } from './components/Sidebar'
 import { TerminalGrid } from './components/TerminalGrid'
-import { DiffPanel } from './components/DiffPanel'
+import { LazyGitPanel } from './components/LazyGitPanel'
 import Split from 'react-split'
 import { NewSessionModal } from './components/NewSessionModal'
 
@@ -24,12 +24,12 @@ export default function App() {
       <div className="relative h-full">
         {/* Unified session ring around center + right (Claude, Terminal, Diff) */}
         <div id="work-ring" className="absolute inset-2 rounded-xl pointer-events-none" />
-        <Split className="h-full w-full flex" sizes={[62, 38]} minSize={[360, 320]} gutterSize={6}>
+        <Split className="h-full w-full flex" sizes={[55, 45]} minSize={[400, 400]} gutterSize={8}>
           <main className="bg-slate-950 h-full">
             <TerminalGrid />
           </main>
           <section className="overflow-hidden">
-            <DiffPanel />
+            <LazyGitPanel />
           </section>
         </Split>
       </div>

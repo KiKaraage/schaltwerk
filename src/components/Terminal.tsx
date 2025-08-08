@@ -73,12 +73,13 @@ export function Terminal({ terminalId, className = '' }: TerminalProps) {
         });
         resizeObserver.observe(termRef.current);
 
-        // Cleanup
+        // Cleanup - but don't close the terminal process, just clean up the UI
         return () => {
             unlisten.then(fn => fn());
             terminal.current?.dispose();
             resizeObserver.disconnect();
-            invoke('close_terminal', { id: terminalId }).catch(console.error);
+            // Don't close the terminal process - keep it running in background
+            // invoke('close_terminal', { id: terminalId }).catch(console.error);
         };
     }, [terminalId]);
 
