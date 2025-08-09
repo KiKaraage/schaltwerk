@@ -1,21 +1,13 @@
-use log::{info, error};
+use log::{error, info};
 
 /// Cleanup all running terminals
 pub async fn cleanup_all_terminals() {
     info!("Cleaning up all terminals...");
     
-    // Get all terminal IDs
-    let terminal_ids: Vec<String> = {
-        let ptys = crate::pty::PTYS.lock().await;
-        ptys.keys().cloned().collect()
-    };
-    
-    // Close each terminal
-    for id in terminal_ids {
-        if let Err(e) = crate::pty::close_terminal(&id).await {
-            error!("Failed to close terminal {id}: {e}");
-        } else {
-            info!("Closed terminal: {id}");
+    // Use the terminal manager to close all terminals
+    if let Some(manager) = crate::TERMINAL_MANAGER.get() {
+        if let Err(e) = manager.close_all().await {
+            error!("Failed to close all terminals: {e}");
         }
     }
     
