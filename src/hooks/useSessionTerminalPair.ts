@@ -25,30 +25,35 @@ export function useSessionTerminalPair() {
         
         // Create top terminal if it doesn't exist
         if (!allTerminals.has(ids.top)) {
+            console.log(`[TerminalPair] Creating top terminal: ${ids.top}`)
             await invoke('create_terminal', { 
                 id: ids.top, 
                 cwd: repoPath
             }).catch(console.error)
             allTerminals.set(ids.top, true)
             
-            // Auto-start Claude in the top orchestrator terminal
-            if (ids.top === 'orchestrator-top') {
-                setTimeout(async () => {
-                    await invoke('write_terminal', { 
-                        id: ids.top, 
-                        data: 'claude\r\n'
-                    }).catch(console.error)
-                }, 500)
-            }
+            // Auto-start Claude in ALL top terminals (not just orchestrator)
+            console.log(`[TerminalPair] Starting Claude in terminal: ${ids.top}`)
+            setTimeout(async () => {
+                await invoke('write_terminal', { 
+                    id: ids.top, 
+                    data: 'claude\r\n'
+                }).catch(console.error)
+            }, 500)
+        } else {
+            console.log(`[TerminalPair] Terminal already exists: ${ids.top}`)
         }
         
         // Create bottom terminal if it doesn't exist
         if (!allTerminals.has(ids.bottom)) {
+            console.log(`[TerminalPair] Creating bottom terminal: ${ids.bottom}`)
             await invoke('create_terminal', { 
                 id: ids.bottom, 
                 cwd: repoPath
             }).catch(console.error)
             allTerminals.set(ids.bottom, true)
+        } else {
+            console.log(`[TerminalPair] Terminal already exists: ${ids.bottom}`)
         }
     }, [allTerminals])
 
@@ -67,9 +72,11 @@ export function useSessionTerminalPair() {
                 : { top: `session-${detail.payload}-top`, bottom: `session-${detail.payload}-bottom` }
             
             // Ensure the new terminals exist before switching
+            console.log(`[TerminalPair] Switching from ${currentTerminalIds.top}/${currentTerminalIds.bottom} to ${newIds.top}/${newIds.bottom}`)
             ensureTerminalsExist(newIds).then(() => {
                 // Switch to the new terminals
                 if (newIds.top !== currentTerminalIds.top) {
+                    console.log(`[TerminalPair] Terminal IDs updated`)
                     setCurrentTerminalIds(newIds)
                 }
             })

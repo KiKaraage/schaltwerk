@@ -70,11 +70,10 @@ export function Terminal({ terminalId, className = '' }: TerminalProps) {
             }
         });
 
-        // Send input to backend only if this terminal is visible
+        // Send input to backend
         terminal.current.onData((data) => {
-            if (isVisible) {
-                invoke('write_terminal', { id: terminalId, data }).catch(console.error);
-            }
+            console.log(`[Terminal ${terminalId}] Input received, data length=${data.length}`);
+            invoke('write_terminal', { id: terminalId, data }).catch(console.error);
         });
 
         // Handle terminal resize - only send if size actually changed
@@ -121,7 +120,9 @@ export function Terminal({ terminalId, className = '' }: TerminalProps) {
         const observer = new IntersectionObserver(
             (entries) => {
                 entries.forEach((entry) => {
-                    setIsVisible(entry.isIntersecting);
+                    const newVisibility = entry.isIntersecting;
+                    console.log(`[Terminal ${terminalId}] Visibility changed: ${newVisibility}, ratio=${entry.intersectionRatio}`);
+                    setIsVisible(newVisibility);
                 });
             },
             { threshold: 0.1 }
@@ -132,7 +133,7 @@ export function Terminal({ terminalId, className = '' }: TerminalProps) {
         return () => {
             observer.disconnect();
         };
-    }, []);
+    }, [terminalId]);
 
     return <div ref={termRef} className={`h-full w-full ${className}`} />;
 }

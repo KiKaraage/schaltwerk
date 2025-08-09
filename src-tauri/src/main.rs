@@ -5,6 +5,7 @@
 #![warn(unused_variables)]
 
 mod cleanup;
+mod logging;
 mod pty;
 
 #[tauri::command]
@@ -28,6 +29,10 @@ async fn close_terminal(id: String) -> Result<(), String> {
 }
 
 fn main() {
+    // Initialize logging
+    logging::init_logging();
+    log::info!("Para UI starting...");
+    
     // Create cleanup guard that will run on exit
     let _cleanup_guard = cleanup::TerminalCleanupGuard;
 

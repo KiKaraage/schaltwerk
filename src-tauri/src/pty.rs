@@ -1,4 +1,5 @@
 use anyhow::Result;
+use log::{debug, info, warn};
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -18,6 +19,8 @@ pub static WRITERS: LazyLock<tauri::async_runtime::Mutex<HashMap<String, Box<dyn
     LazyLock::new(|| tauri::async_runtime::Mutex::new(HashMap::new()));
 
 pub async fn create_terminal(app: AppHandle, id: String, cwd: String) -> Result<String, String> {
+    info!("Creating terminal: id={id}, cwd={cwd}");
+    
     let pty_system = native_pty_system();
     // Start with a more reasonable default size that's closer to typical terminal dimensions
     let pair = pty_system
@@ -37,7 +40,7 @@ pub async fn create_terminal(app: AppHandle, id: String, cwd: String) -> Result<
         })
         .unwrap_or_else(|| "/bin/zsh".to_string());
 
-    println!("Starting shell: {shell_path}");
+    debug!("Starting shell: {shell_path}");
 
     // Create the command builder for the shell
     let mut cmd = CommandBuilder::new(&shell_path);
@@ -106,6 +109,7 @@ pub async fn create_terminal(app: AppHandle, id: String, cwd: String) -> Result<
         }
     });
 
+    info!("Terminal created successfully: id={id}");
     Ok(id)
 }
 
@@ -142,7 +146,7 @@ pub async fn close_terminal(id: &str) -> Result<(), String> {
         if let Some(mut child) = m.remove(id) {
             // Try to kill the child process
             if let Err(e) = child.kill() {
-                eprintln!("Warning: Failed to kill terminal process {id}: {e:?}");
+                warn!("Failed to kill terminal process {id}: {e:?}");
             }
             // Wait for the process to exit
             let _ = child.wait();

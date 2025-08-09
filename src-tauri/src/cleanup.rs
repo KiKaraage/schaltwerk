@@ -1,6 +1,8 @@
+use log::{info, error};
+
 /// Cleanup all running terminals
 pub async fn cleanup_all_terminals() {
-    println!("Cleaning up all terminals...");
+    info!("Cleaning up all terminals...");
     
     // Get all terminal IDs
     let terminal_ids: Vec<String> = {
@@ -11,13 +13,13 @@ pub async fn cleanup_all_terminals() {
     // Close each terminal
     for id in terminal_ids {
         if let Err(e) = crate::pty::close_terminal(&id).await {
-            eprintln!("Failed to close terminal {id}: {e}");
+            error!("Failed to close terminal {id}: {e}");
         } else {
-            println!("Closed terminal: {id}");
+            info!("Closed terminal: {id}");
         }
     }
     
-    println!("Terminal cleanup complete");
+    info!("Terminal cleanup complete");
 }
 
 /// Ensure cleanup happens even on panic
