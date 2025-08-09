@@ -28,3 +28,4 @@ dist-ssr
 .para/*
 !.para/Dockerfile.custom
 !.para/config.json
+.vscode/tasks.json
