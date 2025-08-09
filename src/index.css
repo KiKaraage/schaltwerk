@@ -65,6 +65,10 @@ body {
   box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.45);
 }
 
+.session-ring-gray {
+  box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.45);
+}
+
 /* Subtle header ruler to visually continue the frame into the content */
 .session-header-ruler {
   height: 2px;

@@ -14,6 +14,19 @@ pub struct SessionInfo {
     pub is_current: bool,
     pub session_type: SessionType,
     pub container_status: Option<String>,
+    // Monitor fields now included directly
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_task: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub test_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub todo_percentage: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_blocked: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diff_stats: Option<DiffStats>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,7 +38,7 @@ pub enum SessionStatusType {
     Archived,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum SessionType {
     Worktree,
@@ -57,15 +70,34 @@ pub enum TestStatus {
 pub struct DiffStats {
     #[serde(default)]
     pub files_changed: usize,
-    #[serde(default, alias = "additions")]
-    pub insertions: usize,
+    #[serde(default)]
+    pub additions: usize,
     pub deletions: usize,
+    #[serde(default)]
+    pub insertions: usize,
 }
 
 impl DiffStats {
     /// Get insertions count, handling both field names
+    #[allow(dead_code)]
     pub fn get_insertions(&self) -> usize {
-        self.insertions
+        // Return insertions if set, otherwise fall back to additions
+        if self.insertions > 0 {
+            self.insertions
+        } else {
+            self.additions
+        }
+    }
+    
+    /// Get additions count for compatibility
+    #[allow(dead_code)]
+    pub fn get_additions(&self) -> usize {
+        // Return additions if set, otherwise fall back to insertions
+        if self.additions > 0 {
+            self.additions
+        } else {
+            self.insertions
+        }
     }
 }
 

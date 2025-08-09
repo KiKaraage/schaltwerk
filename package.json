@@ -10,8 +10,10 @@
     "tauri": "tauri",
     "lint": "tsc --noEmit",
     "lint:rust": "cd src-tauri && cargo clippy -- -D warnings",
+    "test:frontend": "vitest run",
+    "test:frontend:watch": "vitest",
     "test:rust": "cd src-tauri && cargo test",
-    "test": "npm run lint && npm run lint:rust && npm run test:rust && npm run build:rust",
+    "test": "npm run lint && npm run lint:rust && npm run test:frontend && npm run test:rust && npm run build:rust",
     "build:rust": "cd src-tauri && cargo build",
     "check": "npm run test"
   },
@@ -34,7 +36,10 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.7.1",
+    "@vitest/ui": "^3.2.4",
+    "happy-dom": "^18.0.1",
     "typescript": "~5.6.2",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vitest": "^3.2.4"
   }
 }

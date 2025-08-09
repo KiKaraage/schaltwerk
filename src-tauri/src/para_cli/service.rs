@@ -1,7 +1,7 @@
 use super::{client::ParaCliClient, types::*};
 use anyhow::Result;
 use std::collections::HashMap;
-use log::{info, debug, warn};
+use log::{info, debug};
 use tokio::sync::RwLock;
 use std::sync::Arc;
 
@@ -52,10 +52,11 @@ impl ParaService {
         let session_infos = self.client.list_sessions(include_archived).await?;
         debug!("Found {} sessions", session_infos.len());
         
+        // Try to get additional status data, but don't fail if unavailable
         let statuses = match self.client.get_all_statuses().await {
             Ok(s) => s,
             Err(e) => {
-                warn!("Failed to get session statuses: {e}");
+                debug!("Using monitor data from session info, status command failed: {e}");
                 Vec::new()
             }
         };
@@ -68,7 +69,13 @@ impl ParaService {
         let enriched: Vec<EnrichedSession> = session_infos
             .into_iter()
             .map(|info| {
-                let status = status_map.get(&info.session_id).cloned();
+                // First try to get status from the separate status command
+                let mut status = status_map.get(&info.session_id).cloned();
+                
+                // If no separate status but we have monitor data in SessionInfo, create a status from it
+                if status.is_none() && (info.current_task.is_some() || info.test_status.is_some()) {
+                    status = Some(self.create_status_from_monitor_data(&info));
+                }
                 
                 let terminals = self.get_session_terminals(&info.session_id);
                 
@@ -83,6 +90,30 @@ impl ParaService {
         Ok(enriched)
     }
     
+    fn create_status_from_monitor_data(&self, info: &SessionInfo) -> SessionStatus {
+        use chrono::Utc;
+        
+        SessionStatus {
+            session_name: info.session_id.clone(),
+            current_task: info.current_task.clone().unwrap_or_else(|| format!("Working on {}", info.session_id)),
+            test_status: match info.test_status.as_deref() {
+                Some("passed") => TestStatus::Passed,
+                Some("failed") => TestStatus::Failed,
+                _ => TestStatus::Unknown,
+            },
+            diff_stats: info.diff_stats.clone(),
+            todos_completed: info.todo_percentage.map(|pct| (pct as u32 * 10) / 100),
+            todos_total: info.todo_percentage.map(|_| 10), // Default estimate
+            is_blocked: info.is_blocked.unwrap_or(false),
+            blocked_reason: if info.is_blocked.unwrap_or(false) {
+                Some("Blocked".to_string())
+            } else {
+                None
+            },
+            last_update: info.last_modified.unwrap_or_else(Utc::now),
+        }
+    }
+    
     pub async fn get_session(&self, session_name: &str) -> Result<Option<EnrichedSession>> {
         let sessions = self.get_all_sessions(false).await?;
         Ok(sessions.into_iter().find(|s| s.info.session_id == session_name))
@@ -93,22 +124,52 @@ impl ParaService {
         
         let total_sessions = sessions.len();
         let active_sessions = sessions.iter()
-            .filter(|s| matches!(s.info.status, SessionStatusType::Active))
+            .filter(|s| {
+                // Check session_state first, then fall back to status
+                if let Some(ref state) = s.info.session_state {
+                    state == "active"
+                } else {
+                    matches!(s.info.status, SessionStatusType::Active)
+                }
+            })
             .count();
+        
         let blocked_sessions = sessions.iter()
-            .filter(|s| s.status.as_ref().is_some_and(|st| st.is_blocked))
+            .filter(|s| {
+                // Check info.is_blocked first, then status
+                s.info.is_blocked.unwrap_or(false) || 
+                s.status.as_ref().is_some_and(|st| st.is_blocked)
+            })
             .count();
+        
         let container_sessions = sessions.iter()
             .filter(|s| matches!(s.info.session_type, SessionType::Container))
             .count();
         
         let tests_passing = sessions.iter()
-            .filter(|s| s.status.as_ref()
-                .is_some_and(|st| matches!(st.test_status, TestStatus::Passed)))
+            .filter(|s| {
+                // Check info.test_status first, then status
+                if let Some(ref test) = s.info.test_status {
+                    test == "passed"
+                } else if let Some(ref status) = s.status {
+                    matches!(status.test_status, TestStatus::Passed)
+                } else {
+                    false
+                }
+            })
             .count();
+        
         let tests_failing = sessions.iter()
-            .filter(|s| s.status.as_ref()
-                .is_some_and(|st| matches!(st.test_status, TestStatus::Failed)))
+            .filter(|s| {
+                // Check info.test_status first, then status
+                if let Some(ref test) = s.info.test_status {
+                    test == "failed"
+                } else if let Some(ref status) = s.status {
+                    matches!(status.test_status, TestStatus::Failed)
+                } else {
+                    false
+                }
+            })
             .count();
         
         let total_todos: u32 = sessions.iter()
