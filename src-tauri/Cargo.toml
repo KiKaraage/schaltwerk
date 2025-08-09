@@ -24,6 +24,25 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 portable-pty = "0.9.0"
 anyhow = "1.0.98"
-tokio = "1.47.1"
+tokio = { version = "1.47.1", features = ["test-util", "macros", "rt"] }
 users = "0.11"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[lints.rust]
+dead_code = "warn"
+unused_imports = "warn"
+unused_variables = "warn"
+unused_mut = "warn"
+
+[lints.clippy]
+# Useful warnings
+uninlined_format_args = "warn"
+needless_borrow = "warn"
+semicolon_if_nothing_returned = "warn"
+# Allow these for Tauri/macro generated code
+missing_panics_doc = "allow"
+missing_errors_doc = "allow"
+must_use_candidate = "allow"
 

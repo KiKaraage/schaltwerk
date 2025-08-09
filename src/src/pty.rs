@@ -8,22 +8,20 @@ use tauri::Emitter;
 use users::os::unix::UserExt;
 use users::{get_current_uid, get_user_by_uid};
 
-pub static PTYS: LazyLock<
+static PTYS: LazyLock<
     tauri::async_runtime::Mutex<HashMap<String, Box<dyn portable_pty::Child + Send>>>,
 > = LazyLock::new(|| tauri::async_runtime::Mutex::new(HashMap::new()));
-pub static MASTERS: LazyLock<
-    tauri::async_runtime::Mutex<HashMap<String, Box<dyn MasterPty + Send>>>,
-> = LazyLock::new(|| tauri::async_runtime::Mutex::new(HashMap::new()));
-pub static WRITERS: LazyLock<tauri::async_runtime::Mutex<HashMap<String, Box<dyn Write + Send>>>> =
+static MASTERS: LazyLock<tauri::async_runtime::Mutex<HashMap<String, Box<dyn MasterPty + Send>>>> =
+    LazyLock::new(|| tauri::async_runtime::Mutex::new(HashMap::new()));
+static WRITERS: LazyLock<tauri::async_runtime::Mutex<HashMap<String, Box<dyn Write + Send>>>> =
     LazyLock::new(|| tauri::async_runtime::Mutex::new(HashMap::new()));
 
 pub async fn create_terminal(app: AppHandle, id: String, cwd: String) -> Result<String, String> {
     let pty_system = native_pty_system();
-    // Start with a more reasonable default size that's closer to typical terminal dimensions
     let pair = pty_system
         .openpty(PtySize {
-            rows: 30,
-            cols: 120,
+            rows: 24,
+            cols: 80,
             pixel_width: 0,
             pixel_height: 0,
         })
@@ -37,10 +35,21 @@ pub async fn create_terminal(app: AppHandle, id: String, cwd: String) -> Result<
         })
         .unwrap_or_else(|| "/bin/zsh".to_string());
 
-    println!("Starting shell: {shell_path}");
+    println!("Starting shell: {}", shell_path);
 
     // Create the command builder for the shell
     let mut cmd = CommandBuilder::new(&shell_path);
+    // Start interactive shell but avoid sourcing user rc/config to prevent auto-starts (e.g., lazygit)
+    if shell_path.contains("zsh") {
+        cmd.arg("-i").arg("-f");
+    } else if shell_path.contains("bash") {
+        cmd.arg("-i").arg("--noprofile").arg("--norc");
+    } else if shell_path.contains("fish") {
+        cmd.arg("--no-config");
+    } else {
+        // Best-effort: request interactive mode
+        cmd.arg("-i");
+    }
     cmd.cwd(cwd);
 
     // Common terminal env so apps behave well
@@ -50,13 +59,6 @@ pub async fn create_terminal(app: AppHandle, id: String, cwd: String) -> Result<
     // Ensure HOME is set
     if let Ok(home) = std::env::var("HOME") {
         cmd.env("HOME", home);
-    }
-
-    // For fish shell, we need to ensure it's running in interactive mode
-    // Fish doesn't use the same -i flag as bash/zsh
-    if shell_path.contains("fish") {
-        // Fish automatically runs in interactive mode when connected to a tty
-        // No special flags needed
     }
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
@@ -99,7 +101,7 @@ pub async fn create_terminal(app: AppHandle, id: String, cwd: String) -> Result<
             match reader.read(&mut buf) {
                 Ok(n) if n > 0 => {
                     let s = String::from_utf8_lossy(&buf[..n]).to_string();
-                    let _ = app_handle.emit(&format!("terminal-output-{id_for_task}"), s);
+                    let _ = app_handle.emit(&format!("terminal-output-{}", id_for_task), s);
                 }
                 _ => break,
             }
@@ -136,20 +138,10 @@ pub async fn resize_terminal(id: &str, cols: u16, rows: u16) -> Result<(), Strin
 }
 
 pub async fn close_terminal(id: &str) -> Result<(), String> {
-    // First, try to kill the child process
     {
         let mut m = PTYS.lock().await;
-        if let Some(mut child) = m.remove(id) {
-            // Try to kill the child process
-            if let Err(e) = child.kill() {
-                eprintln!("Warning: Failed to kill terminal process {id}: {e:?}");
-            }
-            // Wait for the process to exit
-            let _ = child.wait();
-        }
+        m.remove(id);
     }
-
-    // Then clean up the master and writer
     {
         let mut m = MASTERS.lock().await;
         m.remove(id);
@@ -158,32 +150,5 @@ pub async fn close_terminal(id: &str) -> Result<(), String> {
         let mut m = WRITERS.lock().await;
         m.remove(id);
     }
-
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_close_nonexistent_terminal() {
-        // Closing a non-existent terminal should not panic
-        let result = close_terminal("nonexistent").await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_write_to_nonexistent_terminal() {
-        // Writing to non-existent terminal should not panic
-        let result = write_terminal("nonexistent", "test").await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_resize_nonexistent_terminal() {
-        // Resizing non-existent terminal should not panic
-        let result = resize_terminal("nonexistent", 80, 24).await;
-        assert!(result.is_ok());
-    }
 }

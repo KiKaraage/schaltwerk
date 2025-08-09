@@ -1,6 +1,10 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![warn(dead_code)]
+#![warn(unused_imports)]
+#![warn(unused_variables)]
 
+mod cleanup;
 mod pty;
 
 #[tauri::command]
@@ -24,6 +28,9 @@ async fn close_terminal(id: String) -> Result<(), String> {
 }
 
 fn main() {
+    // Create cleanup guard that will run on exit
+    let _cleanup_guard = cleanup::TerminalCleanupGuard;
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             create_terminal,
@@ -31,6 +38,14 @@ fn main() {
             resize_terminal,
             close_terminal
         ])
+        .on_window_event(|_window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // Cleanup terminals when window is closed
+                tauri::async_runtime::block_on(async {
+                    cleanup::cleanup_all_terminals().await;
+                });
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
