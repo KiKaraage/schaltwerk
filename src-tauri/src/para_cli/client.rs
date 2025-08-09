@@ -56,4 +56,45 @@ impl ParaCliClient {
         self.execute_json(&["status", "show", "--json"]).await
     }
     
+    async fn execute_command(&self, args: &[&str]) -> Result<()> {
+        debug!("Executing para command: {} {}", self.para_binary, args.join(" "));
+        
+        let output = Command::new(&self.para_binary)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .map_err(|e| anyhow!("Failed to execute para command: {}", e))?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            error!("Para command failed: {stderr}");
+            return Err(anyhow!("Para command failed: {}", stderr));
+        }
+        
+        Ok(())
+    }
+    
+    pub async fn finish_session(&self, session_id: &str, message: &str, branch: Option<&str>) -> Result<()> {
+        let mut args = vec!["finish", "--session", session_id, "--message", message];
+        
+        if let Some(branch_name) = branch {
+            args.push("--branch");
+            args.push(branch_name);
+        }
+        
+        self.execute_command(&args).await
+    }
+    
+    pub async fn cancel_session(&self, session_id: &str, force: bool) -> Result<()> {
+        let mut args = vec!["cancel", "--session", session_id];
+        
+        if force {
+            args.push("--force");
+        }
+        
+        self.execute_command(&args).await
+    }
+    
 }

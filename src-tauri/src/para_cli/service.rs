@@ -196,6 +196,20 @@ impl ParaService {
         cache.last_updated = std::time::Instant::now() - std::time::Duration::from_secs(60);
     }
     
+    pub async fn finish_session(&self, session_id: &str, message: &str, branch: Option<&str>) -> Result<()> {
+        info!("Finishing session {session_id} with message: {message}");
+        self.client.finish_session(session_id, message, branch).await?;
+        self.invalidate_cache().await;
+        Ok(())
+    }
+    
+    pub async fn cancel_session(&self, session_id: &str, force: bool) -> Result<()> {
+        info!("Cancelling session {session_id} (force: {force})");
+        self.client.cancel_session(session_id, force).await?;
+        self.invalidate_cache().await;
+        Ok(())
+    }
+    
     fn get_session_terminals(&self, session_id: &str) -> Vec<String> {
         if session_id == "orchestrator" {
             vec![
