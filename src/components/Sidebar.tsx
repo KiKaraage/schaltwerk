@@ -172,9 +172,38 @@ export function Sidebar() {
                                             {state}
                                         </span>
                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                                            <button className="text-[11px] px-2 py-0.5 rounded bg-slate-800/60 hover:bg-slate-700/60">PR</button>
-                                            <button className="text-[11px] px-2 py-0.5 rounded bg-slate-800/60 hover:bg-slate-700/60">Finish</button>
-                                            <button className="text-[11px] px-2 py-0.5 rounded bg-slate-800/60 hover:bg-slate-700/60">Cancel</button>
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    window.dispatchEvent(new CustomEvent('para-ui:session-action', {
+                                                        detail: {
+                                                            action: 'finish',
+                                                            sessionId: s.session_id,
+                                                            sessionName: s.session_id,
+                                                            hasUncommittedChanges: s.has_uncommitted_changes || false
+                                                        }
+                                                    }))
+                                                }}
+                                                className="text-[11px] px-2 py-0.5 rounded bg-green-800/60 hover:bg-green-700/60"
+                                            >
+                                                Finish
+                                            </button>
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    window.dispatchEvent(new CustomEvent('para-ui:session-action', {
+                                                        detail: {
+                                                            action: 'cancel',
+                                                            sessionId: s.session_id,
+                                                            sessionName: s.session_id,
+                                                            hasUncommittedChanges: s.has_uncommitted_changes || false
+                                                        }
+                                                    }))
+                                                }}
+                                                className="text-[11px] px-2 py-0.5 rounded bg-red-800/60 hover:bg-red-700/60"
+                                            >
+                                                Cancel
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

@@ -62,6 +62,26 @@ async fn refresh_para_sessions() -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn para_finish_session(session_id: String, message: String, branch: Option<String>) -> Result<(), String> {
+    let service = ParaService::new()
+        .map_err(|e| format!("Failed to initialize para service: {e}"))?;
+    
+    service.finish_session(&session_id, &message, branch.as_deref())
+        .await
+        .map_err(|e| format!("Failed to finish session: {e}"))
+}
+
+#[tauri::command]
+async fn para_cancel_session(session_id: String, force: bool) -> Result<(), String> {
+    let service = ParaService::new()
+        .map_err(|e| format!("Failed to initialize para service: {e}"))?;
+    
+    service.cancel_session(&session_id, force)
+        .await
+        .map_err(|e| format!("Failed to cancel session: {e}"))
+}
+
+#[tauri::command]
 async fn create_terminal(app: tauri::AppHandle, id: String, cwd: String) -> Result<String, String> {
     let manager = get_terminal_manager().await;
     manager.set_app_handle(app).await;
@@ -137,7 +157,9 @@ fn main() {
             get_para_sessions,
             get_para_session,
             get_para_summary,
-            refresh_para_sessions
+            refresh_para_sessions,
+            para_finish_session,
+            para_cancel_session
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
