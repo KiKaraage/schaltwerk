@@ -7,6 +7,48 @@
 mod cleanup;
 mod logging;
 mod pty;
+mod para_cli;
+
+use para_cli::{EnrichedSession, SessionsSummary, ParaService};
+
+#[tauri::command]
+async fn get_para_sessions(include_archived: bool) -> Result<Vec<EnrichedSession>, String> {
+    let service = ParaService::new()
+        .map_err(|e| format!("Failed to initialize para service: {e}"))?;
+    
+    service.get_all_sessions(include_archived)
+        .await
+        .map_err(|e| format!("Failed to get sessions: {e}"))
+}
+
+#[tauri::command]
+async fn get_para_session(session_name: String) -> Result<Option<EnrichedSession>, String> {
+    let service = ParaService::new()
+        .map_err(|e| format!("Failed to initialize para service: {e}"))?;
+    
+    service.get_session(&session_name)
+        .await
+        .map_err(|e| format!("Failed to get session: {e}"))
+}
+
+#[tauri::command]
+async fn get_para_summary() -> Result<SessionsSummary, String> {
+    let service = ParaService::new()
+        .map_err(|e| format!("Failed to initialize para service: {e}"))?;
+    
+    service.get_summary()
+        .await
+        .map_err(|e| format!("Failed to get summary: {e}"))
+}
+
+#[tauri::command]
+async fn refresh_para_sessions() -> Result<(), String> {
+    let service = ParaService::new()
+        .map_err(|e| format!("Failed to initialize para service: {e}"))?;
+    
+    service.invalidate_cache().await;
+    Ok(())
+}
 
 #[tauri::command]
 async fn create_terminal(app: tauri::AppHandle, id: String, cwd: String) -> Result<String, String> {
@@ -53,8 +95,20 @@ fn main() {
             resize_terminal,
             close_terminal,
             terminal_exists,
-            get_terminal_buffer
+            get_terminal_buffer,
+            get_para_sessions,
+            get_para_session,
+            get_para_summary,
+            refresh_para_sessions
         ])
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                para_cli::start_session_monitor(app_handle).await;
+            });
+            Ok(())
+        })
         .on_window_event(|_window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // Cleanup terminals when window is closed
