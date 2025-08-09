@@ -45,8 +45,6 @@ mod tests {
         assert_eq!(diff_stats.additions, 3);
         assert_eq!(diff_stats.insertions, 3);
         assert_eq!(diff_stats.deletions, 0);
-        assert_eq!(diff_stats.get_insertions(), 3);
-        assert_eq!(diff_stats.get_additions(), 3);
     }
 
     #[test]
@@ -83,7 +81,7 @@ mod tests {
         
         let diff_stats = session.diff_stats.unwrap();
         assert_eq!(diff_stats.files_changed, 0);
-        assert_eq!(diff_stats.get_insertions(), 0);
+        assert_eq!(diff_stats.insertions, 0);
     }
 
     #[test]
@@ -162,8 +160,8 @@ mod tests {
         assert_eq!(stats.additions, 50);
         assert_eq!(stats.insertions, 0); // Not present in JSON, defaults to 0
         assert_eq!(stats.deletions, 20);
-        assert_eq!(stats.get_additions(), 50);
-        assert_eq!(stats.get_insertions(), 50); // Falls back to additions
+        assert_eq!(stats.additions, 50);
+        assert_eq!(stats.insertions, 0);
         
         // Test with "insertions" field
         let json_insertions = r#"{
@@ -177,8 +175,8 @@ mod tests {
         assert_eq!(stats.additions, 0); // Not present in JSON, defaults to 0
         assert_eq!(stats.insertions, 30);
         assert_eq!(stats.deletions, 10);
-        assert_eq!(stats.get_additions(), 30); // Falls back to insertions
-        assert_eq!(stats.get_insertions(), 30);
+        assert_eq!(stats.additions, 0);
+        assert_eq!(stats.insertions, 30);
         
         // Test with both fields (new para format)
         let json_both = r#"{
@@ -193,8 +191,8 @@ mod tests {
         assert_eq!(stats.additions, 60);
         assert_eq!(stats.insertions, 60);
         assert_eq!(stats.deletions, 15);
-        assert_eq!(stats.get_additions(), 60);
-        assert_eq!(stats.get_insertions(), 60);
+        assert_eq!(stats.additions, 60);
+        assert_eq!(stats.insertions, 60);
     }
 
     #[test]

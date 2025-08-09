@@ -5,6 +5,7 @@ interface Selection {
     kind: 'session' | 'orchestrator'
     payload?: string
     color?: 'blue' | 'green' | 'violet' | 'amber'
+    worktreePath?: string
 }
 
 /**
@@ -19,8 +20,9 @@ export function useSessionTerminalPair() {
     })
 
     // Create terminals only once when they're first needed
-    const ensureTerminalsExist = useCallback(async (ids: { top: string; bottom: string }) => {
-        const repoPath = '/Users/marius.wichtner/Documents/git/para/ui' // TODO: Make configurable
+    const ensureTerminalsExist = useCallback(async (ids: { top: string; bottom: string }, cwd?: string) => {
+        // Use provided cwd or fall back to current directory
+        const repoPath = cwd || process.cwd() || '.'
         
         const topExists = await invoke<boolean>('terminal_exists', { id: ids.top })
         if (!topExists) {
@@ -50,8 +52,8 @@ export function useSessionTerminalPair() {
     }, [])
 
     useEffect(() => {
-        // Initialize first terminals
-        ensureTerminalsExist(currentTerminalIds)
+        // Initialize first terminals (orchestrator uses current directory)
+        ensureTerminalsExist(currentTerminalIds, '.')
 
         // Listen for selection changes
         const handler = (e: Event) => {

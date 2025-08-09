@@ -77,29 +77,6 @@ pub struct DiffStats {
     pub insertions: usize,
 }
 
-impl DiffStats {
-    /// Get insertions count, handling both field names
-    #[allow(dead_code)]
-    pub fn get_insertions(&self) -> usize {
-        // Return insertions if set, otherwise fall back to additions
-        if self.insertions > 0 {
-            self.insertions
-        } else {
-            self.additions
-        }
-    }
-    
-    /// Get additions count for compatibility
-    #[allow(dead_code)]
-    pub fn get_additions(&self) -> usize {
-        // Return additions if set, otherwise fall back to insertions
-        if self.additions > 0 {
-            self.additions
-        } else {
-            self.insertions
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct EnrichedSession {

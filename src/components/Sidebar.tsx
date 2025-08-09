@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { clsx } from 'clsx'
 import { invoke } from '@tauri-apps/api/core'
 import { formatLastActivity } from '../utils/time'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 
 interface DiffStats {
     files_changed: number
@@ -48,8 +49,8 @@ function getSessionStateColor(state?: string): 'green' | 'violet' | 'amber' | 'g
     }
 }
 
-function emitSelection(kind: 'session' | 'orchestrator', payload?: string, color?: 'blue' | 'green' | 'violet' | 'amber' | 'gray') {
-    window.dispatchEvent(new CustomEvent('para-ui:selection', { detail: { kind, payload, color } }))
+function emitSelection(kind: 'session' | 'orchestrator', payload?: string, color?: 'blue' | 'green' | 'violet' | 'amber' | 'gray', worktreePath?: string) {
+    window.dispatchEvent(new CustomEvent('para-ui:selection', { detail: { kind, payload, color, worktreePath } }))
 }
 
 export function Sidebar() {
@@ -57,6 +58,28 @@ export function Sidebar() {
     const [selectedKind, setSelectedKind] = useState<'session' | 'orchestrator'>('orchestrator')
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
     const [loading, setLoading] = useState(true)
+
+    const handleSelectOrchestrator = () => {
+        setSelectedKind('orchestrator')
+        emitSelection('orchestrator', undefined, 'blue')
+    }
+
+    const handleSelectSession = (index: number) => {
+        const session = sessions[index]
+        if (session) {
+            const s = session.info
+            const color = getSessionStateColor(s.session_state)
+            setSelectedKind('session')
+            setSelectedIdx(index)
+            emitSelection('session', s.session_id, color, s.worktree_path)
+        }
+    }
+
+    useKeyboardShortcuts({
+        onSelectOrchestrator: handleSelectOrchestrator,
+        onSelectSession: handleSelectSession,
+        sessionCount: sessions.length
+    })
 
     useEffect(() => {
         const loadSessions = async () => {
@@ -83,7 +106,7 @@ export function Sidebar() {
             <div className="px-3 py-2 border-b border-slate-800 text-sm text-slate-300">Repository (Orchestrator)</div>
             <div className="px-2 pt-2">
                 <button
-                    onClick={() => { setSelectedKind('orchestrator'); emitSelection('orchestrator', undefined, 'blue') }}
+                    onClick={handleSelectOrchestrator}
                     className={clsx('w-full text-left px-3 py-2 rounded-md mb-2', selectedKind === 'orchestrator' ? 'bg-slate-800/60 session-ring session-ring-blue' : 'hover:bg-slate-800/30')}
                 >
                     <div className="flex items-center justify-between">
@@ -119,11 +142,7 @@ export function Sidebar() {
                         return (
                             <button
                                 key={`c-${s.session_id}`}
-                                onClick={() => { 
-                                    setSelectedKind('session')
-                                    setSelectedIdx(i)
-                                    emitSelection('session', s.session_id, color)
-                                }}
+                                onClick={() => handleSelectSession(i)}
                                 className={clsx('group w-full text-left p-3 rounded-md mb-2 border border-slate-800 bg-slate-900/40',
                                     selectedKind === 'session' && selectedIdx === i
                                         ? clsx('session-ring', 
