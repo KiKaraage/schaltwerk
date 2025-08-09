@@ -22,6 +22,48 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [sandboxEnabled, setSandbox] = useState(false)
     const [sandboxProfile, setSandboxProfile] = useState('standard')
     const [color, setColor] = useState<'green' | 'violet' | 'amber'>('green')
+    const [validationError, setValidationError] = useState('')
+
+    const validateSessionName = (sessionName: string): string | null => {
+        if (!sessionName.trim()) {
+            return 'Session name is required'
+        }
+        if (sessionName.length > 100) {
+            return 'Session name must be 100 characters or less'
+        }
+        if (!/^[a-zA-Z0-9_-]+$/.test(sessionName)) {
+            return 'Session name can only contain letters, numbers, hyphens, and underscores'
+        }
+        return null
+    }
+
+    const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newName = e.target.value
+        setName(newName)
+        
+        // Clear validation error when user starts typing again
+        if (validationError) {
+            setValidationError('')
+        }
+    }
+
+    const handleCreate = () => {
+        const error = validateSessionName(name)
+        if (error) {
+            setValidationError(error)
+            return
+        }
+        
+        onCreate({ 
+            name, 
+            prompt: prompt || undefined, 
+            baseBranch, 
+            dangerousSkipPermissions, 
+            sandboxEnabled, 
+            sandboxProfile: sandboxEnabled ? sandboxProfile : undefined, 
+            color 
+        })
+    }
 
     if (!open) return null
 
@@ -32,7 +74,18 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                 <div className="p-4 space-y-4">
                     <div>
                         <label className="block text-sm text-slate-300 mb-1">Session name</label>
-                        <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700" placeholder="e.g. eager_cosmos" />
+                        <input 
+                            value={name} 
+                            onChange={handleNameChange} 
+                            className={`w-full bg-slate-800 text-slate-100 rounded px-3 py-2 border ${
+                                validationError ? 'border-red-500' : 'border-slate-700'
+                            }`} 
+                            placeholder="e.g. eager_cosmos" 
+                        />
+                        {validationError && (
+                            <p className="text-xs text-red-400 mt-1">{validationError}</p>
+                        )}
+                        <p className="text-xs text-slate-400 mt-1">Only letters, numbers, hyphens, and underscores allowed</p>
                     </div>
 
                     <div>
@@ -79,7 +132,13 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                 </div>
                 <div className="px-4 py-3 border-t border-slate-800 flex justify-end gap-2">
                     <button onClick={onClose} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded">Cancel</button>
-                    <button onClick={() => onCreate({ name, prompt: prompt || undefined, baseBranch, dangerousSkipPermissions, sandboxEnabled, sandboxProfile: sandboxEnabled ? sandboxProfile : undefined, color })} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-white">Create</button>
+                    <button 
+                        onClick={handleCreate} 
+                        disabled={!name.trim()}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-white"
+                    >
+                        Create
+                    </button>
                 </div>
             </div>
         </div>

@@ -8,14 +8,14 @@ mod cleanup;
 mod diff_commands;
 mod logging;
 mod terminal;
-mod para_cli;
+mod para_core;
 
 use std::sync::Arc;
 use terminal::TerminalManager;
-use tokio::sync::OnceCell;
-use para_cli::{EnrichedSession, SessionsSummary, ParaService};
+use tokio::sync::{OnceCell, Mutex};
 
 static TERMINAL_MANAGER: OnceCell<Arc<TerminalManager>> = OnceCell::const_new();
+static PARA_CORE: OnceCell<Arc<Mutex<para_core::ParaCore>>> = OnceCell::const_new();
 
 async fn get_terminal_manager() -> Arc<TerminalManager> {
     TERMINAL_MANAGER.get_or_init(|| async {
@@ -23,63 +23,32 @@ async fn get_terminal_manager() -> Arc<TerminalManager> {
     }).await.clone()
 }
 
-#[tauri::command]
-async fn get_para_sessions(include_archived: bool) -> Result<Vec<EnrichedSession>, String> {
-    let service = ParaService::new()
-        .map_err(|e| format!("Failed to initialize para service: {e}"))?;
-    
-    service.get_all_sessions(include_archived)
-        .await
-        .map_err(|e| format!("Failed to get sessions: {e}"))
+async fn get_para_core() -> Arc<Mutex<para_core::ParaCore>> {
+    PARA_CORE.get_or_init(|| async {
+        let core = para_core::ParaCore::new(None)
+            .expect("Failed to initialize para core");
+        Arc::new(Mutex::new(core))
+    }).await.clone()
 }
 
 #[tauri::command]
-async fn get_para_session(session_name: String) -> Result<Option<EnrichedSession>, String> {
-    let service = ParaService::new()
-        .map_err(|e| format!("Failed to initialize para service: {e}"))?;
+async fn para_core_list_enriched_sessions() -> Result<Vec<para_core::EnrichedSession>, String> {
+    log::debug!("Listing enriched sessions from para_core");
     
-    service.get_session(&session_name)
-        .await
-        .map_err(|e| format!("Failed to get session: {e}"))
-}
-
-#[tauri::command]
-async fn get_para_summary() -> Result<SessionsSummary, String> {
-    let service = ParaService::new()
-        .map_err(|e| format!("Failed to initialize para service: {e}"))?;
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    let manager = core.session_manager();
     
-    service.get_summary()
-        .await
-        .map_err(|e| format!("Failed to get summary: {e}"))
-}
-
-#[tauri::command]
-async fn refresh_para_sessions() -> Result<(), String> {
-    let service = ParaService::new()
-        .map_err(|e| format!("Failed to initialize para service: {e}"))?;
-    
-    service.invalidate_cache().await;
-    Ok(())
-}
-
-#[tauri::command]
-async fn para_finish_session(session_id: String, message: String, branch: Option<String>) -> Result<(), String> {
-    let service = ParaService::new()
-        .map_err(|e| format!("Failed to initialize para service: {e}"))?;
-    
-    service.finish_session(&session_id, &message, branch.as_deref())
-        .await
-        .map_err(|e| format!("Failed to finish session: {e}"))
-}
-
-#[tauri::command]
-async fn para_cancel_session(session_id: String, force: bool) -> Result<(), String> {
-    let service = ParaService::new()
-        .map_err(|e| format!("Failed to initialize para service: {e}"))?;
-    
-    service.cancel_session(&session_id, force)
-        .await
-        .map_err(|e| format!("Failed to cancel session: {e}"))
+    match manager.list_enriched_sessions() {
+        Ok(sessions) => {
+            log::debug!("Found {} sessions", sessions.len());
+            Ok(sessions)
+        },
+        Err(e) => {
+            log::error!("Failed to list enriched sessions: {e}");
+            Err(format!("Failed to get sessions: {e}"))
+        }
+    }
 }
 
 #[tauri::command]
@@ -138,6 +107,77 @@ fn get_current_directory() -> Result<String, String> {
     }
 }
 
+#[tauri::command]
+async fn para_core_create_session(name: String, prompt: Option<String>) -> Result<para_core::Session, String> {
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    let manager = core.session_manager();
+    
+    manager.create_session(&name, prompt.as_deref())
+        .map_err(|e| format!("Failed to create session: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_list_sessions() -> Result<Vec<para_core::Session>, String> {
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    let manager = core.session_manager();
+    
+    manager.list_sessions()
+        .map_err(|e| format!("Failed to list sessions: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_get_session(name: String) -> Result<para_core::Session, String> {
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    let manager = core.session_manager();
+    
+    manager.get_session(&name)
+        .map_err(|e| format!("Failed to get session: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_cancel_session(name: String) -> Result<(), String> {
+    log::info!("Starting cancel session: {name}");
+    
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    let manager = core.session_manager();
+    
+    match manager.cancel_session(&name) {
+        Ok(()) => {
+            log::info!("Successfully canceled session: {name}");
+            Ok(())
+        },
+        Err(e) => {
+            log::error!("Failed to cancel session {name}: {e}");
+            Err(format!("Failed to cancel session: {e}"))
+        }
+    }
+}
+
+
+#[tauri::command]
+async fn para_core_update_git_stats(session_id: String) -> Result<(), String> {
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    let manager = core.session_manager();
+    
+    manager.update_git_stats(&session_id)
+        .map_err(|e| format!("Failed to update git stats: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_cleanup_orphaned_worktrees() -> Result<(), String> {
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    let manager = core.session_manager();
+    
+    manager.cleanup_orphaned_worktrees()
+        .map_err(|e| format!("Failed to cleanup orphaned worktrees: {e}"))
+}
+
 fn main() {
     // Initialize logging
     logging::init_logging();
@@ -155,23 +195,29 @@ fn main() {
             terminal_exists,
             get_terminal_buffer,
             get_current_directory,
-            get_para_sessions,
-            get_para_session,
-            get_para_summary,
-            refresh_para_sessions,
-            para_finish_session,
-            para_cancel_session,
+            para_core_create_session,
+            para_core_list_sessions,
+            para_core_list_enriched_sessions,
+            para_core_get_session,
+            para_core_cancel_session,
+            para_core_update_git_stats,
+            para_core_cleanup_orphaned_worktrees,
             diff_commands::get_changed_files_from_main,
             diff_commands::get_file_diff_from_main,
             diff_commands::get_current_branch_name,
             diff_commands::get_commit_comparison_info
         ])
-        .setup(|app| {
-            let app_handle = app.handle().clone();
+        .setup(|_app| {
+            // Start activity tracking for para_core sessions
             tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                para_cli::start_session_monitor(app_handle).await;
+                let core = get_para_core().await;
+                let db = {
+                    let core_lock = core.lock().await;
+                    Arc::new(core_lock.db.clone())
+                };
+                para_core::activity::start_activity_tracking(db);
             });
+            
             Ok(())
         })
         .on_window_event(|_window, event| {

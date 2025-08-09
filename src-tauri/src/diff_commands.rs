@@ -1,6 +1,6 @@
 use std::process::Command;
 use serde::{Serialize, Deserialize};
-use crate::para_cli::ParaService;
+use crate::get_para_core;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChangedFile {
@@ -119,12 +119,14 @@ pub async fn get_commit_comparison_info(session_name: Option<String>) -> Result<
 
 async fn get_repo_path(session_name: Option<String>) -> Result<String, String> {
     if let Some(name) = session_name {
-        let service = ParaService::new()
-            .map_err(|e| format!("Failed to initialize para service: {e}"))?;
+        let core = get_para_core().await;
+        let core = core.lock().await;
+        let manager = core.session_manager();
         
-        let session = service.get_session(&name)
-            .await
-            .map_err(|e| format!("Failed to get session: {e}"))?;
+        let sessions = manager.list_enriched_sessions()
+            .map_err(|e| format!("Failed to get sessions: {e}"))?;
+        
+        let session = sessions.into_iter().find(|s| s.info.session_id == name);
         
         if let Some(session) = session {
             Ok(session.info.worktree_path)
