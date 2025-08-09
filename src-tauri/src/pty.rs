@@ -110,7 +110,7 @@ pub async fn create_terminal(app: AppHandle, id: String, cwd: String) -> Result<
         })
         .unwrap_or_else(|| "/bin/zsh".to_string());
 
-    info!("Starting shell: {shell_path} in directory: {}", cwd);
+    info!("Starting shell: {shell_path} in directory: {cwd}");
 
     let mut cmd = CommandBuilder::new(&shell_path);
     cmd.cwd(cwd.clone());
@@ -174,10 +174,10 @@ pub async fn create_terminal(app: AppHandle, id: String, cwd: String) -> Result<
             let masters = MASTERS.lock().await;
             let master = masters
                 .get(&id_for_task)
-                .expect(&format!("Master not found for terminal {id_for_task}"));
+                .unwrap_or_else(|| panic!("Master not found for terminal {id_for_task}"));
             master
                 .try_clone_reader()
-                .expect(&format!("Failed to clone reader for terminal {id_for_task}"))
+                .unwrap_or_else(|_| panic!("Failed to clone reader for terminal {id_for_task}"))
         };
         
         info!("Successfully cloned reader for terminal {id_for_task}");
@@ -200,7 +200,7 @@ pub async fn create_terminal(app: AppHandle, id: String, cwd: String) -> Result<
                     }
                     Ok(n) => {
                         if first_read {
-                            info!("Terminal {id_for_blocking} first read: {} bytes", n);
+                            info!("Terminal {id_for_blocking} first read: {n} bytes");
                             first_read = false;
                         }
                         read_count += 1;

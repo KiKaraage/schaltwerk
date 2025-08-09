@@ -169,38 +169,124 @@ Never consider a task complete unless `npm run test` passes without errors.
 
 ## Logging
 
+### Overview
+The application uses the Rust `log` crate with `env_logger` for comprehensive logging. Logs are written to both stderr (console) and a timestamped file for persistent debugging.
+
 ### Log File Location
-The application writes detailed logs to help debug issues. Log files are located at:
+Log files are automatically created at application startup:
 - **macOS**: `~/Library/Application Support/para-ui/logs/para-ui-{timestamp}.log`
 - **Linux**: `~/.local/share/para-ui/logs/para-ui-{timestamp}.log`
 - **Windows**: `%LOCALAPPDATA%\para-ui\logs\para-ui-{timestamp}.log`
 
 The exact log file path is printed to stderr when the app starts with a 📝 emoji prefix.
 
-### Log Content
-Logs include:
-- Terminal creation/destruction events
-- Terminal resize operations
-- Session switching events
-- Errors and warnings
-- Terminal process lifecycle
+### Log Levels
+The application uses standard log levels with smart defaults:
+- **DEBUG**: Detailed information for our codebase (`ui`, `para_ui` modules)
+- **INFO**: Important events and milestones (default for `portable_pty`, `tauri`)
+- **WARN**: Potentially harmful situations (default for third-party crates)
+- **ERROR**: Error events that might still allow the app to continue
+- **TRACE**: Very detailed debugging (disabled by default)
+
+### Configuring Log Levels
+Set the `RUST_LOG` environment variable to override defaults:
+```bash
+# Maximum verbosity for everything
+RUST_LOG=trace npm run tauri dev
+
+# Debug our code, warn for everything else
+RUST_LOG=ui=debug,warn npm run tauri dev
+
+# Only errors
+RUST_LOG=error npm run tauri dev
+
+# Debug specific module
+RUST_LOG=ui::pty=trace npm run tauri dev
+```
+
+### Log Format
+Logs use a consistent format for easy parsing:
+```
+[YYYY-MM-DD HH:MM:SS.mmm LEVEL module::path] Message
+```
+
+Example:
+```
+[2024-01-15 14:23:45.123 INFO  ui::pty] Creating terminal: id=orchestrator-top, cwd=/Users/name/project
+[2024-01-15 14:23:45.456 DEBUG ui::pty] Saved child process for terminal orchestrator-top
+[2024-01-15 14:23:45.789 WARN  ui::pty] Terminal orchestrator-bottom slow write: 25ms
+```
+
+### Logging in Rust Code
+Use the appropriate macros from the `log` crate:
+
+```rust
+use log::{debug, info, warn, error};
+
+// Informational messages for important events
+info!("Terminal created successfully: id={id}");
+
+// Debug messages for detailed flow tracking
+debug!("Resizing terminal {id}: {cols}x{rows}");
+
+// Warnings for recoverable issues
+warn!("Terminal {id} slow write: {}ms", elapsed.as_millis());
+
+// Errors for serious problems
+error!("Failed to spawn terminal {id}: {e}");
+```
+
+### Best Practices
+1. **Use structured logging**: Include relevant context (IDs, sizes, durations)
+2. **Log at boundaries**: Entry/exit of major operations
+3. **Performance metrics**: Log slow operations with timing
+4. **Error context**: Always include error details and affected resources
+5. **Avoid sensitive data**: Never log passwords, tokens, or user data
+
+### Common Log Patterns
+
+#### Terminal Lifecycle
+```
+INFO Creating terminal: id=session-main-top, cwd=/path
+DEBUG Marked terminal session-main-top as being created
+INFO Successfully spawned shell process for terminal session-main-top
+DEBUG Saved child process for terminal session-main-top
+INFO Terminal created successfully: id=session-main-top
+```
+
+#### Performance Issues
+```
+WARN Terminal orchestrator-bottom slow write: 25ms
+DEBUG Terminal orchestrator-top slow buffer append: 15ms
+```
+
+#### Error Handling
+```
+ERROR Failed to spawn terminal session-test: Permission denied
+WARN Failed to kill terminal process session-old: No such process
+```
 
 ### Viewing Logs
 ```bash
-# macOS - View latest log
+# View latest log file (macOS)
 tail -f ~/Library/Application\ Support/para-ui/logs/para-ui-*.log
 
-# Linux - View latest log
-tail -f ~/.local/share/para-ui/logs/para-ui-*.log
+# Filter for errors only
+grep ERROR ~/Library/Application\ Support/para-ui/logs/para-ui-*.log
 
-# Filter for terminal-related events
-cat ~/Library/Application\ Support/para-ui/logs/para-ui-*.log | grep -E "Creating terminal|Terminal.*exists|Switching from"
+# Watch for specific terminal
+grep "orchestrator-top" ~/Library/Application\ Support/para-ui/logs/para-ui-*.log
+
+# Monitor performance issues
+grep -E "slow|WARN|ERROR" ~/Library/Application\ Support/para-ui/logs/para-ui-*.log
 ```
 
-### Common Log Patterns to Watch For
-- **Duplicate terminal creation**: Multiple "Creating terminal" entries with the same ID indicates a bug
-- **Orphaned terminals**: Terminals created but never closed in cleanup
-- **Failed operations**: WARN or ERROR level messages indicate problems
+### Debugging Tips
+1. **Start with INFO level**: Default configuration shows important events
+2. **Enable DEBUG for issues**: `RUST_LOG=ui=debug` for detailed flow
+3. **Check timing**: Look for "slow" operations indicating performance issues
+4. **Follow IDs**: Track specific terminal IDs through their lifecycle
+5. **Check cleanup**: Ensure terminals in logs are properly closed
 
 
 ### Code Quality
