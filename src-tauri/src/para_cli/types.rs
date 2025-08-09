@@ -55,9 +55,18 @@ pub enum TestStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiffStats {
+    #[serde(default)]
     pub files_changed: usize,
+    #[serde(default, alias = "additions")]
     pub insertions: usize,
     pub deletions: usize,
+}
+
+impl DiffStats {
+    /// Get insertions count, handling both field names
+    pub fn get_insertions(&self) -> usize {
+        self.insertions
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
