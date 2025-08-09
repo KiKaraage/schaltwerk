@@ -99,6 +99,24 @@ async fn get_terminal_buffer(id: String) -> Result<String, String> {
     manager.get_terminal_buffer(id).await
 }
 
+#[tauri::command]
+fn get_current_directory() -> Result<String, String> {
+    // In dev mode, the current dir is src-tauri, so we need to go up one level
+    let current_dir = std::env::current_dir()
+        .map_err(|e| format!("Failed to get current directory: {e}"))?;
+    
+    // Check if we're in src-tauri directory (dev mode)
+    if current_dir.file_name().and_then(|n| n.to_str()) == Some("src-tauri") {
+        // Go up one level to get the project root
+        current_dir.parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .ok_or_else(|| "Failed to get parent directory".to_string())
+    } else {
+        // We're already in the project root (production mode)
+        Ok(current_dir.to_string_lossy().to_string())
+    }
+}
+
 fn main() {
     // Initialize logging
     logging::init_logging();
@@ -115,6 +133,7 @@ fn main() {
             close_terminal,
             terminal_exists,
             get_terminal_buffer,
+            get_current_directory,
             get_para_sessions,
             get_para_session,
             get_para_summary,

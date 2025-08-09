@@ -1,10 +1,8 @@
 import { Terminal } from './Terminal'
-import { useSessionTerminals } from '../hooks/useSessionTerminals'
+import { useSessionWorkspace } from '../hooks/useSessionWorkspace'
 
 export function LazyGitPanel() {
-    const { selection, currentTerminalId } = useSessionTerminals({
-        terminalSuffix: 'right'
-    })
+    const { selection, terminals } = useSessionWorkspace()
 
     const headerText = selection.kind === 'orchestrator' 
         ? 'Terminal — main'
@@ -16,7 +14,7 @@ export function LazyGitPanel() {
                 {headerText}
             </div>
             <div className="flex-1 overflow-hidden">
-                <Terminal terminalId={currentTerminalId} className="h-full" />
+                <Terminal terminalId={terminals.right} className="h-full" />
             </div>
         </div>
     )
