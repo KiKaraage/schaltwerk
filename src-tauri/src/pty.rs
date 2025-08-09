@@ -114,17 +114,27 @@ pub async fn create_terminal(app: AppHandle, id: String, cwd: String) -> Result<
 }
 
 pub async fn write_terminal(id: &str, data: &str) -> Result<(), String> {
+    debug!("Writing to terminal {id}: {} bytes", data.len());
     let mut writers = WRITERS.lock().await;
     if let Some(writer) = writers.get_mut(id) {
         writer
             .write_all(data.as_bytes())
-            .map_err(|e| e.to_string())?;
-        writer.flush().map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                warn!("Failed to write to terminal {id}: {e}");
+                e.to_string()
+            })?;
+        writer.flush().map_err(|e| {
+            warn!("Failed to flush terminal {id}: {e}");
+            e.to_string()
+        })?;
+    } else {
+        warn!("Terminal {id} not found in writers map");
     }
     Ok(())
 }
 
 pub async fn resize_terminal(id: &str, cols: u16, rows: u16) -> Result<(), String> {
+    debug!("Resizing terminal {id}: {cols}x{rows}");
     let masters = MASTERS.lock().await;
     if let Some(master) = masters.get(id) {
         master
@@ -134,7 +144,12 @@ pub async fn resize_terminal(id: &str, cols: u16, rows: u16) -> Result<(), Strin
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                warn!("Failed to resize terminal {id}: {e}");
+                e.to_string()
+            })?;
+    } else {
+        warn!("Terminal {id} not found in masters map for resize");
     }
     Ok(())
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { invoke } from '@tauri-apps/api/core';
@@ -14,11 +14,14 @@ export function Terminal({ terminalId, className = '' }: TerminalProps) {
     const termRef = useRef<HTMLDivElement>(null);
     const terminal = useRef<XTerm | null>(null);
     const fitAddon = useRef<FitAddon | null>(null);
-    const [isVisible, setIsVisible] = useState(true);
     const lastSize = useRef<{ cols: number; rows: number }>({ cols: 80, rows: 24 });
 
     useEffect(() => {
-        if (!termRef.current) return;
+        console.log(`[Terminal ${terminalId}] Mounting/re-mounting terminal component`);
+        if (!termRef.current) {
+            console.error(`[Terminal ${terminalId}] No ref available!`);
+            return;
+        }
 
         // Create terminal with styling that matches web-ui prototype
         terminal.current = new XTerm({
@@ -104,6 +107,7 @@ export function Terminal({ terminalId, className = '' }: TerminalProps) {
         // Cleanup - dispose UI but keep terminal process running
         // Terminal processes will be cleaned up when the app exits
         return () => {
+            console.log(`[Terminal ${terminalId}] Unmounting terminal component`);
             clearTimeout(mountTimeout);
             unlisten.then(fn => fn());
             terminal.current?.dispose();
@@ -111,29 +115,8 @@ export function Terminal({ terminalId, className = '' }: TerminalProps) {
             // Note: We intentionally don't close terminals here to allow switching between sessions
             // All terminals are cleaned up when the app exits via the backend cleanup handler
         };
-    }, [terminalId, isVisible]);
+    }, [terminalId]); // Only recreate when terminalId changes, not visibility
 
-    // Add visibility detection using IntersectionObserver
-    useEffect(() => {
-        if (!termRef.current) return;
-
-        const observer = new IntersectionObserver(
-            (entries) => {
-                entries.forEach((entry) => {
-                    const newVisibility = entry.isIntersecting;
-                    console.log(`[Terminal ${terminalId}] Visibility changed: ${newVisibility}, ratio=${entry.intersectionRatio}`);
-                    setIsVisible(newVisibility);
-                });
-            },
-            { threshold: 0.1 }
-        );
-
-        observer.observe(termRef.current);
-
-        return () => {
-            observer.disconnect();
-        };
-    }, [terminalId]);
 
     return <div ref={termRef} className={`h-full w-full ${className}`} />;
 }
