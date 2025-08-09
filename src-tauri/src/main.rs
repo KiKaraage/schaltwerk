@@ -28,6 +28,16 @@ async fn close_terminal(id: String) -> Result<(), String> {
     pty::close_terminal(&id).await
 }
 
+#[tauri::command]
+async fn terminal_exists(id: String) -> Result<bool, String> {
+    pty::terminal_exists(&id).await
+}
+
+#[tauri::command]
+async fn get_terminal_buffer(id: String) -> Result<String, String> {
+    pty::get_terminal_buffer(&id).await
+}
+
 fn main() {
     // Initialize logging
     logging::init_logging();
@@ -41,7 +51,9 @@ fn main() {
             create_terminal,
             write_terminal,
             resize_terminal,
-            close_terminal
+            close_terminal,
+            terminal_exists,
+            get_terminal_buffer
         ])
         .on_window_event(|_window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {

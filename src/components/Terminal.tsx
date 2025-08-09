@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { invoke } from '@tauri-apps/api/core';
@@ -15,6 +15,8 @@ export function Terminal({ terminalId, className = '' }: TerminalProps) {
     const terminal = useRef<XTerm | null>(null);
     const fitAddon = useRef<FitAddon | null>(null);
     const lastSize = useRef<{ cols: number; rows: number }>({ cols: 80, rows: 24 });
+    const [hydrated, setHydrated] = useState(false);
+    const pendingOutput = useRef<string[]>([]);
 
     useEffect(() => {
         console.log(`[Terminal ${terminalId}] Mounting/re-mounting terminal component`);
@@ -23,7 +25,9 @@ export function Terminal({ terminalId, className = '' }: TerminalProps) {
             return;
         }
 
-        // Create terminal with styling that matches web-ui prototype
+        setHydrated(false);
+        pendingOutput.current = [];
+
         terminal.current = new XTerm({
             theme: {
                 background: '#0b1220', // Match bg-panel color from web-ui
@@ -66,12 +70,44 @@ export function Terminal({ terminalId, className = '' }: TerminalProps) {
         // Send initial size to backend immediately
         invoke('resize_terminal', { id: terminalId, cols: initialCols, rows: initialRows }).catch(console.error);
 
-        // Listen for terminal output from backend
+        // Listen for terminal output from backend (buffer until hydrated)
         const unlisten = listen(`terminal-output-${terminalId}`, (event) => {
-            if (terminal.current) {
-                terminal.current.write(event.payload as string);
+            const output = event.payload as string;
+            if (!hydrated) {
+                pendingOutput.current.push(output);
+            } else if (terminal.current) {
+                terminal.current.write(output);
             }
         });
+
+        // Hydrate from buffer
+        const hydrateTerminal = async () => {
+            try {
+                console.log(`[Terminal ${terminalId}] Fetching buffer for hydration`);
+                const snapshot = await invoke<string>('get_terminal_buffer', { id: terminalId });
+                
+                if (snapshot && terminal.current) {
+                    terminal.current.write(snapshot);
+                    console.log(`[Terminal ${terminalId}] Hydrated with ${snapshot.length} bytes`);
+                }
+
+                // Flush any pending output that arrived during hydration
+                if (pendingOutput.current.length > 0 && terminal.current) {
+                    console.log(`[Terminal ${terminalId}] Flushing ${pendingOutput.current.length} pending outputs`);
+                    for (const output of pendingOutput.current) {
+                        terminal.current.write(output);
+                    }
+                    pendingOutput.current = [];
+                }
+
+                setHydrated(true);
+            } catch (error) {
+                console.error(`[Terminal ${terminalId}] Failed to hydrate:`, error);
+                setHydrated(true);
+            }
+        };
+
+        hydrateTerminal();
 
         // Send input to backend
         terminal.current.onData((data) => {
@@ -112,6 +148,8 @@ export function Terminal({ terminalId, className = '' }: TerminalProps) {
             unlisten.then(fn => fn());
             terminal.current?.dispose();
             resizeObserver.disconnect();
+            setHydrated(false);
+            pendingOutput.current = [];
             // Note: We intentionally don't close terminals here to allow switching between sessions
             // All terminals are cleaned up when the app exits via the backend cleanup handler
         };

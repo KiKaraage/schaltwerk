@@ -17,22 +17,19 @@ export function useSessionTerminalPair() {
         top: 'orchestrator-top', 
         bottom: 'orchestrator-bottom' 
     })
-    const [allTerminals] = useState<Map<string, boolean>>(new Map())
 
     // Create terminals only once when they're first needed
     const ensureTerminalsExist = useCallback(async (ids: { top: string; bottom: string }) => {
         const repoPath = '/Users/marius.wichtner/Documents/git/para/ui' // TODO: Make configurable
         
-        // Create top terminal if it doesn't exist
-        if (!allTerminals.has(ids.top)) {
+        const topExists = await invoke<boolean>('terminal_exists', { id: ids.top })
+        if (!topExists) {
             console.log(`[TerminalPair] Creating top terminal: ${ids.top}`)
             await invoke('create_terminal', { 
                 id: ids.top, 
                 cwd: repoPath
-            }).catch(console.error)
-            allTerminals.set(ids.top, true)
+            })
             
-            // Auto-start Claude in ALL top terminals (not just orchestrator)
             console.log(`[TerminalPair] Starting Claude in terminal: ${ids.top}`)
             setTimeout(async () => {
                 await invoke('write_terminal', { 
@@ -40,22 +37,17 @@ export function useSessionTerminalPair() {
                     data: 'claude\r\n'
                 }).catch(console.error)
             }, 500)
-        } else {
-            console.log(`[TerminalPair] Terminal already exists: ${ids.top}`)
         }
         
-        // Create bottom terminal if it doesn't exist
-        if (!allTerminals.has(ids.bottom)) {
+        const bottomExists = await invoke<boolean>('terminal_exists', { id: ids.bottom })
+        if (!bottomExists) {
             console.log(`[TerminalPair] Creating bottom terminal: ${ids.bottom}`)
             await invoke('create_terminal', { 
                 id: ids.bottom, 
                 cwd: repoPath
-            }).catch(console.error)
-            allTerminals.set(ids.bottom, true)
-        } else {
-            console.log(`[TerminalPair] Terminal already exists: ${ids.bottom}`)
+            })
         }
-    }, [allTerminals])
+    }, [])
 
     useEffect(() => {
         // Initialize first terminals

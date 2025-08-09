@@ -159,9 +159,54 @@ Never consider a task complete unless `npm run test` passes without errors.
 2. Check Tauri console for Rust errors
 3. Verify terminal IDs match expected format
 4. Use `ps aux | grep -E "zsh|bash|fish"` to check for orphaned processes
+5. Check application logs (see Logging section below)
 
 ### Performance optimization
 1. Minimize resize events with debouncing
 2. Use visibility detection to pause inactive terminals
 3. Lazy-create terminals only when needed
 4. Properly dispose xterm.js instances
+
+## Logging
+
+### Log File Location
+The application writes detailed logs to help debug issues. Log files are located at:
+- **macOS**: `~/Library/Application Support/para-ui/logs/para-ui-{timestamp}.log`
+- **Linux**: `~/.local/share/para-ui/logs/para-ui-{timestamp}.log`
+- **Windows**: `%LOCALAPPDATA%\para-ui\logs\para-ui-{timestamp}.log`
+
+The exact log file path is printed to stderr when the app starts with a 📝 emoji prefix.
+
+### Log Content
+Logs include:
+- Terminal creation/destruction events
+- Terminal resize operations
+- Session switching events
+- Errors and warnings
+- Terminal process lifecycle
+
+### Viewing Logs
+```bash
+# macOS - View latest log
+tail -f ~/Library/Application\ Support/para-ui/logs/para-ui-*.log
+
+# Linux - View latest log
+tail -f ~/.local/share/para-ui/logs/para-ui-*.log
+
+# Filter for terminal-related events
+cat ~/Library/Application\ Support/para-ui/logs/para-ui-*.log | grep -E "Creating terminal|Terminal.*exists|Switching from"
+```
+
+### Common Log Patterns to Watch For
+- **Duplicate terminal creation**: Multiple "Creating terminal" entries with the same ID indicates a bug
+- **Orphaned terminals**: Terminals created but never closed in cleanup
+- **Failed operations**: WARN or ERROR level messages indicate problems
+
+
+### Code Quality
+
+- Do not write comments, ensure we have self-documenting code.
+- Avoid writing fallbacks or alternative solutions to solve them. Rather fix them directly.
+- Never write altnerative file names, functions or components. Rather fix them directly.
+- Ask the user if problems seem impossible or difficult to solve for advice.
+- Always develop deterministic solutions and never heuristics.

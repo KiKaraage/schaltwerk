@@ -20,7 +20,6 @@ export function useSessionTerminals(options: UseSessionTerminalsOptions) {
     const { terminalSuffix, autoStartCommand } = options
     const [selection, setSelection] = useState<Selection>({ kind: 'orchestrator' })
     const [currentTerminalId, setCurrentTerminalId] = useState<string>(`orchestrator-${terminalSuffix}`)
-    const [allTerminals] = useState<Map<string, boolean>>(new Map())
 
     // Generate terminal ID based on selection
     const getTerminalId = useCallback((sel: Selection) => {
@@ -33,28 +32,24 @@ export function useSessionTerminals(options: UseSessionTerminalsOptions) {
     const ensureTerminalExists = useCallback(async (id: string) => {
         const repoPath = '/Users/marius.wichtner/Documents/git/para/ui' // TODO: Make configurable
         
-        if (!allTerminals.has(id)) {
-            try {
-                await invoke('create_terminal', { 
-                    id: id, 
-                    cwd: repoPath
-                })
-                allTerminals.set(id, true)
-                
-                // Auto-start command for orchestrator terminal if specified
-                if (autoStartCommand && id.startsWith('orchestrator-')) {
-                    setTimeout(async () => {
-                        await invoke('write_terminal', { 
-                            id: id, 
-                            data: autoStartCommand + '\r\n'
-                        }).catch(console.error)
-                    }, 500)
-                }
-            } catch (error) {
-                console.error('Failed to create terminal:', error)
+        const exists = await invoke<boolean>('terminal_exists', { id })
+        if (!exists) {
+            console.log(`[SessionTerminals] Creating terminal: ${id}`)
+            await invoke('create_terminal', { 
+                id: id, 
+                cwd: repoPath
+            })
+            
+            if (autoStartCommand && id.startsWith('orchestrator-')) {
+                setTimeout(async () => {
+                    await invoke('write_terminal', { 
+                        id: id, 
+                        data: autoStartCommand + '\r\n'
+                    }).catch(console.error)
+                }, 500)
             }
         }
-    }, [allTerminals, autoStartCommand])
+    }, [autoStartCommand])
 
     useEffect(() => {
         // Initialize first terminal
