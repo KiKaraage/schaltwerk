@@ -296,3 +296,5 @@ grep -E "slow|WARN|ERROR" ~/Library/Application\ Support/para-ui/logs/para-ui-*.
 - Never write altnerative file names, functions or components. Rather fix them directly.
 - Ask the user if problems seem impossible or difficult to solve for advice.
 - Always develop deterministic solutions and never heuristics.
+- Never use #[allow(dead_code)] Implement real implementations and unused code you can delete if we do not need it anymore.
+- Never introduce YAGNI: Code that eventually will be needed in the future but not now, all the code must be used and referenced now
