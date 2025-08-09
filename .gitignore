@@ -29,3 +29,6 @@ dist-ssr
 !.para/Dockerfile.custom
 !.para/config.json
 .vscode/tasks.json
+# Para launch profiles
+*.launch
+.para_state/
