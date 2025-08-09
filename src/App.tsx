@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import { Sidebar } from './components/Sidebar'
 import { TerminalGrid } from './components/TerminalGrid'
-import { LazyGitPanel } from './components/LazyGitPanel'
+import { SimpleDiffPanel } from './components/SimpleDiffPanel'
+import { DiffViewerOverlay } from './components/DiffViewerOverlay'
 import Split from 'react-split'
 import { NewSessionModal } from './components/NewSessionModal'
 import { FinishSessionModal } from './components/FinishSessionModal'
@@ -21,6 +22,8 @@ export default function App() {
   const [finishModalOpen, setFinishModalOpen] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [currentSession, setCurrentSession] = useState<{ id: string; name: string; hasUncommittedChanges: boolean } | null>(null)
+  const [selectedDiffFile, setSelectedDiffFile] = useState<string | null>(null)
+  const [isDiffViewerOpen, setIsDiffViewerOpen] = useState(false)
   
   useEffect(() => {
     const handleSessionAction = (event: CustomEvent<SessionActionEvent>) => {
@@ -79,8 +82,19 @@ export default function App() {
       alert(`Failed to cancel session: ${error}`)
     }
   }
+  
+  const handleFileSelect = (filePath: string) => {
+    setSelectedDiffFile(filePath)
+    setIsDiffViewerOpen(true)
+  }
+  
+  const handleCloseDiffViewer = () => {
+    setIsDiffViewerOpen(false)
+  }
+  
   return (
-    <Split className="h-full w-full flex" sizes={[18, 82]} minSize={[220, 400]} gutterSize={6}>
+    <>
+      <Split className="h-full w-full flex" sizes={[18, 82]} minSize={[220, 400]} gutterSize={6}>
       <div className="h-full bg-panel border-r border-slate-800 overflow-y-auto">
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-y-auto">
@@ -95,12 +109,12 @@ export default function App() {
       <div className="relative h-full">
         {/* Unified session ring around center + right (Claude, Terminal, Diff) */}
         <div id="work-ring" className="absolute inset-2 rounded-xl pointer-events-none" />
-        <Split className="h-full w-full flex" sizes={[55, 45]} minSize={[400, 400]} gutterSize={8}>
+        <Split className="h-full w-full flex" sizes={[70, 30]} minSize={[400, 280]} gutterSize={8}>
           <main className="bg-slate-950 h-full">
             <TerminalGrid />
           </main>
           <section className="overflow-hidden">
-            <LazyGitPanel />
+            <SimpleDiffPanel onFileSelect={handleFileSelect} />
           </section>
         </Split>
       </div>
@@ -124,6 +138,14 @@ export default function App() {
           />
         </>
       )}
-    </Split>
+      </Split>
+      
+      {/* Diff Viewer Overlay - renders outside of main layout */}
+      <DiffViewerOverlay 
+        filePath={selectedDiffFile}
+        isOpen={isDiffViewerOpen}
+        onClose={handleCloseDiffViewer}
+      />
+    </>
   )
 }

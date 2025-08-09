@@ -5,6 +5,7 @@
 #![warn(unused_variables)]
 
 mod cleanup;
+mod diff_commands;
 mod logging;
 mod terminal;
 mod para_cli;
@@ -159,7 +160,11 @@ fn main() {
             get_para_summary,
             refresh_para_sessions,
             para_finish_session,
-            para_cancel_session
+            para_cancel_session,
+            diff_commands::get_changed_files_from_main,
+            diff_commands::get_file_diff_from_main,
+            diff_commands::get_current_branch_name,
+            diff_commands::get_commit_comparison_info
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
