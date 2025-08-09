@@ -4527,9 +4527,11 @@ name = "ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "dirs 5.0.1",
  "env_logger",
+ "lazy_static",
  "log",
  "mockall",
  "portable-pty",

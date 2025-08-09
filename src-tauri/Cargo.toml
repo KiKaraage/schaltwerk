@@ -18,7 +18,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 portable-pty = "0.9.0"
 anyhow = "1.0.98"
-tokio = { version = "1.47.1", features = ["test-util", "macros", "rt"] }
+tokio = { version = "1.47.1", features = ["test-util", "macros", "rt", "sync", "io-util", "time"] }
+async-trait = "0.1"
+lazy_static = "1.4"
 users = "0.11"
 log = "0.4"
 env_logger = "0.11"

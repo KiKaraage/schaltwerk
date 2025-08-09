@@ -1,0 +1,416 @@
+use super::{CreateParams, TerminalBackend};
+use log::{debug, error, info, warn};
+use portable_pty::{Child, CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
+use std::collections::{HashMap, HashSet};
+use std::io::{Read, Write};
+use std::sync::Arc;
+use std::time::Instant;
+use tauri::{AppHandle, Emitter};
+use tokio::sync::{Mutex, RwLock};
+
+const MAX_BUFFER_SIZE: usize = 5 * 1024 * 1024;
+
+// Global state maps to avoid Sync issues with trait objects
+lazy_static::lazy_static! {
+    static ref PTY_CHILDREN: Mutex<HashMap<String, Box<dyn Child + Send>>> = Mutex::new(HashMap::new());
+    static ref PTY_MASTERS: Mutex<HashMap<String, Box<dyn MasterPty + Send>>> = Mutex::new(HashMap::new());
+    static ref PTY_WRITERS: Mutex<HashMap<String, Box<dyn Write + Send>>> = Mutex::new(HashMap::new());
+}
+
+struct TerminalState {
+    buffer: Vec<u8>,
+    seq: u64,
+}
+
+pub struct LocalPtyAdapter {
+    terminals: Arc<RwLock<HashMap<String, TerminalState>>>,
+    creating: Arc<Mutex<HashSet<String>>>,
+    app_handle: Arc<Mutex<Option<AppHandle>>>,
+}
+
+impl LocalPtyAdapter {
+    pub fn new() -> Self {
+        Self {
+            terminals: Arc::new(RwLock::new(HashMap::new())),
+            creating: Arc::new(Mutex::new(HashSet::new())),
+            app_handle: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub async fn set_app_handle(&self, handle: AppHandle) {
+        *self.app_handle.lock().await = Some(handle);
+    }
+
+    fn get_shell_command() -> CommandBuilder {
+        let mut cmd = CommandBuilder::new(get_shell_binary());
+        cmd.arg("-i");
+        cmd
+    }
+
+    fn setup_environment(cmd: &mut CommandBuilder) {
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
+        
+        if let Ok(home) = std::env::var("HOME") {
+            cmd.env("HOME", home);
+        }
+        
+        let path = std::env::var("PATH").unwrap_or_else(|_| {
+            "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin".to_string()
+        });
+        cmd.env("PATH", path);
+        
+        // Preserve other important environment variables for colors
+        if let Ok(lang) = std::env::var("LANG") {
+            cmd.env("LANG", lang);
+        } else {
+            cmd.env("LANG", "en_US.UTF-8");
+        }
+        
+        if let Ok(lc_all) = std::env::var("LC_ALL") {
+            cmd.env("LC_ALL", lc_all);
+        }
+        
+        // Ensure color support for common tools
+        cmd.env("CLICOLOR", "1");
+        cmd.env("CLICOLOR_FORCE", "1");
+    }
+
+    async fn start_reader(
+        id: String,
+        mut reader: Box<dyn Read + Send>,
+        terminals: Arc<RwLock<HashMap<String, TerminalState>>>,
+        app_handle: Arc<Mutex<Option<AppHandle>>>,
+    ) {
+        tokio::task::spawn_blocking(move || {
+            let runtime = tokio::runtime::Handle::current();
+            let mut buf = [0u8; 8192];
+            
+            loop {
+                match reader.read(&mut buf) {
+                    Ok(0) => {
+                        info!("Terminal {id} EOF");
+                        break;
+                    }
+                    Ok(n) => {
+                        let data = buf[..n].to_vec();
+                        let id_clone = id.clone();
+                        let terminals_clone = Arc::clone(&terminals);
+                        let app_handle_clone = Arc::clone(&app_handle);
+                        
+                        runtime.block_on(async move {
+                            let mut terminals = terminals_clone.write().await;
+                            if let Some(state) = terminals.get_mut(&id_clone) {
+                                // Append to ring buffer
+                                state.buffer.extend_from_slice(&data);
+                                if state.buffer.len() > MAX_BUFFER_SIZE {
+                                    let excess = state.buffer.len() - MAX_BUFFER_SIZE;
+                                    state.buffer.drain(0..excess);
+                                }
+                                
+                                // Increment sequence
+                                state.seq += 1;
+                                
+                                // Emit Tauri event
+                                if let Some(handle) = app_handle_clone.lock().await.as_ref() {
+                                    let event_name = format!("terminal-output-{id_clone}");
+                                    if let Err(e) = handle.emit(&event_name, data) {
+                                        warn!("Failed to emit terminal output: {e}");
+                                    }
+                                }
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        if e.kind() != std::io::ErrorKind::WouldBlock {
+                            error!("Terminal {id} read error: {e}");
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+#[async_trait::async_trait]
+impl TerminalBackend for LocalPtyAdapter {
+    async fn create(&self, params: CreateParams) -> Result<(), String> {
+        let id = params.id.clone();
+        
+        // Check if already creating
+        {
+            let mut creating = self.creating.lock().await;
+            if creating.contains(&id) {
+                debug!("Terminal {id} already being created");
+                return Ok(());
+            }
+            creating.insert(id.clone());
+        }
+        
+        // Check if already exists
+        if self.exists(&id).await? {
+            self.creating.lock().await.remove(&id);
+            return Ok(());
+        }
+        
+        info!("Creating terminal: id={id}, cwd={}", params.cwd);
+        
+        let pty_system = NativePtySystem::default();
+        let pair = pty_system
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|e| format!("Failed to open PTY: {e}"))?;
+        
+        let mut cmd = if let Some(app) = params.app {
+            let mut cmd = CommandBuilder::new(app.command);
+            for arg in app.args {
+                cmd.arg(arg);
+            }
+            for (key, value) in app.env {
+                cmd.env(key, value);
+            }
+            cmd
+        } else {
+            Self::get_shell_command()
+        };
+        
+        Self::setup_environment(&mut cmd);
+        cmd.cwd(params.cwd);
+        
+        let child = pair
+            .slave
+            .spawn_command(cmd)
+            .map_err(|e| format!("Failed to spawn command: {e}"))?;
+        
+        info!("Successfully spawned shell process for terminal {id}");
+        
+        let writer = pair
+            .master
+            .take_writer()
+            .map_err(|e| format!("Failed to get writer: {e}"))?;
+        
+        let reader = pair
+            .master
+            .try_clone_reader()
+            .map_err(|e| format!("Failed to get reader: {e}"))?;
+        
+        // Store the child and master in separate maps to avoid Sync issues
+        PTY_CHILDREN.lock().await.insert(id.clone(), child);
+        PTY_MASTERS.lock().await.insert(id.clone(), pair.master);
+        PTY_WRITERS.lock().await.insert(id.clone(), writer);
+        
+        let state = TerminalState {
+            buffer: Vec::new(),
+            seq: 0,
+        };
+        
+        self.terminals.write().await.insert(id.clone(), state);
+        
+        // Start reader task
+        Self::start_reader(
+            id.clone(),
+            reader,
+            Arc::clone(&self.terminals),
+            Arc::clone(&self.app_handle),
+        )
+        .await;
+        
+        self.creating.lock().await.remove(&id);
+        
+        info!("Terminal created successfully: id={id}");
+        Ok(())
+    }
+    
+    async fn write(&self, id: &str, data: &[u8]) -> Result<(), String> {
+        let start = Instant::now();
+        
+        if let Some(writer) = PTY_WRITERS.lock().await.get_mut(id) {
+            writer
+                .write_all(data)
+                .map_err(|e| format!("Write failed: {e}"))?;
+            writer
+                .flush()
+                .map_err(|e| format!("Flush failed: {e}"))?;
+            
+            let elapsed = start.elapsed();
+            if elapsed.as_millis() > 20 {
+                warn!("Terminal {id} slow write: {}ms", elapsed.as_millis());
+            }
+            
+            Ok(())
+        } else {
+            warn!("Terminal {id} not found for write");
+            Ok(())
+        }
+    }
+    
+    async fn resize(&self, id: &str, cols: u16, rows: u16) -> Result<(), String> {
+        if let Some(master) = PTY_MASTERS.lock().await.get(id) {
+            master
+                .resize(PtySize {
+                    rows,
+                    cols,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+                .map_err(|e| format!("Resize failed: {e}"))?;
+            
+            debug!("Resized terminal {id}: {cols}x{rows}");
+            Ok(())
+        } else {
+            warn!("Terminal {id} not found for resize");
+            Ok(())
+        }
+    }
+    
+    async fn close(&self, id: &str) -> Result<(), String> {
+        info!("Closing terminal: {id}");
+        
+        // Remove from all maps
+        if let Some(mut child) = PTY_CHILDREN.lock().await.remove(id) {
+            if let Err(e) = child.kill() {
+                warn!("Failed to kill terminal process {id}: {e}");
+            }
+        }
+        
+        PTY_MASTERS.lock().await.remove(id);
+        PTY_WRITERS.lock().await.remove(id);
+        self.terminals.write().await.remove(id);
+        
+        info!("Terminal {id} closed");
+        Ok(())
+    }
+    
+    async fn exists(&self, id: &str) -> Result<bool, String> {
+        Ok(self.terminals.read().await.contains_key(id))
+    }
+    
+    async fn snapshot(&self, id: &str, from_seq: Option<u64>) -> Result<(u64, Vec<u8>), String> {
+        let terminals = self.terminals.read().await;
+        
+        if let Some(state) = terminals.get(id) {
+            let current_seq = state.seq;
+            
+            if let Some(from) = from_seq {
+                if from < current_seq {
+                    // For simplicity, just return full buffer if seq is within range
+                    // In a real implementation, you'd track byte positions per seq
+                    Ok((current_seq, state.buffer.clone()))
+                } else {
+                    Ok((current_seq, state.buffer.clone()))
+                }
+            } else {
+                Ok((current_seq, state.buffer.clone()))
+            }
+        } else {
+            Ok((0, Vec::new()))
+        }
+    }
+}
+
+fn get_shell_binary() -> String {
+    std::env::var("SHELL").unwrap_or_else(|_| {
+        if cfg!(target_os = "windows") {
+            "cmd.exe".to_string()
+        } else {
+            "/bin/bash".to_string()
+        }
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::time::{sleep, Duration};
+    
+    #[tokio::test]
+    async fn test_create_exists() {
+        let adapter = LocalPtyAdapter::new();
+        let params = CreateParams {
+            id: "test-terminal".to_string(),
+            cwd: "/tmp".to_string(),
+            app: None,
+        };
+        
+        assert!(!adapter.exists("test-terminal").await.unwrap());
+        adapter.create(params).await.unwrap();
+        assert!(adapter.exists("test-terminal").await.unwrap());
+        adapter.close("test-terminal").await.unwrap();
+        assert!(!adapter.exists("test-terminal").await.unwrap());
+    }
+    
+    #[tokio::test]
+    async fn test_snapshot_empty() {
+        let adapter = LocalPtyAdapter::new();
+        let (seq, data) = adapter.snapshot("nonexistent", None).await.unwrap();
+        assert_eq!(seq, 0);
+        assert!(data.is_empty());
+    }
+    
+    #[tokio::test]
+    async fn test_write_and_snapshot() {
+        let adapter = LocalPtyAdapter::new();
+        let params = CreateParams {
+            id: "test-write".to_string(),
+            cwd: "/tmp".to_string(),
+            app: None,
+        };
+        
+        adapter.create(params).await.unwrap();
+        sleep(Duration::from_millis(100)).await;
+        
+        adapter.write("test-write", b"echo test\n").await.unwrap();
+        sleep(Duration::from_millis(200)).await;
+        
+        let (seq, data) = adapter.snapshot("test-write", None).await.unwrap();
+        assert!(seq > 0);
+        assert!(!data.is_empty());
+        
+        adapter.close("test-write").await.unwrap();
+    }
+    
+    #[tokio::test]
+    async fn test_resize() {
+        let adapter = LocalPtyAdapter::new();
+        let params = CreateParams {
+            id: "test-resize".to_string(),
+            cwd: "/tmp".to_string(),
+            app: None,
+        };
+        
+        adapter.create(params).await.unwrap();
+        adapter.resize("test-resize", 120, 40).await.unwrap();
+        adapter.close("test-resize").await.unwrap();
+    }
+    
+    #[tokio::test]
+    async fn test_concurrent_create() {
+        let adapter = Arc::new(LocalPtyAdapter::new());
+        let mut handles = vec![];
+        
+        for _ in 0..3 {
+            let adapter_clone = Arc::clone(&adapter);
+            let handle = tokio::spawn(async move {
+                let params = CreateParams {
+                    id: "concurrent-test".to_string(),
+                    cwd: "/tmp".to_string(),
+                    app: None,
+                };
+                adapter_clone.create(params).await.unwrap();
+            });
+            handles.push(handle);
+        }
+        
+        for handle in handles {
+            handle.await.unwrap();
+        }
+        
+        assert!(adapter.exists("concurrent-test").await.unwrap());
+        adapter.close("concurrent-test").await.unwrap();
+    }
+}
