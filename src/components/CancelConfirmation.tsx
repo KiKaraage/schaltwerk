@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 
 interface CancelConfirmationProps {
   open: boolean
@@ -15,6 +15,7 @@ export function CancelConfirmation({
   onConfirm, 
   onCancel 
 }: CancelConfirmationProps) {
+  const confirmButtonRef = useRef<HTMLButtonElement>(null)
   const handleConfirm = useCallback(() => {
     onConfirm(hasUncommittedChanges)
   }, [onConfirm, hasUncommittedChanges])
@@ -35,6 +36,15 @@ export function CancelConfirmation({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [open, onCancel, handleConfirm])
+
+  useEffect(() => {
+    if (!open) return
+    // Ensure the primary action is focused so Enter activates it even if terminal captured events previously
+    const id = window.setTimeout(() => {
+      confirmButtonRef.current?.focus()
+    }, 0)
+    return () => window.clearTimeout(id)
+  }, [open])
 
   if (!open) return null
 
@@ -68,7 +78,9 @@ export function CancelConfirmation({
             <span className="ml-1.5 text-xs opacity-60 group-hover:opacity-100">Esc</span>
           </button>
           <button
+            ref={confirmButtonRef}
             onClick={handleConfirm}
+            autoFocus
             className={`px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 group ${
               hasUncommittedChanges 
                 ? 'bg-red-700 hover:bg-red-600 focus:ring-red-500' 

@@ -12,7 +12,7 @@ import { useSelection } from './contexts/SelectionContext'
 import { FocusProvider } from './contexts/FocusContext'
 
 export interface SessionActionEvent {
-  action: 'cancel'
+  action: 'cancel' | 'cancel-immediate'
   sessionId: string
   sessionName: string
   hasUncommittedChanges?: boolean
@@ -34,6 +34,10 @@ export default function App() {
       
       if (action === 'cancel') {
         setCancelModalOpen(true)
+      } else if (action === 'cancel-immediate') {
+        // perform cancel directly
+        setCancelModalOpen(false)
+        void handleCancelSession(hasUncommittedChanges)
       }
     }
     

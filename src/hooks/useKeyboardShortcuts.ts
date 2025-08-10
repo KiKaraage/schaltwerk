@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 interface KeyboardShortcutsProps {
     onSelectOrchestrator: () => void
     onSelectSession: (index: number) => void
-    onCancelSelectedSession?: () => void
+    onCancelSelectedSession?: (immediate: boolean) => void
     sessionCount: number
 }
 
@@ -29,7 +29,8 @@ export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, on
             } else if (key === 'd' || key === 'D') {
                 if (onCancelSelectedSession) {
                     event.preventDefault()
-                    onCancelSelectedSession()
+                    const immediate = event.shiftKey === true
+                    onCancelSelectedSession(immediate)
                 }
             }
         }

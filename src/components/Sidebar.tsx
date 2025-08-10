@@ -92,18 +92,30 @@ export function Sidebar() {
         }
     }
 
-    const handleCancelSelectedSession = () => {
+    const handleCancelSelectedSession = (immediate: boolean) => {
         if (selection.kind === 'session') {
             const selectedSession = sessions.find(s => s.info.session_id === selection.payload)
             if (selectedSession) {
-                window.dispatchEvent(new CustomEvent('para-ui:session-action', {
-                    detail: {
-                        action: 'cancel',
-                        sessionId: selectedSession.info.session_id,
-                        sessionName: selectedSession.info.session_id,
-                        hasUncommittedChanges: selectedSession.info.has_uncommitted_changes || false
-                    }
-                }))
+                if (immediate) {
+                    // immediate cancel without modal
+                    window.dispatchEvent(new CustomEvent('para-ui:session-action', {
+                        detail: {
+                            action: 'cancel-immediate',
+                            sessionId: selectedSession.info.session_id,
+                            sessionName: selectedSession.info.session_id,
+                            hasUncommittedChanges: selectedSession.info.has_uncommitted_changes || false
+                        }
+                    }))
+                } else {
+                    window.dispatchEvent(new CustomEvent('para-ui:session-action', {
+                        detail: {
+                            action: 'cancel',
+                            sessionId: selectedSession.info.session_id,
+                            sessionName: selectedSession.info.session_id,
+                            hasUncommittedChanges: selectedSession.info.has_uncommitted_changes || false
+                        }
+                    }))
+                }
             }
         }
     }
@@ -349,7 +361,7 @@ export function Sidebar() {
                                         'ring-2 ring-amber-400/50 shadow-lg shadow-amber-400/20 bg-amber-950/20'
                                 )}
                                 title={isSelected 
-                                    ? `Selected session • Cancel with ⌘D` 
+                                    ? `Selected session • Cancel: ⌘D, Force: ⇧⌘D` 
                                     : i < 8 
                                         ? `Select session (⌘${i + 2})` 
                                         : `Select session`}
@@ -450,7 +462,7 @@ export function Sidebar() {
                                             }))
                                         }}
                                         className="text-[11px] px-2 py-0.5 rounded bg-red-800/60 hover:bg-red-700/60"
-                                        title="Cancel session (⌘D)"
+                                        title="Cancel session (⌘D, ⇧⌘D to force)"
                                     >
                                         Cancel
                                     </button>
