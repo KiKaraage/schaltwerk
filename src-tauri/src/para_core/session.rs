@@ -205,17 +205,8 @@ impl SessionManager {
             if session.status == SessionStatus::Cancelled {
                 continue;
             }
-            let has_uncommitted = if let Ok(stats) = self.db.should_update_stats(&session.id) {
-                if !stats {
-                    git::has_uncommitted_changes(&session.worktree_path).unwrap_or(false)
-                } else {
-                    false
-                }
-            } else {
-                false
-            };
-            
             let git_stats = git::calculate_git_stats(&session.worktree_path, &session.parent_branch).ok();
+            let has_uncommitted = git_stats.as_ref().map(|s| s.has_uncommitted).unwrap_or(false);
             
             let diff_stats = git_stats.as_ref().map(|stats| DiffStats {
                 files_changed: stats.files_changed as usize,
@@ -236,7 +227,7 @@ impl SessionManager {
                 base_branch: session.parent_branch.clone(),
                 merge_mode: "rebase".to_string(),
                 status: status_type,
-                last_modified: session.last_activity,
+                last_modified: session.last_activity.or(Some(session.updated_at)),
                 has_uncommitted_changes: Some(has_uncommitted),
                 is_current: false,
                 session_type: SessionType::Worktree,

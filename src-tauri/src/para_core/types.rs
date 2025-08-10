@@ -4,6 +4,12 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangedFile {
+    pub path: String,
+    pub change_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
     pub id: String,
     pub name: String,

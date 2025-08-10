@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from '../contexts/SelectionContext'
 import clsx from 'clsx'
+import { sortSessions } from '../utils/sessionSort'
 
 interface EnrichedSession {
     info: {
@@ -50,7 +51,7 @@ export function SidebarNew() {
         const loadSessions = async () => {
             try {
                 const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                setSessions(result)
+                setSessions(sortSessions<EnrichedSession>(result))
             } catch (err) {
                 console.error('Failed to load sessions:', err)
             } finally {
@@ -105,12 +106,7 @@ export function SidebarNew() {
                 ) : sessions.length === 0 ? (
                     <div className="text-center text-slate-500 py-4">No active sessions</div>
                 ) : (
-                    sessions
-                        .sort((a, b) => {
-                            const aTime = a.info.last_modified ? new Date(a.info.last_modified).getTime() : 0
-                            const bTime = b.info.last_modified ? new Date(b.info.last_modified).getTime() : 0
-                            return bTime - aTime
-                        })
+                    sortSessions<EnrichedSession>(sessions)
                         .map((session) => {
                         const s = session.info
                         const color = getSessionStateColor()

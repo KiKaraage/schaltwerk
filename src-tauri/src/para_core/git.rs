@@ -3,7 +3,7 @@ use std::process::Command;
 use std::collections::HashSet;
 use anyhow::{Result, anyhow};
 use chrono::Utc;
-use crate::para_core::types::GitStats;
+use crate::para_core::types::{GitStats, ChangedFile};
 
 pub fn discover_repository() -> Result<PathBuf> {
     let output = Command::new("git")
@@ -255,6 +255,94 @@ pub fn calculate_git_stats(worktree_path: &Path, parent_branch: &str) -> Result<
         has_uncommitted,
         calculated_at: Utc::now(),
     })
+}
+
+pub fn get_changed_files(worktree_path: &Path, parent_branch: &str) -> Result<Vec<ChangedFile>> {
+    let mut file_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
+    // 1. Committed changes relative to base
+    let committed_output = Command::new("git")
+        .args([
+            "-C", worktree_path.to_str().unwrap(),
+            "diff", "--name-status", &format!("{parent_branch}...HEAD")
+        ])
+        .output()?;
+    if committed_output.status.success() {
+        for line in String::from_utf8_lossy(&committed_output.stdout).lines() {
+            if let Some((status, path)) = parse_name_status_line(line) {
+                file_map.insert(path.to_string(), status.to_string());
+            }
+        }
+    }
+
+    // 2. Staged changes
+    let staged_output = Command::new("git")
+        .args([
+            "-C", worktree_path.to_str().unwrap(),
+            "diff", "--name-status", "--cached"
+        ])
+        .output()?;
+    if staged_output.status.success() {
+        for line in String::from_utf8_lossy(&staged_output.stdout).lines() {
+            if let Some((status, path)) = parse_name_status_line(line) {
+                file_map.insert(path.to_string(), status.to_string());
+            }
+        }
+    }
+
+    // 3. Unstaged changes
+    let unstaged_output = Command::new("git")
+        .args([
+            "-C", worktree_path.to_str().unwrap(),
+            "diff", "--name-status"
+        ])
+        .output()?;
+    if unstaged_output.status.success() {
+        for line in String::from_utf8_lossy(&unstaged_output.stdout).lines() {
+            if let Some((status, path)) = parse_name_status_line(line) {
+                file_map.insert(path.to_string(), status.to_string());
+            }
+        }
+    }
+
+    // 4. Untracked files
+    let untracked_output = Command::new("git")
+        .args([
+            "-C", worktree_path.to_str().unwrap(),
+            "ls-files", "--others", "--exclude-standard"
+        ])
+        .output()?;
+    if untracked_output.status.success() {
+        for line in String::from_utf8_lossy(&untracked_output.stdout).lines() {
+            if !line.is_empty() {
+                file_map.insert(line.to_string(), "added".to_string());
+            }
+        }
+    }
+
+    let mut files: Vec<ChangedFile> = file_map
+        .into_iter()
+        .map(|(path, change_type)| ChangedFile { path, change_type })
+        .collect();
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(files)
+}
+
+fn parse_name_status_line(line: &str) -> Option<(&str, &str)> {
+    if line.is_empty() { return None; }
+    let parts: Vec<&str> = line.splitn(2, '\t').collect();
+    if parts.len() != 2 { return None; }
+    let status = parts[0];
+    let path = parts[1];
+    let change_type = match status.chars().next().unwrap_or('?') {
+        'M' => "modified",
+        'A' => "added",
+        'D' => "deleted",
+        'R' => "renamed",
+        'C' => "copied",
+        _ => "unknown",
+    };
+    Some((change_type, path))
 }
 
 fn parse_numstat_line(line: &str) -> Option<(u32, u32, &str)> {

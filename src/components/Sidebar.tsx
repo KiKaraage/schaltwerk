@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { clsx } from 'clsx'
 import { invoke } from '@tauri-apps/api/core'
 import { formatLastActivity } from '../utils/time'
+import { sortSessions } from '../utils/sessionSort'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { useSelection } from '../contexts/SelectionContext'
@@ -132,13 +133,7 @@ export function Sidebar() {
         const loadSessions = async () => {
             try {
                 const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                // Sort sessions: ready_to_merge at the bottom
-                const sorted = result.sort((a, b) => {
-                    if (a.info.ready_to_merge && !b.info.ready_to_merge) return 1
-                    if (!a.info.ready_to_merge && b.info.ready_to_merge) return -1
-                    return 0
-                })
-                setSessions(sorted)
+                setSessions(sortSessions(result))
             } catch (err) {
                 console.error('Failed to load sessions:', err)
             } finally {
@@ -245,11 +240,7 @@ export function Sidebar() {
                     const enriched: EnrichedSession = { info, status: undefined, terminals }
                     // Add new session and re-sort
                     const updated = [enriched, ...prev]
-                    return updated.sort((a, b) => {
-                        if (a.info.ready_to_merge && !b.info.ready_to_merge) return 1
-                        if (!a.info.ready_to_merge && b.info.ready_to_merge) return -1
-                        return 0
-                    })
+                    return sortSessions(updated)
                 })
             })
             unlisteners.push(u3)
@@ -323,12 +314,7 @@ export function Sidebar() {
                 ) : sessions.length === 0 ? (
                     <div className="text-center text-slate-500 py-4">No active sessions</div>
                 ) : (
-                    sessions
-                        .sort((a, b) => {
-                            const aTime = a.info.last_modified ? new Date(a.info.last_modified).getTime() : 0
-                            const bTime = b.info.last_modified ? new Date(b.info.last_modified).getTime() : 0
-                            return bTime - aTime
-                        })
+                    sortSessions(sessions)
                         .map((session, i) => {
                         const s = session.info
                         const color = getSessionStateColor()
@@ -419,12 +405,7 @@ export function Sidebar() {
                                                     await invoke('para_core_unmark_session_ready', { name: s.session_id })
                                                     // Reload sessions
                                                     const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                                                    const sorted = result.sort((a, b) => {
-                                                        if (a.info.ready_to_merge && !b.info.ready_to_merge) return 1
-                                                        if (!a.info.ready_to_merge && b.info.ready_to_merge) return -1
-                                                        return 0
-                                                    })
-                                                    setSessions(sorted)
+                                                    setSessions(sortSessions(result))
                                                 } catch (err) {
                                                     console.error('Failed to unmark session:', err)
                                                 }
@@ -503,12 +484,7 @@ export function Sidebar() {
                 onSuccess={async () => {
                     // Reload sessions
                     const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                    const sorted = result.sort((a, b) => {
-                        if (a.info.ready_to_merge && !b.info.ready_to_merge) return 1
-                        if (!a.info.ready_to_merge && b.info.ready_to_merge) return -1
-                        return 0
-                    })
-                    setSessions(sorted)
+                    setSessions(sortSessions(result))
                 }}
             />
         </div>

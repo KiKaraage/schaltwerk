@@ -1,118 +1,14 @@
 use std::process::Command;
-use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
+// no serde derives used in this module
 use crate::get_para_core;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ChangedFile {
-    pub path: String,
-    pub change_type: String,
-}
+use crate::para_core::{git, types::ChangedFile};
 
 #[tauri::command]
 pub async fn get_changed_files_from_main(session_name: Option<String>) -> Result<Vec<ChangedFile>, String> {
     let repo_path = get_repo_path(session_name.clone()).await?;
     let base_branch = get_base_branch(session_name).await?;
-    
-    let mut file_map: HashMap<String, String> = HashMap::new();
-    
-    // 1. Get changes between base branch and HEAD (committed changes)
-    let committed_output = Command::new("git")
-        .args(["-C", &repo_path, "diff", "--name-status", &format!("{base_branch}...HEAD")])
-        .output()
-        .map_err(|e| format!("Failed to get committed changes: {e}"))?;
-    
-    if committed_output.status.success() {
-        let stdout = String::from_utf8_lossy(&committed_output.stdout);
-        for line in stdout.lines() {
-            if let Some((status, path)) = parse_git_status_line(line) {
-                file_map.insert(path.to_string(), status.to_string());
-            }
-        }
-    }
-    
-    // 2. Get staged changes (changes in index)
-    let staged_output = Command::new("git")
-        .args(["-C", &repo_path, "diff", "--name-status", "--cached"])
-        .output()
-        .map_err(|e| format!("Failed to get staged changes: {e}"))?;
-    
-    if staged_output.status.success() {
-        let stdout = String::from_utf8_lossy(&staged_output.stdout);
-        for line in stdout.lines() {
-            if let Some((status, path)) = parse_git_status_line(line) {
-                file_map.insert(path.to_string(), status.to_string());
-            }
-        }
-    }
-    
-    // 3. Get unstaged changes (working directory changes)
-    let unstaged_output = Command::new("git")
-        .args(["-C", &repo_path, "diff", "--name-status"])
-        .output()
-        .map_err(|e| format!("Failed to get unstaged changes: {e}"))?;
-    
-    if unstaged_output.status.success() {
-        let stdout = String::from_utf8_lossy(&unstaged_output.stdout);
-        for line in stdout.lines() {
-            if let Some((status, path)) = parse_git_status_line(line) {
-                file_map.insert(path.to_string(), status.to_string());
-            }
-        }
-    }
-    
-    // 4. Get untracked files
-    let untracked_output = Command::new("git")
-        .args(["-C", &repo_path, "ls-files", "--others", "--exclude-standard"])
-        .output()
-        .map_err(|e| format!("Failed to get untracked files: {e}"))?;
-    
-    if untracked_output.status.success() {
-        let stdout = String::from_utf8_lossy(&untracked_output.stdout);
-        for line in stdout.lines() {
-            if !line.is_empty() {
-                file_map.insert(line.to_string(), "added".to_string());
-            }
-        }
-    }
-    
-    // Convert to result vector
-    let mut files: Vec<ChangedFile> = file_map.into_iter().map(|(path, change_type)| {
-        ChangedFile {
-            path,
-            change_type,
-        }
-    }).collect();
-    
-    // Sort by path for consistent ordering
-    files.sort_by(|a, b| a.path.cmp(&b.path));
-    
-    Ok(files)
-}
-
-fn parse_git_status_line(line: &str) -> Option<(&str, &str)> {
-    if line.is_empty() { 
-        return None; 
-    }
-    
-    let parts: Vec<&str> = line.splitn(2, '\t').collect();
-    if parts.len() != 2 { 
-        return None; 
-    }
-    
-    let status = parts[0];
-    let path = parts[1];
-    
-    let change_type = match status.chars().next().unwrap_or('?') {
-        'M' => "modified",
-        'A' => "added", 
-        'D' => "deleted",
-        'R' => "renamed",
-        'C' => "copied",
-        _ => "unknown"
-    };
-    
-    Some((change_type, path))
+    git::get_changed_files(std::path::Path::new(&repo_path), &base_branch)
+        .map_err(|e| format!("Failed to compute changed files: {e}"))
 }
 
 #[tauri::command]
