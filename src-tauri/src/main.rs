@@ -121,9 +121,15 @@ async fn start_terminal_monitoring(app: tauri::AppHandle) {
         elapsed_seconds: u64,
     }
     
+    #[derive(Serialize, Clone)]
+    struct TerminalUnstuckNotification {
+        terminal_id: String,
+        session_id: Option<String>,
+    }
+    
     tokio::spawn(async move {
-        let mut interval = interval(Duration::from_secs(30));
-        let mut notified_terminals = HashSet::new();
+        let mut interval = interval(Duration::from_secs(5)); // Check more frequently for better responsiveness
+        let mut previously_stuck = HashSet::new();
         
         loop {
             interval.tick().await;
@@ -136,8 +142,8 @@ async fn start_terminal_monitoring(app: tauri::AppHandle) {
                 if is_stuck {
                     currently_stuck.insert(terminal_id.clone());
                     
-                    // Only notify once per terminal until it becomes unstuck
-                    if !notified_terminals.contains(&terminal_id) {
+                    // Only notify if this terminal wasn't previously stuck
+                    if !previously_stuck.contains(&terminal_id) {
                         let session_id = if terminal_id.starts_with("session-") {
                             terminal_id.split('-').nth(1).map(|s| s.to_string())
                         } else {
@@ -150,19 +156,37 @@ async fn start_terminal_monitoring(app: tauri::AppHandle) {
                             elapsed_seconds: elapsed,
                         };
                         
-                        log::info!("Terminal {terminal_id} pondering for {elapsed} seconds");
+                        log::info!("Terminal {terminal_id} became idle after {elapsed} seconds");
                         
                         if let Err(e) = app.emit("para-ui:terminal-stuck", &notification) {
                             log::error!("Failed to emit terminal stuck notification: {e}");
                         }
+                    }
+                } else {
+                    // Terminal is not stuck - check if it was previously stuck to emit unstuck event
+                    if previously_stuck.contains(&terminal_id) {
+                        let session_id = if terminal_id.starts_with("session-") {
+                            terminal_id.split('-').nth(1).map(|s| s.to_string())
+                        } else {
+                            None
+                        };
                         
-                        notified_terminals.insert(terminal_id);
+                        let notification = TerminalUnstuckNotification {
+                            terminal_id: terminal_id.clone(),
+                            session_id,
+                        };
+                        
+                        log::info!("Terminal {terminal_id} became active again");
+                        
+                        if let Err(e) = app.emit("para-ui:terminal-unstuck", &notification) {
+                            log::error!("Failed to emit terminal unstuck notification: {e}");
+                        }
                     }
                 }
             }
             
-            // Remove terminals that are no longer stuck from the notified set
-            notified_terminals.retain(|terminal_id| currently_stuck.contains(terminal_id));
+            // Update the set of previously stuck terminals for next iteration
+            previously_stuck = currently_stuck;
         }
     });
 }

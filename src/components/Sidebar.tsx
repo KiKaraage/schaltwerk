@@ -50,6 +50,11 @@ interface TerminalStuckNotification {
     elapsed_seconds: number
 }
 
+interface TerminalUnstuckNotification {
+    terminal_id: string
+    session_id?: string
+}
+
 export function Sidebar() {
     const { selection, setSelection } = useSelection()
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
@@ -256,6 +261,19 @@ export function Sidebar() {
                 }
             })
             unlisteners.push(u5)
+            
+            // Listen for unstuck terminal notifications
+            const u6 = await listen<TerminalUnstuckNotification>('para-ui:terminal-unstuck', (event) => {
+                const { session_id } = event.payload
+                if (session_id) {
+                    setStuckTerminals(prev => {
+                        const updated = new Set(prev)
+                        updated.delete(session_id)
+                        return updated
+                    })
+                }
+            })
+            unlisteners.push(u6)
         }
         attach()
         

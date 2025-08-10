@@ -324,7 +324,7 @@ impl LocalPtyAdapter {
                 .duration_since(state.last_output)
                 .map_err(|e| format!("Time error: {e}"))?
                 .as_secs();
-            let is_stuck = elapsed > 30;
+            let is_stuck = elapsed > 60; // Increased to 60 seconds for less aggressive idle detection
             Ok((is_stuck, elapsed))
         } else {
             Err(format!("Terminal {id} not found"))
@@ -338,7 +338,7 @@ impl LocalPtyAdapter {
         for (id, state) in terminals.iter() {
             if let Ok(duration) = SystemTime::now().duration_since(state.last_output) {
                 let elapsed = duration.as_secs();
-                let is_stuck = elapsed > 30;
+                let is_stuck = elapsed > 60; // Increased to 60 seconds for less aggressive idle detection
                 results.push((id.clone(), is_stuck, elapsed));
             }
         }
