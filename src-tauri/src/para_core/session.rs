@@ -73,6 +73,8 @@ impl SessionManager {
             last_activity: None,
             initial_prompt: prompt.map(String::from),
             ready_to_merge: false,
+            original_agent_type: None,
+            original_skip_permissions: None,
         };
         
         // Create worktree with new branch from specified base
@@ -91,6 +93,11 @@ impl SessionManager {
             let _ = git::delete_branch(&self.repo_path, &branch);
             return Err(anyhow!("Failed to save session to database: {}", e));
         }
+
+        // Persist original opening settings at creation time from global config
+        let global_agent = self.db.get_agent_type().unwrap_or_else(|_| "claude".to_string());
+        let global_skip = self.db.get_skip_permissions().unwrap_or(false);
+        let _ = self.db.set_session_original_settings(&session.id, &global_agent, global_skip);
         
         let mut git_stats = git::calculate_git_stats(&worktree_path, &parent_branch)?;
         git_stats.session_id = session_id;
@@ -259,8 +266,9 @@ impl SessionManager {
     
     pub fn start_claude_in_session(&self, session_name: &str) -> Result<String> {
         let session = self.db.get_session_by_name(&self.repo_path, session_name)?;
-        let skip_permissions = self.db.get_skip_permissions()?;
-        let agent_type = self.db.get_agent_type()?;
+        // Use per-session original settings if available, falling back to current globals
+        let skip_permissions = session.original_skip_permissions.unwrap_or(self.db.get_skip_permissions()?);
+        let agent_type = session.original_agent_type.clone().unwrap_or(self.db.get_agent_type()?);
         
         let command = match agent_type.as_str() {
             "cursor" => {
@@ -372,6 +380,8 @@ mod session_tests {
             last_activity: None,
             initial_prompt: Some("implement feature X".to_string()),
             ready_to_merge: false,
+            original_agent_type: None,
+            original_skip_permissions: None,
         };
         
         manager.db.create_session(&session).unwrap();
@@ -428,6 +438,8 @@ mod session_tests {
             last_activity: None,
             initial_prompt: None,
             ready_to_merge: false,
+            original_agent_type: None,
+            original_skip_permissions: None,
         };
         
         manager.db.create_session(&session_no_prompt).unwrap();
@@ -502,6 +514,8 @@ mod session_tests {
             last_activity: None,
             initial_prompt: Some("test prompt".to_string()),
             ready_to_merge: false,
+            original_agent_type: None,
+            original_skip_permissions: None,
         };
         
         manager.db.create_session(&session).unwrap();

@@ -18,6 +18,10 @@ pub struct Session {
     pub last_activity: Option<DateTime<Utc>>,
     pub initial_prompt: Option<String>,
     pub ready_to_merge: bool,
+    // If present, captures the agent type that originally opened this session (e.g., "claude" or "cursor")
+    pub original_agent_type: Option<String>,
+    // If present, captures whether skip-permissions/force was enabled when the session was originally opened
+    pub original_skip_permissions: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

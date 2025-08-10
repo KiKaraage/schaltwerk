@@ -52,6 +52,8 @@ impl Database {
                 last_activity INTEGER,
                 initial_prompt TEXT,
                 ready_to_merge BOOLEAN DEFAULT FALSE,
+                original_agent_type TEXT,
+                original_skip_permissions BOOLEAN,
                 UNIQUE(repository_path, name)
             )",
             [],
@@ -117,6 +119,16 @@ impl Database {
             "ALTER TABLE sessions ADD COLUMN ready_to_merge BOOLEAN DEFAULT FALSE",
             [],
         );
+        // Add original_agent_type column if it doesn't exist (migration)
+        let _ = conn.execute(
+            "ALTER TABLE sessions ADD COLUMN original_agent_type TEXT",
+            [],
+        );
+        // Add original_skip_permissions column if it doesn't exist (migration)
+        let _ = conn.execute(
+            "ALTER TABLE sessions ADD COLUMN original_skip_permissions BOOLEAN",
+            [],
+        );
         
         Ok(())
     }
@@ -128,8 +140,9 @@ impl Database {
             "INSERT INTO sessions (
                 id, name, repository_path, repository_name,
                 branch, parent_branch, worktree_path,
-                status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
+                original_agent_type, original_skip_permissions
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 session.id,
                 session.name,
@@ -144,6 +157,8 @@ impl Database {
                 session.last_activity.map(|dt| dt.timestamp()),
                 session.initial_prompt,
                 session.ready_to_merge,
+                session.original_agent_type,
+                session.original_skip_permissions,
             ],
         )?;
         
@@ -156,7 +171,8 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
-                    status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge
+                    status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
+                    original_agent_type, original_skip_permissions
              FROM sessions
              WHERE repository_path = ?1 AND name = ?2"
         )?;
@@ -179,6 +195,8 @@ impl Database {
                         .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
                     initial_prompt: row.get(11)?,
                     ready_to_merge: row.get(12).unwrap_or(false),
+                    original_agent_type: row.get(13).ok(),
+                    original_skip_permissions: row.get(14).ok(),
                 })
             }
         )?;
@@ -192,7 +210,8 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
-                    status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge
+                    status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
+                    original_agent_type, original_skip_permissions
              FROM sessions
              WHERE id = ?1"
         )?;
@@ -215,6 +234,8 @@ impl Database {
                         .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
                     initial_prompt: row.get(11)?,
                     ready_to_merge: row.get(12).unwrap_or(false),
+                    original_agent_type: row.get(13).ok(),
+                    original_skip_permissions: row.get(14).ok(),
                 })
             }
         )?;
@@ -228,7 +249,8 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
-                    status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge
+                    status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
+                    original_agent_type, original_skip_permissions
              FROM sessions
              WHERE repository_path = ?1
              ORDER BY ready_to_merge ASC, COALESCE(last_activity, updated_at) DESC"
@@ -252,6 +274,8 @@ impl Database {
                         .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
                     initial_prompt: row.get(11)?,
                     ready_to_merge: row.get(12).unwrap_or(false),
+                    original_agent_type: row.get(13).ok(),
+                    original_skip_permissions: row.get(14).ok(),
                 })
             }
         )?
@@ -266,7 +290,8 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
-                    status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge
+                    status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
+                    original_agent_type, original_skip_permissions
              FROM sessions
              WHERE status = 'active'
              ORDER BY ready_to_merge ASC, COALESCE(last_activity, updated_at) DESC"
@@ -290,6 +315,8 @@ impl Database {
                         .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
                     initial_prompt: row.get(11)?,
                     ready_to_merge: row.get(12).unwrap_or(false),
+                    original_agent_type: row.get(13).ok(),
+                    original_skip_permissions: row.get(14).ok(),
                 })
             }
         )?
@@ -425,6 +452,15 @@ impl Database {
             params![agent_type],
         )?;
         
+        Ok(())
+    }
+
+    pub fn set_session_original_settings(&self, session_id: &str, agent_type: &str, skip_permissions: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET original_agent_type = ?1, original_skip_permissions = ?2 WHERE id = ?3",
+            params![agent_type, skip_permissions, session_id],
+        )?;
         Ok(())
     }
 }
