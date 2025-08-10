@@ -288,7 +288,7 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
                 </button>
               </div>
               
-              <div className="flex-1 overflow-auto">
+              <div className="flex-1 overflow-auto diff-wrapper">
                 {loading ? (
                   <div className="h-full flex items-center justify-center text-slate-500">
                     <div className="text-center">
@@ -311,7 +311,6 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
                     styles={{
                       variables: {
                         dark: {
-                          // Make unchanged code feel native to our panel
                           diffViewerBackground: 'transparent',
                           diffViewerColor: '#cbd5e1',
                           gutterBackground: 'transparent',
@@ -321,15 +320,14 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
                           emptyLineBackground: 'transparent',
                           highlightBackground: '#334155',
                           highlightGutterBackground: '#475569',
-                          // Keep changes clearly visible
-                          addedBackground: 'rgba(34, 197, 94, 0.12)',
+                          addedBackground: 'rgba(34, 197, 94, 0.18)',
                           addedColor: '#cbd5e1',
-                          removedBackground: 'rgba(239, 68, 68, 0.12)',
+                          removedBackground: 'rgba(239, 68, 68, 0.18)',
                           removedColor: '#cbd5e1',
-                          wordAddedBackground: 'rgba(34, 197, 94, 0.28)',
-                          wordRemovedBackground: 'rgba(239, 68, 68, 0.28)',
-                          addedGutterBackground: 'rgba(34, 197, 94, 0.18)',
-                          removedGutterBackground: 'rgba(239, 68, 68, 0.18)',
+                          wordAddedBackground: 'rgba(34, 197, 94, 0.32)',
+                          wordRemovedBackground: 'rgba(239, 68, 68, 0.32)',
+                          addedGutterBackground: 'rgba(34, 197, 94, 0.24)',
+                          removedGutterBackground: 'rgba(239, 68, 68, 0.24)',
                           gutterColor: '#64748b',
                           addedGutterColor: '#cbd5e1',
                           removedGutterColor: '#cbd5e1',
@@ -339,16 +337,10 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
                           diffViewerTitleBorderColor: '#334155',
                         }
                       },
-                      // Unchanged content should not have a grey tile
-                      content: {
-                        background: 'transparent'
-                      },
-                      gutter: {
-                        background: 'transparent'
-                      },
-                      diffContainer: {
-                        background: 'transparent'
-                      },
+                      // Ensure row backgrounds for changes are visible
+                      diffAdded: { background: 'rgba(34, 197, 94, 0.18)' },
+                      diffRemoved: { background: 'rgba(239, 68, 68, 0.18)' },
+                      diffContainer: { background: 'transparent' },
                       line: {
                         fontFamily: 'SF Mono, Monaco, Consolas, monospace',
                         fontSize: '12px',

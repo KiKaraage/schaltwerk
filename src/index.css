@@ -147,17 +147,29 @@ body {
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.45);
 }
 
-/* Remove background from nested elements in the diff */
+/* Keep diff containers themselves transparent but allow line highlights */
 .diff-wrapper,
-.diff-wrapper *,
-.diff-wrapper table,
-.diff-wrapper tbody,
-.diff-wrapper tr,
-.diff-wrapper td,
-.diff-wrapper pre,
-[class*="diff-viewer"],
-[class*="diff-container"],
-[class*="code-diff"] {
+.diff-wrapper [class*="diff-viewer"],
+.diff-wrapper [class*="diff-container"],
+.diff-wrapper [class*="code-diff"] {
+  background: transparent;
+}
+
+/* Ensure highlight.js does not introduce its own background */
+.hljs {
   background: transparent !important;
-  background-color: transparent !important;
+}
+
+/* Adjust token colors slightly for our slate palette (optional) */
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section, .hljs-link {
+  color: #93c5fd; /* sky-300 */
+}
+.hljs-string, .hljs-title, .hljs-name, .hljs-type, .hljs-attribute {
+  color: #86efac; /* green-300 */
+}
+.hljs-number, .hljs-template-variable, .hljs-variable, .hljs-bullet {
+  color: #fca5a5; /* red-300 */
+}
+.hljs-comment, .hljs-quote {
+  color: #94a3b8; /* slate-400 */
 }
