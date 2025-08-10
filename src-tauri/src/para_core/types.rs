@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::str::FromStr;
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,12 +33,16 @@ impl SessionStatus {
             SessionStatus::Cancelled => "cancelled",
         }
     }
+}
+
+impl FromStr for SessionStatus {
+    type Err = String;
     
-    pub fn from_str(s: &str) -> Option<Self> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "active" => Some(SessionStatus::Active),
-            "cancelled" => Some(SessionStatus::Cancelled),
-            _ => None,
+            "active" => Ok(SessionStatus::Active),
+            "cancelled" => Ok(SessionStatus::Cancelled),
+            _ => Err(format!("Invalid session status: {s}")),
         }
     }
 }

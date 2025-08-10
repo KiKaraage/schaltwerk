@@ -12,6 +12,7 @@ mod para_core;
 
 use std::sync::Arc;
 use terminal::TerminalManager;
+// Manager not directly used anymore; remove import
 use tokio::sync::{OnceCell, Mutex};
 
 static TERMINAL_MANAGER: OnceCell<Arc<TerminalManager>> = OnceCell::const_new();
@@ -107,14 +108,36 @@ fn get_current_directory() -> Result<String, String> {
     }
 }
 
+use tauri::Emitter;
+
 #[tauri::command]
-async fn para_core_create_session(name: String, prompt: Option<String>) -> Result<para_core::Session, String> {
+async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: Option<String>, base_branch: Option<String>) -> Result<para_core::Session, String> {
     let core = get_para_core().await;
     let core = core.lock().await;
     let manager = core.session_manager();
     
-    manager.create_session(&name, prompt.as_deref())
-        .map_err(|e| format!("Failed to create session: {e}"))
+    let session = manager.create_session(&name, prompt.as_deref(), base_branch.as_deref())
+        .map_err(|e| format!("Failed to create session: {e}"))?;
+
+    // Emit session-added event for frontend to merge incrementally
+    #[derive(serde::Serialize, Clone)]
+    struct SessionAddedPayload {
+        session_name: String,
+        branch: String,
+        worktree_path: String,
+        parent_branch: String,
+    }
+    let _ = app.emit(
+        "para-ui:session-added",
+        SessionAddedPayload {
+            session_name: session.name.clone(),
+            branch: session.branch.clone(),
+            worktree_path: session.worktree_path.to_string_lossy().to_string(),
+            parent_branch: session.parent_branch.clone(),
+        },
+    );
+
+    Ok(session)
 }
 
 #[tauri::command]
@@ -138,7 +161,7 @@ async fn para_core_get_session(name: String) -> Result<para_core::Session, Strin
 }
 
 #[tauri::command]
-async fn para_core_cancel_session(name: String) -> Result<(), String> {
+async fn para_core_cancel_session(app: tauri::AppHandle, name: String) -> Result<(), String> {
     log::info!("Starting cancel session: {name}");
     
     let core = get_para_core().await;
@@ -148,6 +171,12 @@ async fn para_core_cancel_session(name: String) -> Result<(), String> {
     match manager.cancel_session(&name) {
         Ok(()) => {
             log::info!("Successfully canceled session: {name}");
+            #[derive(serde::Serialize, Clone)]
+            struct SessionRemovedPayload { session_name: String }
+            let _ = app.emit(
+                "para-ui:session-removed",
+                SessionRemovedPayload { session_name: name.clone() },
+            );
             Ok(())
         },
         Err(e) => {
@@ -178,6 +207,80 @@ async fn para_core_cleanup_orphaned_worktrees() -> Result<(), String> {
         .map_err(|e| format!("Failed to cleanup orphaned worktrees: {e}"))
 }
 
+#[tauri::command]
+async fn para_core_start_claude(session_name: String) -> Result<String, String> {
+    log::info!("Starting Claude for session: {session_name}");
+    
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    let manager = core.session_manager();
+    
+    let command = manager.start_claude_in_session(&session_name)
+        .map_err(|e| {
+            log::error!("Failed to build Claude command for session {session_name}: {e}");
+            format!("Failed to start Claude in session: {e}")
+        })?;
+    
+    log::info!("Claude command for session {session_name}: {command}");
+    
+    // Write command to terminal
+    let terminal_id = format!("session-{session_name}-top");
+    let terminal_manager = get_terminal_manager().await;
+    log::info!("Writing to terminal: {terminal_id}");
+    terminal_manager.write_terminal(terminal_id.clone(), format!("{command}\r").into_bytes()).await
+        .map_err(|e| {
+            log::error!("Failed to write to terminal {terminal_id}: {e}");
+            e
+        })?;
+    
+    log::info!("Successfully sent Claude command to terminal: {terminal_id}");
+    Ok(command)
+}
+
+#[tauri::command]
+async fn para_core_start_claude_orchestrator() -> Result<String, String> {
+    log::info!("Starting Claude for orchestrator");
+    
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    let manager = core.session_manager();
+    
+    let command = manager.start_claude_in_orchestrator()
+        .map_err(|e| format!("Failed to start Claude in orchestrator: {e}"))?;
+    
+    log::info!("Claude command for orchestrator: {command}");
+    
+    // Write command to terminal
+    let terminal_manager = get_terminal_manager().await;
+    let terminal_id = "orchestrator-top".to_string();
+    terminal_manager.write_terminal(terminal_id.clone(), format!("{command}\r").into_bytes()).await
+        .map_err(|e| {
+            log::error!("Failed to write to terminal {terminal_id}: {e}");
+            e
+        })?;
+    
+    log::info!("Successfully sent Claude command to orchestrator terminal");
+    Ok(command)
+}
+
+#[tauri::command]
+async fn para_core_set_skip_permissions(enabled: bool) -> Result<(), String> {
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    
+    core.db.set_skip_permissions(enabled)
+        .map_err(|e| format!("Failed to set skip permissions: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_get_skip_permissions() -> Result<bool, String> {
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    
+    core.db.get_skip_permissions()
+        .map_err(|e| format!("Failed to get skip permissions: {e}"))
+}
+
 fn main() {
     // Initialize logging
     logging::init_logging();
@@ -202,20 +305,25 @@ fn main() {
             para_core_cancel_session,
             para_core_update_git_stats,
             para_core_cleanup_orphaned_worktrees,
+            para_core_start_claude,
+            para_core_start_claude_orchestrator,
+            para_core_set_skip_permissions,
+            para_core_get_skip_permissions,
             diff_commands::get_changed_files_from_main,
             diff_commands::get_file_diff_from_main,
             diff_commands::get_current_branch_name,
             diff_commands::get_commit_comparison_info
         ])
-        .setup(|_app| {
+        .setup(|app| {
             // Start activity tracking for para_core sessions
+            let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let core = get_para_core().await;
                 let db = {
                     let core_lock = core.lock().await;
                     Arc::new(core_lock.db.clone())
                 };
-                para_core::activity::start_activity_tracking(db);
+                para_core::activity::start_activity_tracking_with_app(db, app_handle);
             });
             
             Ok(())

@@ -4,6 +4,7 @@ pub mod git;
 pub mod session;
 pub mod activity;
 pub mod types;
+pub mod claude;
 #[cfg(test)]
 mod tests;
 

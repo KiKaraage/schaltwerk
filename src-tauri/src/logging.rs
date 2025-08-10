@@ -28,7 +28,7 @@ pub fn get_log_path() -> PathBuf {
     
     // Create directory if it doesn't exist
     if let Err(e) = fs::create_dir_all(&log_dir) {
-        eprintln!("⚠️ Failed to create log directory: {e}");
+        eprintln!("Failed to create log directory: {e}");
     }
     
     let log_file = log_dir.join(format!("para-ui-{}.log", Local::now().format("%Y%m%d-%H%M%S")));
@@ -53,8 +53,8 @@ pub fn init_logging() {
     {
         Ok(_) => {},
         Err(e) => {
-            eprintln!("⚠️ Failed to open log file: {e}");
-            eprintln!("⚠️ Logging will continue to console only");
+            eprintln!("Failed to open log file: {e}");
+            eprintln!("Logging will continue to console only");
         }
     }
     
@@ -123,5 +123,5 @@ pub fn init_logging() {
     log::info!("========================================");
     
     // Print to console so user knows where logs are
-    eprintln!("📝 Logs are being written to: {}", log_path.display());
+    eprintln!("Logs are being written to: {}", log_path.display());
 }

@@ -84,7 +84,7 @@ mod tests {
         let manager = env.get_session_manager().unwrap();
         
         // Create a session
-        let session = manager.create_session("test-feature", Some("Test prompt")).unwrap();
+        let session = manager.create_session("test-feature", Some("Test prompt"), None).unwrap();
         
         // Verify session properties
         assert_eq!(session.name, "test-feature");
@@ -122,9 +122,9 @@ mod tests {
         let manager = env.get_session_manager().unwrap();
         
         // Create multiple sessions
-        let session1 = manager.create_session("feature-1", None).unwrap();
-        let session2 = manager.create_session("feature-2", Some("Second feature")).unwrap();
-        let session3 = manager.create_session("bugfix-1", None).unwrap();
+        let session1 = manager.create_session("feature-1", None, None).unwrap();
+        let session2 = manager.create_session("feature-2", Some("Second feature"), None).unwrap();
+        let session3 = manager.create_session("bugfix-1", None, None).unwrap();
         
         // Verify all sessions exist
         let sessions = manager.list_sessions().unwrap();
@@ -156,10 +156,10 @@ mod tests {
         let manager = env.get_session_manager().unwrap();
         
         // Create first session
-        manager.create_session("duplicate", None).unwrap();
+        manager.create_session("duplicate", None, None).unwrap();
         
         // Try to create session with same name
-        let result = manager.create_session("duplicate", None);
+        let result = manager.create_session("duplicate", None, None);
         assert!(result.is_err());
         
         // Verify only one session exists
@@ -185,7 +185,7 @@ mod tests {
         ];
         
         for name in invalid_names {
-            let result = manager.create_session(name, None);
+            let result = manager.create_session(name, None, None);
             assert!(result.is_err(), "Should reject invalid name: {}", name);
         }
         
@@ -211,7 +211,7 @@ mod tests {
             let env = TestEnvironment::new().unwrap();
             let manager = env.get_session_manager().unwrap();
             
-            let result = manager.create_session(name, None);
+            let result = manager.create_session(name, None, None);
             if let Err(ref e) = result {
                 println!("Error for {}: {}", name, e);
             }
@@ -225,7 +225,7 @@ mod tests {
         let manager = env.get_session_manager().unwrap();
         
         // Create and then cancel a session
-        let session = manager.create_session("to-cancel", None).unwrap();
+        let session = manager.create_session("to-cancel", None, None).unwrap();
         let worktree_path = session.worktree_path.clone();
         
         // Verify worktree exists before cancel
@@ -259,8 +259,8 @@ mod tests {
         let manager = env.get_session_manager().unwrap();
         
         // Create some sessions
-        manager.create_session("session-1", Some("First session")).unwrap();
-        manager.create_session("session-2", None).unwrap();
+        manager.create_session("session-1", Some("First session"), None).unwrap();
+        manager.create_session("session-2", None, None).unwrap();
         
         // Get enriched sessions
         let enriched = manager.list_enriched_sessions().unwrap();
@@ -282,7 +282,7 @@ mod tests {
         let manager = env.get_session_manager().unwrap();
         
         // Create a session
-        let session = manager.create_session("with-changes", None).unwrap();
+        let session = manager.create_session("with-changes", None, None).unwrap();
         
         // Make some changes
         std::fs::write(session.worktree_path.join("file1.txt"), "Line 1\nLine 2\nLine 3").unwrap();
@@ -321,7 +321,7 @@ mod tests {
         let manager = env.get_session_manager().unwrap();
         
         // Create a session properly
-        let session1 = manager.create_session("proper-session", None).unwrap();
+        let session1 = manager.create_session("proper-session", None, None).unwrap();
         
         // Create an orphaned worktree manually (not through session manager)
         let orphan_path = env.repo_path.join(".para").join("worktrees").join("orphan");
@@ -370,7 +370,7 @@ mod tests {
                 let repo_path = repo_path.clone();
                 thread::spawn(move || {
                     let manager = SessionManager::new((*db).clone(), repo_path);
-                    manager.create_session(&format!("concurrent-{}", i), None)
+                    manager.create_session(&format!("concurrent-{}", i), None, None)
                 })
             })
             .collect();

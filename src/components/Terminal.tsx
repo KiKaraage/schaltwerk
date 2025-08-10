@@ -5,18 +5,25 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import 'xterm/css/xterm.css';
 
+// Global guard to avoid starting Claude multiple times for the same terminal id across remounts
+const startedGlobal = new Set<string>();
+
 interface TerminalProps {
     terminalId: string;
     className?: string;
+    sessionName?: string; // explicitly provided session name
+    isOrchestrator?: boolean; // explicitly provided orchestrator flag
 }
 
-export function Terminal({ terminalId, className = '' }: TerminalProps) {
+export function Terminal({ terminalId, className = '', sessionName, isOrchestrator = false }: TerminalProps) {
     const termRef = useRef<HTMLDivElement>(null);
     const terminal = useRef<XTerm | null>(null);
     const fitAddon = useRef<FitAddon | null>(null);
     const lastSize = useRef<{ cols: number; rows: number }>({ cols: 80, rows: 24 });
     const [hydrated, setHydrated] = useState(false);
     const pendingOutput = useRef<string[]>([]);
+    const startAttempts = useRef<Map<string, number>>(new Map());
+    const startingTerminals = useRef<Map<string, boolean>>(new Map());
 
     useEffect(() => {
         console.log(`[Terminal ${terminalId}] Mounting/re-mounting terminal component`);
@@ -154,6 +161,92 @@ export function Terminal({ terminalId, className = '' }: TerminalProps) {
             // All terminals are cleaned up when the app exits via the backend cleanup handler
         };
     }, [terminalId]); // Only recreate when terminalId changes, not visibility
+
+
+    // Automatically start Claude for top terminals when hydrated and first ready
+    useEffect(() => {
+        if (!hydrated) return;
+        if (!terminalId.endsWith('-top')) return;
+        if (startedGlobal.has(terminalId)) return;
+
+        const start = async () => {
+            if (startingTerminals.current.get(terminalId)) {
+                return;
+            }
+            startingTerminals.current.set(terminalId, true);
+            try {
+                if (isOrchestrator || terminalId === 'orchestrator-top') {
+                    const exists = await invoke<boolean>('terminal_exists', { id: terminalId });
+                    if (!exists) {
+                        const attempts = (startAttempts.current.get(terminalId) || 0) + 1;
+                        if (attempts <= 10) {
+                            startAttempts.current.set(terminalId, attempts);
+                            startingTerminals.current.set(terminalId, false);
+                            setTimeout(start, 150);
+                            return;
+                        }
+                        console.warn(`[Terminal ${terminalId}] Terminal not ready after retries; skipping auto-start.`);
+                        startingTerminals.current.set(terminalId, false);
+                        return;
+                    }
+                    console.log('[Terminal orchestrator-top] Auto-starting Claude');
+                    // Mark as started BEFORE invoking to prevent overlaps
+                    startedGlobal.add(terminalId);
+                    try {
+                        await invoke('para_core_start_claude_orchestrator');
+                    } catch (e) {
+                        // Roll back start flags on failure to allow retry
+                        startedGlobal.delete(terminalId);
+                        throw e;
+                    }
+                    startingTerminals.current.set(terminalId, false);
+                } else {
+                    const expectedId = sessionName ? `session-${sessionName}-top` : null;
+                    if (!sessionName) {
+                        console.warn(`[Terminal ${terminalId}] Missing sessionName prop; cannot start Claude reliably.`);
+                        startingTerminals.current.set(terminalId, false);
+                        return;
+                    }
+                    if (expectedId !== terminalId) {
+                        console.warn(`[Terminal ${terminalId}] Terminal ID mismatch for session ${sessionName}. Expected ${expectedId}, got ${terminalId}. Skipping auto-start.`);
+                        startingTerminals.current.set(terminalId, false);
+                        return;
+                    }
+                    const exists = await invoke<boolean>('terminal_exists', { id: terminalId });
+                    if (!exists) {
+                        const attempts = (startAttempts.current.get(terminalId) || 0) + 1;
+                        if (attempts <= 10) {
+                            startAttempts.current.set(terminalId, attempts);
+                            startingTerminals.current.set(terminalId, false);
+                            setTimeout(start, 150);
+                            return;
+                        }
+                        console.warn(`[Terminal ${terminalId}] Terminal not ready after retries; skipping auto-start.`);
+                        startingTerminals.current.set(terminalId, false);
+                        return;
+                    }
+                    console.log(`[Terminal ${terminalId}] Auto-starting Claude for session: ${sessionName}`);
+                    // Mark as started BEFORE invoking to prevent overlaps
+                    startedGlobal.add(terminalId);
+                    try {
+                        await invoke('para_core_start_claude', { sessionName });
+                    } catch (e) {
+                        // Roll back start flags on failure to allow retry
+                        startedGlobal.delete(terminalId);
+                        throw e;
+                    }
+                    startingTerminals.current.set(terminalId, false);
+                }
+            } catch (error) {
+                console.error(`[Terminal ${terminalId}] Failed to auto-start Claude:`, error);
+                startingTerminals.current.set(terminalId, false);
+            }
+        };
+
+        // Delay a tick to ensure xterm is laid out
+        const t = setTimeout(start, 0);
+        return () => clearTimeout(t);
+    }, [hydrated, terminalId]);
 
 
     return <div ref={termRef} className={`h-full w-full ${className}`} />;

@@ -93,6 +93,54 @@ pub fn create_worktree(repo_path: &Path, branch: &str, worktree_path: &Path) -> 
     create_worktree_with_new_branch(repo_path, branch, worktree_path)
 }
 
+pub fn create_worktree_from_base(
+    repo_path: &Path,
+    branch_name: &str,
+    worktree_path: &Path,
+    base_branch: &str
+) -> Result<()> {
+    if let Some(parent) = worktree_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    
+    // First check if branch already exists and delete it if it does
+    let branch_check = Command::new("git")
+        .args([
+            "-C", repo_path.to_str().unwrap(),
+            "show-ref", "--verify", "--quiet", &format!("refs/heads/{branch_name}")
+        ])
+        .output()?;
+    
+    if branch_check.status.success() {
+        // Branch exists, delete it
+        let _ = Command::new("git")
+            .args([
+                "-C", repo_path.to_str().unwrap(),
+                "branch", "-D", branch_name
+            ])
+            .output()?;
+    }
+    
+    // Create worktree with new branch from specified base
+    let output = Command::new("git")
+        .args([
+            "-C", repo_path.to_str().unwrap(),
+            "worktree", "add", "-b", branch_name,
+            worktree_path.to_str().unwrap(),
+            base_branch
+        ])
+        .output()?;
+    
+    if !output.status.success() {
+        return Err(anyhow!(
+            "Failed to create worktree: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    
+    Ok(())
+}
+
 pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
     let output = Command::new("git")
         .args([

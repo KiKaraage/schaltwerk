@@ -1,4 +1,6 @@
 use std::path::PathBuf;
+use std::collections::HashMap;
+use std::sync::{OnceLock, Mutex as StdMutex, Arc};
 use anyhow::{Result, anyhow};
 use uuid::Uuid;
 use chrono::Utc;
@@ -18,7 +20,23 @@ impl SessionManager {
         Self { db, repo_path }
     }
     
-    pub fn create_session(&self, name: &str, prompt: Option<&str>) -> Result<Session> {
+    // Global per-repository mutexes to serialize worktree operations
+    fn get_repo_lock(repo_path: &PathBuf) -> Arc<StdMutex<()>> {
+        static REPO_LOCKS: OnceLock<StdMutex<HashMap<PathBuf, Arc<StdMutex<()>>>>> = OnceLock::new();
+        let map_mutex = REPO_LOCKS.get_or_init(|| StdMutex::new(HashMap::new()));
+        let mut map = map_mutex.lock().unwrap();
+        if let Some(lock) = map.get(repo_path) {
+            return lock.clone();
+        }
+        let lock = Arc::new(StdMutex::new(()));
+        map.insert(repo_path.clone(), lock.clone());
+        lock
+    }
+    
+    pub fn create_session(&self, name: &str, prompt: Option<&str>, base_branch: Option<&str>) -> Result<Session> {
+        // Serialize session creation per repository to avoid git worktree races
+        let repo_lock = Self::get_repo_lock(&self.repo_path);
+        let _guard = repo_lock.lock().unwrap();
         if !git::is_valid_session_name(name) {
             return Err(anyhow!("Invalid session name: use only letters, numbers, hyphens, and underscores"));
         }
@@ -30,7 +48,9 @@ impl SessionManager {
             .join("worktrees")
             .join(name);
         
-        let parent_branch = git::get_current_branch(&self.repo_path)?;
+        let parent_branch = base_branch
+            .map(String::from)
+            .unwrap_or_else(|| git::get_current_branch(&self.repo_path).unwrap_or_else(|_| "main".to_string()));
         let repo_name = self.repo_path
             .file_name()
             .unwrap()
@@ -54,8 +74,14 @@ impl SessionManager {
             initial_prompt: prompt.map(String::from),
         };
         
-        // Create worktree with new branch (this creates both the branch and worktree)
-        if let Err(e) = git::create_worktree(&self.repo_path, &branch, &worktree_path) {
+        // Create worktree with new branch from specified base
+        let create_result = if let Some(base) = base_branch {
+            git::create_worktree_from_base(&self.repo_path, &branch, &worktree_path, base)
+        } else {
+            git::create_worktree(&self.repo_path, &branch, &worktree_path)
+        };
+        
+        if let Err(e) = create_result {
             return Err(anyhow!("Failed to create worktree: {}", e));
         }
         
@@ -229,5 +255,207 @@ impl SessionManager {
         }
         
         Ok(enriched)
+    }
+    
+    pub fn start_claude_in_session(&self, session_name: &str) -> Result<String> {
+        let session = self.db.get_session_by_name(&self.repo_path, session_name)?;
+        let skip_permissions = self.db.get_skip_permissions()?;
+        
+        // Check for existing Claude session
+        let session_id = crate::para_core::claude::find_claude_session(&session.worktree_path);
+        
+        let command = crate::para_core::claude::build_claude_command(
+            &session.worktree_path,
+            session_id.as_deref(),
+            if session_id.is_none() { session.initial_prompt.as_deref() } else { None },
+            skip_permissions,
+        );
+        
+        Ok(command)
+    }
+    
+    pub fn start_claude_in_orchestrator(&self) -> Result<String> {
+        let skip_permissions = self.db.get_skip_permissions()?;
+        let session_id = crate::para_core::claude::find_claude_session(&self.repo_path);
+        
+        let command = crate::para_core::claude::build_claude_command(
+            &self.repo_path,
+            session_id.as_deref(),
+            None,
+            skip_permissions,
+        );
+        
+        Ok(command)
+    }
+}
+
+#[cfg(test)]
+mod session_tests {
+    use super::*;
+    use tempfile::TempDir;
+    use std::fs;
+    use chrono::Utc;
+    use crate::para_core::types::{Session, SessionStatus};
+    
+    fn create_test_session_manager() -> (SessionManager, TempDir, Session) {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db = Database::new(Some(db_path)).unwrap();
+        let manager = SessionManager::new(db, temp_dir.path().to_path_buf());
+        
+        let worktree_path = temp_dir.path().join("test-session");
+        fs::create_dir_all(&worktree_path).unwrap();
+        
+        let session = Session {
+            id: "test-session-id".to_string(),
+            name: "test-session".to_string(),
+            repository_path: temp_dir.path().to_path_buf(),
+            repository_name: "test-repo".to_string(),
+            branch: "para/test-session".to_string(),
+            parent_branch: "main".to_string(),
+            worktree_path,
+            status: SessionStatus::Active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_activity: None,
+            initial_prompt: Some("implement feature X".to_string()),
+        };
+        
+        manager.db.create_session(&session).unwrap();
+        (manager, temp_dir, session)
+    }
+    
+    #[test]
+    fn test_start_claude_in_session_fresh_session() {
+        let (manager, _temp_dir, _session) = create_test_session_manager();
+        
+        manager.db.set_skip_permissions(true).unwrap();
+        
+        let result = manager.start_claude_in_session("test-session").unwrap();
+        
+        assert!(result.contains("cd"));
+        assert!(result.contains("claude"));
+        assert!(result.contains("--dangerously-skip-permissions"));
+        assert!(result.contains("implement feature X"));
+        assert!(!result.contains("-r"));
+    }
+    
+    #[test]
+    fn test_start_claude_in_session_without_skip_permissions() {
+        let (manager, _temp_dir, _session) = create_test_session_manager();
+        
+        manager.db.set_skip_permissions(false).unwrap();
+        
+        let result = manager.start_claude_in_session("test-session").unwrap();
+        
+        assert!(result.contains("cd"));
+        assert!(result.contains("claude"));
+        assert!(!result.contains("--dangerously-skip-permissions"));
+        assert!(result.contains("implement feature X"));
+    }
+    
+    #[test]
+    fn test_start_claude_in_session_no_initial_prompt() {
+        let (manager, temp_dir, _) = create_test_session_manager();
+        
+        let worktree_path = temp_dir.path().join("no-prompt-session");
+        fs::create_dir_all(&worktree_path).unwrap();
+        
+        let session_no_prompt = Session {
+            id: "no-prompt-id".to_string(),
+            name: "no-prompt-session".to_string(),
+            repository_path: temp_dir.path().to_path_buf(),
+            repository_name: "test-repo".to_string(),
+            branch: "para/no-prompt-session".to_string(),
+            parent_branch: "main".to_string(),
+            worktree_path,
+            status: SessionStatus::Active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_activity: None,
+            initial_prompt: None,
+        };
+        
+        manager.db.create_session(&session_no_prompt).unwrap();
+        manager.db.set_skip_permissions(false).unwrap();
+        
+        let result = manager.start_claude_in_session("no-prompt-session").unwrap();
+        
+        assert!(result.contains("cd"));
+        assert!(result.contains("claude"));
+        assert!(!result.contains("--dangerously-skip-permissions"));
+        assert!(!result.contains("implement"));
+    }
+    
+    #[test]
+    fn test_start_claude_in_session_nonexistent() {
+        let (manager, _temp_dir, _session) = create_test_session_manager();
+        
+        let result = manager.start_claude_in_session("nonexistent-session");
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("Query returned no rows") || error_msg.contains("no rows returned"));
+    }
+    
+    #[test]
+    fn test_start_claude_in_orchestrator() {
+        let (manager, _temp_dir, _session) = create_test_session_manager();
+        
+        manager.db.set_skip_permissions(true).unwrap();
+        
+        let result = manager.start_claude_in_orchestrator().unwrap();
+        
+        assert!(result.contains("cd"));
+        assert!(result.contains("claude"));
+        assert!(result.contains("--dangerously-skip-permissions"));
+        assert!(!result.contains("-r"));
+    }
+    
+    #[test]
+    fn test_start_claude_in_orchestrator_without_permissions() {
+        let (manager, _temp_dir, _session) = create_test_session_manager();
+        
+        manager.db.set_skip_permissions(false).unwrap();
+        
+        let result = manager.start_claude_in_orchestrator().unwrap();
+        
+        assert!(result.contains("cd"));
+        assert!(result.contains("claude"));
+        assert!(!result.contains("--dangerously-skip-permissions"));
+    }
+    
+    #[test]
+    fn test_path_sanitization_in_claude_command() {
+        let temp_dir = TempDir::new().unwrap();
+        let path_with_spaces = temp_dir.path().join("path with spaces");
+        fs::create_dir_all(&path_with_spaces).unwrap();
+        
+        let db_path = temp_dir.path().join("test.db");
+        let db = Database::new(Some(db_path)).unwrap();
+        let manager = SessionManager::new(db, temp_dir.path().to_path_buf());
+        
+        let session = Session {
+            id: "spaces-session-id".to_string(),
+            name: "spaces-session".to_string(),
+            repository_path: temp_dir.path().to_path_buf(),
+            repository_name: "test-repo".to_string(),
+            branch: "para/spaces-session".to_string(),
+            parent_branch: "main".to_string(),
+            worktree_path: path_with_spaces,
+            status: SessionStatus::Active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_activity: None,
+            initial_prompt: Some("test prompt".to_string()),
+        };
+        
+        manager.db.create_session(&session).unwrap();
+        manager.db.set_skip_permissions(false).unwrap();
+        
+        let result = manager.start_claude_in_session("spaces-session").unwrap();
+        
+        assert!(result.contains("cd"));
+        assert!(result.contains("path with spaces"));
+        assert!(result.contains("test prompt"));
     }
 }

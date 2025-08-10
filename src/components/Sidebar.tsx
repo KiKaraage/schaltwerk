@@ -3,6 +3,8 @@ import { clsx } from 'clsx'
 import { invoke } from '@tauri-apps/api/core'
 import { formatLastActivity } from '../utils/time'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
+import { listen, UnlistenFn } from '@tauri-apps/api/event'
+import { useSelection } from '../contexts/SelectionContext'
 
 interface DiffStats {
     files_changed: number
@@ -49,29 +51,26 @@ function getSessionStateColor(state?: string): 'green' | 'violet' | 'amber' | 'g
     }
 }
 
-function emitSelection(kind: 'session' | 'orchestrator', payload?: string, color?: 'blue' | 'green' | 'violet' | 'amber' | 'gray', worktreePath?: string) {
-    window.dispatchEvent(new CustomEvent('para-ui:selection', { detail: { kind, payload, color, worktreePath } }))
-}
-
 export function Sidebar() {
-    const [selectedIdx, setSelectedIdx] = useState(0)
-    const [selectedKind, setSelectedKind] = useState<'session' | 'orchestrator'>('orchestrator')
+    const { selection, setSelection } = useSelection()
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
     const [loading, setLoading] = useState(true)
 
-    const handleSelectOrchestrator = () => {
-        setSelectedKind('orchestrator')
-        emitSelection('orchestrator', undefined, 'blue')
+    const handleSelectOrchestrator = async () => {
+        await setSelection({ kind: 'orchestrator', color: 'blue' })
     }
 
-    const handleSelectSession = (index: number) => {
+    const handleSelectSession = async (index: number) => {
         const session = sessions[index]
         if (session) {
             const s = session.info
             const color = getSessionStateColor(s.session_state)
-            setSelectedKind('session')
-            setSelectedIdx(index)
-            emitSelection('session', s.session_id, color, s.worktree_path)
+            await setSelection({
+                kind: 'session',
+                payload: s.session_id,
+                color: color as any,
+                worktreePath: s.worktree_path
+            })
         }
     }
 
@@ -81,6 +80,7 @@ export function Sidebar() {
         sessionCount: sessions.length
     })
 
+    // Initial load only; push updates keep it fresh thereafter
     useEffect(() => {
         const loadSessions = async () => {
             try {
@@ -94,12 +94,125 @@ export function Sidebar() {
         }
 
         loadSessions()
-        
-        // Refresh every 5 seconds
-        const interval = setInterval(loadSessions, 5000)
-        
-        return () => clearInterval(interval)
     }, [])
+    
+    // Selection is now restored by SelectionContext itself
+    
+    // No longer need to listen for events - context handles everything
+
+    // Subscribe to backend push updates and merge into sessions list incrementally
+    useEffect(() => {
+        let unlisteners: UnlistenFn[] = []
+        
+        const attach = async () => {
+            // Activity updates (last_modified)
+            const u1 = await listen<{
+                session_id: string
+                session_name: string
+                last_activity_ts: number
+            }>('para-ui:session-activity', (event) => {
+                const { session_name, last_activity_ts } = event.payload
+                setSessions(prev => prev.map(s => {
+                    if (s.info.session_id !== session_name) return s
+                    return {
+                        ...s,
+                        info: {
+                            ...s.info,
+                            last_modified: new Date(last_activity_ts * 1000).toISOString(),
+                        }
+                    }
+                }))
+            })
+            unlisteners.push(u1)
+            
+            // Git stats updates
+            const u2 = await listen<{
+                session_id: string
+                session_name: string
+                files_changed: number
+                lines_added: number
+                lines_removed: number
+                has_uncommitted: boolean
+            }>('para-ui:session-git-stats', (event) => {
+                const { session_name, files_changed, lines_added, lines_removed, has_uncommitted } = event.payload
+                setSessions(prev => prev.map(s => {
+                    if (s.info.session_id !== session_name) return s
+                    const diff = {
+                        files_changed: files_changed || 0,
+                        additions: lines_added || 0,
+                        deletions: lines_removed || 0,
+                        insertions: lines_added || 0,
+                    }
+                    return {
+                        ...s,
+                        info: {
+                            ...s.info,
+                            diff_stats: diff,
+                            has_uncommitted_changes: has_uncommitted,
+                        }
+                    }
+                }))
+            })
+            unlisteners.push(u2)
+
+            // Session added
+            const u3 = await listen<{
+                session_name: string
+                branch: string
+                worktree_path: string
+                parent_branch: string
+            }>('para-ui:session-added', (event) => {
+                const { session_name, branch, worktree_path, parent_branch } = event.payload
+                setSessions(prev => {
+                    // Avoid duplicates
+                    if (prev.some(s => s.info.session_id === session_name)) return prev
+                    const info: SessionInfo = {
+                        session_id: session_name,
+                        branch,
+                        worktree_path,
+                        base_branch: parent_branch,
+                        merge_mode: 'rebase',
+                        status: 'active',
+                        last_modified: undefined,
+                        has_uncommitted_changes: false,
+                        is_current: false,
+                        session_type: 'worktree',
+                        container_status: undefined,
+                        session_state: 'active',
+                        current_task: undefined,
+                        test_status: undefined,
+                        todo_percentage: undefined,
+                        is_blocked: undefined,
+                        diff_stats: undefined,
+                    }
+                    const terminals = [
+                        `session-${session_name}-top`,
+                        `session-${session_name}-bottom`,
+                        `session-${session_name}-right`,
+                    ]
+                    const enriched: EnrichedSession = { info, status: undefined, terminals }
+                    return [enriched, ...prev]
+                })
+            })
+            unlisteners.push(u3)
+
+            // Session removed
+            const u4 = await listen<{ session_name: string }>('para-ui:session-removed', async (event) => {
+                const { session_name } = event.payload
+                setSessions(prev => prev.filter(s => s.info.session_id !== session_name))
+                // If the removed session was selected, fallback to orchestrator
+                if (selection.kind === 'session' && selection.payload === session_name) {
+                    await setSelection({ kind: 'orchestrator', color: 'blue' })
+                }
+            })
+            unlisteners.push(u4)
+        }
+        attach()
+        
+        return () => {
+            unlisteners.forEach(u => u())
+        }
+    }, [selection, setSelection])
 
     return (
         <div className="h-full flex flex-col">
@@ -107,7 +220,7 @@ export function Sidebar() {
             <div className="px-2 pt-2">
                 <button
                     onClick={handleSelectOrchestrator}
-                    className={clsx('w-full text-left px-3 py-2 rounded-md mb-2', selectedKind === 'orchestrator' ? 'bg-slate-800/60 session-ring session-ring-blue' : 'hover:bg-slate-800/30')}
+                    className={clsx('w-full text-left px-3 py-2 rounded-md mb-2', selection.kind === 'orchestrator' ? 'bg-slate-800/60 session-ring session-ring-blue' : 'hover:bg-slate-800/30')}
                 >
                     <div className="flex items-center justify-between">
                         <div className="font-medium text-slate-100">main (orchestrator)</div>
@@ -138,13 +251,14 @@ export function Sidebar() {
                         const filesChanged = s.diff_stats?.files_changed || 0
                         const lastActivity = formatLastActivity(s.last_modified)
                         const isBlocked = s.is_blocked || false
+                        const isSelected = selection.kind === 'session' && selection.payload === s.session_id
 
                         return (
                             <button
                                 key={`c-${s.session_id}`}
                                 onClick={() => handleSelectSession(i)}
                                 className={clsx('group w-full text-left p-3 rounded-md mb-2 border border-slate-800 bg-slate-900/40',
-                                    selectedKind === 'session' && selectedIdx === i
+                                    isSelected
                                         ? clsx('session-ring', 
                                             color === 'green' && 'session-ring-green',
                                             color === 'violet' && 'session-ring-violet',

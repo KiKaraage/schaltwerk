@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
 import DiffViewer from 'react-diff-viewer-continued'
+import { useSelection } from '../contexts/SelectionContext'
 
 const oldCode = `
 pub fn create_session(name: String) -> Result<SessionState> {
@@ -16,19 +16,14 @@ pub fn create_session(name: String) -> Result<SessionState> {
 `
 
 export function DiffPanel() {
-    const [selected, setSelected] = useState<{ kind: 'session' | 'orchestrator', payload?: string, color?: 'blue' | 'green' | 'violet' | 'amber' }>({ kind: 'orchestrator', color: 'blue' })
-    useEffect(() => {
-        const handler = (e: Event) => setSelected((e as CustomEvent).detail)
-        window.addEventListener('para-ui:selection', handler as any)
-        return () => window.removeEventListener('para-ui:selection', handler as any)
-    }, [])
+    const { selection } = useSelection()
 
-    const header = selected.kind === 'orchestrator'
+    const header = selection.kind === 'orchestrator'
         ? 'Git Diff — orchestrator (main)'
-        : `Git Diff — ${selected.payload ?? ''}`
+        : `Git Diff — ${selection.payload ?? ''}`
 
-    const mockOld = selected.kind === 'orchestrator' ? oldCode : `// ${selected.payload} old\n` + oldCode
-    const mockNew = selected.kind === 'orchestrator' ? newCode : `// ${selected.payload} new\n` + newCode
+    const mockOld = selection.kind === 'orchestrator' ? oldCode : `// ${selection.payload} old\n` + oldCode
+    const mockNew = selection.kind === 'orchestrator' ? newCode : `// ${selection.payload} new\n` + newCode
 
     const viewerStyles = {
         variables: {

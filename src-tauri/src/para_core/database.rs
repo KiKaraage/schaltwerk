@@ -84,6 +84,19 @@ impl Database {
             [],
         )?;
         
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS app_config (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                skip_permissions BOOLEAN DEFAULT FALSE
+            )",
+            [],
+        )?;
+        
+        conn.execute(
+            "INSERT OR IGNORE INTO app_config (id, skip_permissions) VALUES (1, FALSE)",
+            [],
+        )?;
+        
         Ok(())
     }
     
@@ -137,8 +150,7 @@ impl Database {
                     branch: row.get(4)?,
                     parent_branch: row.get(5)?,
                     worktree_path: PathBuf::from(row.get::<_, String>(6)?),
-                    status: SessionStatus::from_str(&row.get::<_, String>(7)?)
-                        .unwrap_or(SessionStatus::Active),
+                    status: row.get::<_, String>(7)?.parse().unwrap_or(SessionStatus::Active),
                     created_at: Utc.timestamp_opt(row.get(8)?, 0).unwrap(),
                     updated_at: Utc.timestamp_opt(row.get(9)?, 0).unwrap(),
                     last_activity: row.get::<_, Option<i64>>(10)?
@@ -173,8 +185,7 @@ impl Database {
                     branch: row.get(4)?,
                     parent_branch: row.get(5)?,
                     worktree_path: PathBuf::from(row.get::<_, String>(6)?),
-                    status: SessionStatus::from_str(&row.get::<_, String>(7)?)
-                        .unwrap_or(SessionStatus::Active),
+                    status: row.get::<_, String>(7)?.parse().unwrap_or(SessionStatus::Active),
                     created_at: Utc.timestamp_opt(row.get(8)?, 0).unwrap(),
                     updated_at: Utc.timestamp_opt(row.get(9)?, 0).unwrap(),
                     last_activity: row.get::<_, Option<i64>>(10)?
@@ -210,8 +221,7 @@ impl Database {
                     branch: row.get(4)?,
                     parent_branch: row.get(5)?,
                     worktree_path: PathBuf::from(row.get::<_, String>(6)?),
-                    status: SessionStatus::from_str(&row.get::<_, String>(7)?)
-                        .unwrap_or(SessionStatus::Active),
+                    status: row.get::<_, String>(7)?.parse().unwrap_or(SessionStatus::Active),
                     created_at: Utc.timestamp_opt(row.get(8)?, 0).unwrap(),
                     updated_at: Utc.timestamp_opt(row.get(9)?, 0).unwrap(),
                     last_activity: row.get::<_, Option<i64>>(10)?
@@ -248,8 +258,7 @@ impl Database {
                     branch: row.get(4)?,
                     parent_branch: row.get(5)?,
                     worktree_path: PathBuf::from(row.get::<_, String>(6)?),
-                    status: SessionStatus::from_str(&row.get::<_, String>(7)?)
-                        .unwrap_or(SessionStatus::Active),
+                    status: row.get::<_, String>(7)?.parse().unwrap_or(SessionStatus::Active),
                     created_at: Utc.timestamp_opt(row.get(8)?, 0).unwrap(),
                     updated_at: Utc.timestamp_opt(row.get(9)?, 0).unwrap(),
                     last_activity: row.get::<_, Option<i64>>(10)?
@@ -328,4 +337,121 @@ impl Database {
         }
     }
     
+    pub fn get_skip_permissions(&self) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        
+        let result: SqlResult<bool> = conn.query_row(
+            "SELECT skip_permissions FROM app_config WHERE id = 1",
+            [],
+            |row| row.get(0),
+        );
+        
+        match result {
+            Ok(value) => Ok(value),
+            Err(_) => Ok(false),
+        }
+    }
+    
+    pub fn set_skip_permissions(&self, enabled: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        
+        conn.execute(
+            "UPDATE app_config SET skip_permissions = ?1 WHERE id = 1",
+            params![enabled],
+        )?;
+        
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod database_tests {
+    use super::*;
+    use tempfile::TempDir;
+    
+    fn create_test_database() -> (Database, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test_skip_permissions.db");
+        let db = Database::new(Some(db_path)).unwrap();
+        (db, temp_dir)
+    }
+    
+    #[test]
+    fn test_get_skip_permissions_default() {
+        let (db, _temp_dir) = create_test_database();
+        
+        let result = db.get_skip_permissions().unwrap();
+        assert!(!result);
+    }
+    
+    #[test]
+    fn test_set_skip_permissions_enabled() {
+        let (db, _temp_dir) = create_test_database();
+        
+        db.set_skip_permissions(true).unwrap();
+        let result = db.get_skip_permissions().unwrap();
+        assert!(result);
+    }
+    
+    #[test]
+    fn test_set_skip_permissions_disabled() {
+        let (db, _temp_dir) = create_test_database();
+        
+        db.set_skip_permissions(false).unwrap();
+        let result = db.get_skip_permissions().unwrap();
+        assert!(!result);
+    }
+    
+    #[test]
+    fn test_skip_permissions_persistence() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("persistence_test.db");
+        
+        {
+            let db = Database::new(Some(db_path.clone())).unwrap();
+            db.set_skip_permissions(true).unwrap();
+        }
+        
+        let db = Database::new(Some(db_path)).unwrap();
+        let result = db.get_skip_permissions().unwrap();
+        assert!(result);
+    }
+    
+    #[test]
+    fn test_skip_permissions_toggle() {
+        let (db, _temp_dir) = create_test_database();
+        
+        assert!(!db.get_skip_permissions().unwrap());
+        
+        db.set_skip_permissions(true).unwrap();
+        assert!(db.get_skip_permissions().unwrap());
+        
+        db.set_skip_permissions(false).unwrap();
+        assert!(!db.get_skip_permissions().unwrap());
+        
+        db.set_skip_permissions(true).unwrap();
+        assert!(db.get_skip_permissions().unwrap());
+    }
+    
+    #[test]
+    fn test_skip_permissions_multiple_updates() {
+        let (db, _temp_dir) = create_test_database();
+        
+        for i in 0..10 {
+            let enable = i % 2 == 0;
+            db.set_skip_permissions(enable).unwrap();
+            assert_eq!(db.get_skip_permissions().unwrap(), enable);
+        }
+    }
+    
+    #[test]
+    fn test_skip_permissions_error_handling() {
+        let (db, _temp_dir) = create_test_database();
+        
+        let result_get = db.get_skip_permissions();
+        assert!(result_get.is_ok());
+        
+        let result_set = db.set_skip_permissions(true);
+        assert!(result_set.is_ok());
+    }
 }

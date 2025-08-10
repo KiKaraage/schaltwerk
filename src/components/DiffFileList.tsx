@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { useSessionWorkspace } from '../hooks/useSessionWorkspace'
+import { useSelection } from '../contexts/SelectionContext'
 import { VscFile, VscDiffAdded, VscDiffModified, VscDiffRemoved } from 'react-icons/vsc'
 import clsx from 'clsx'
 
@@ -14,7 +14,7 @@ interface DiffFileListProps {
 }
 
 export function DiffFileList({ onFileSelect }: DiffFileListProps) {
-  const { selection } = useSessionWorkspace()
+  const { selection } = useSelection()
   const [files, setFiles] = useState<ChangedFile[]>([])
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [branchInfo, setBranchInfo] = useState<{ 

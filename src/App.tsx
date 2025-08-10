@@ -8,6 +8,7 @@ import Split from 'react-split'
 import { NewSessionModal } from './components/NewSessionModal'
 import { CancelConfirmation } from './components/CancelConfirmation'
 import { invoke } from '@tauri-apps/api/core'
+import { useSelection } from './contexts/SelectionContext'
 
 export interface SessionActionEvent {
   action: 'cancel'
@@ -17,6 +18,7 @@ export interface SessionActionEvent {
 }
 
 export default function App() {
+  const { setSelection } = useSelection()
   const [newSessionOpen, setNewSessionOpen] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [currentSession, setCurrentSession] = useState<{ id: string; name: string; hasUncommittedChanges: boolean } | null>(null)
@@ -48,9 +50,8 @@ export default function App() {
       })
       setCancelModalOpen(false)
       
-      window.dispatchEvent(new CustomEvent('para-ui:selection', { 
-        detail: { kind: 'orchestrator', color: 'blue' } 
-      }))
+      // Switch back to orchestrator after canceling session
+      await setSelection({ kind: 'orchestrator', color: 'blue' })
     } catch (error) {
       console.error('Failed to cancel session:', error)
       alert(`Failed to cancel session: ${error}`)
@@ -70,29 +71,27 @@ export default function App() {
     name: string
     prompt?: string
     baseBranch: string
-    dangerousSkipPermissions: boolean
-    sandboxEnabled: boolean
-    sandboxProfile?: string
     color: 'green' | 'violet' | 'amber'
   }) => {
     try {
       await invoke('para_core_create_session', { 
         name: data.name, 
-        prompt: data.prompt || null 
+        prompt: data.prompt || null,
+        baseBranch: data.baseBranch || null
       })
       setNewSessionOpen(false)
       
       // Get the created session to get the correct worktree path
       const sessionData = await invoke('para_core_get_session', { name: data.name }) as any
       
-      window.dispatchEvent(new CustomEvent('para-ui:selection', { 
-        detail: { 
-          kind: 'session', 
-          payload: sessionData.id,
-          color: data.color,
-          worktreePath: sessionData.worktree_path
-        } 
-      }))
+      // Switch to the new session immediately - context handles terminal creation and Claude start
+      await setSelection({
+        kind: 'session',
+        payload: data.name,
+        color: data.color,
+        worktreePath: sessionData.worktree_path,
+        isNewSession: true  // This triggers Claude to start
+      })
     } catch (error) {
       console.error('Failed to create session:', error)
       alert(`Failed to create session: ${error}`)

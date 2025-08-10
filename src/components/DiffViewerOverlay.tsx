@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
-import { useSessionWorkspace } from '../hooks/useSessionWorkspace'
+import { useSelection } from '../contexts/SelectionContext'
 import { VscClose, VscChevronLeft, VscFile, VscDiffAdded, VscDiffModified, VscDiffRemoved } from 'react-icons/vsc'
 import clsx from 'clsx'
 
@@ -17,7 +17,7 @@ interface DiffViewerOverlayProps {
 }
 
 export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverlayProps) {
-  const { selection } = useSessionWorkspace()
+  const { selection } = useSelection()
   const [files, setFiles] = useState<ChangedFile[]>([])
   const [selectedFile, setSelectedFile] = useState<string | null>(filePath)
   const [mainContent, setMainContent] = useState<string>('')

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useClaudeSession } from '../hooks/useClaudeSession'
 
 interface Props {
     open: boolean
@@ -7,9 +8,6 @@ interface Props {
         name: string
         prompt?: string
         baseBranch: string
-        dangerousSkipPermissions: boolean
-        sandboxEnabled: boolean
-        sandboxProfile?: string
         color: 'green' | 'violet' | 'amber'
     }) => void
 }
@@ -18,11 +16,21 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [name, setName] = useState('')
     const [prompt, setPrompt] = useState('')
     const [baseBranch, setBaseBranch] = useState('main')
-    const [dangerousSkipPermissions, setDangerous] = useState(false)
-    const [sandboxEnabled, setSandbox] = useState(false)
-    const [sandboxProfile, setSandboxProfile] = useState('standard')
+    const [skipPermissions, setSkipPermissions] = useState(false)
     const [color, setColor] = useState<'green' | 'violet' | 'amber'>('green')
     const [validationError, setValidationError] = useState('')
+    const { getSkipPermissions, setSkipPermissions: saveSkipPermissions } = useClaudeSession()
+
+    useEffect(() => {
+        if (open) {
+            getSkipPermissions().then(setSkipPermissions)
+        }
+    }, [open, getSkipPermissions])
+
+    const handleSkipPermissionsChange = async (checked: boolean) => {
+        setSkipPermissions(checked)
+        await saveSkipPermissions(checked)
+    }
 
     const validateSessionName = (sessionName: string): string | null => {
         if (!sessionName.trim()) {
@@ -58,9 +66,6 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             name, 
             prompt: prompt || undefined, 
             baseBranch, 
-            dangerousSkipPermissions, 
-            sandboxEnabled, 
-            sandboxProfile: sandboxEnabled ? sandboxProfile : undefined, 
             color 
         })
     }
@@ -110,25 +115,10 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                             <p className="text-xs text-slate-400 mt-1">Used for the session ring and accents</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <input id="dangerous" type="checkbox" checked={dangerousSkipPermissions} onChange={e => setDangerous(e.target.checked)} />
-                            <label htmlFor="dangerous" className="text-sm text-slate-300">Dangerous: skip permissions</label>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <input id="sandbox" type="checkbox" checked={sandboxEnabled} onChange={e => setSandbox(e.target.checked)} />
-                            <label htmlFor="sandbox" className="text-sm text-slate-300">Sandbox enabled</label>
+                            <input id="skipPerms" type="checkbox" checked={skipPermissions} onChange={e => handleSkipPermissionsChange(e.target.checked)} />
+                            <label htmlFor="skipPerms" className="text-sm text-slate-300">Skip permissions</label>
                         </div>
                     </div>
-
-                    {sandboxEnabled && (
-                        <div>
-                            <label className="block text-sm text-slate-300 mb-1">Sandbox profile</label>
-                            <select value={sandboxProfile} onChange={e => setSandboxProfile(e.target.value)} className="bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700">
-                                <option value="standard">standard</option>
-                                <option value="permissive">permissive</option>
-                            </select>
-                            <p className="text-xs text-slate-400 mt-1">Matches para sandbox profiles</p>
-                        </div>
-                    )}
                 </div>
                 <div className="px-4 py-3 border-t border-slate-800 flex justify-end gap-2">
                     <button onClick={onClose} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded">Cancel</button>
