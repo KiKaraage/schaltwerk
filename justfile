@@ -74,13 +74,23 @@ run-split:
 # Run on a specific port
 run-port port:
     #!/usr/bin/env bash
+    set -euo pipefail
+    
     if lsof -i :{{port}} >/dev/null 2>&1; then
         echo "❌ Port {{port}} is already in use"
         exit 1
     fi
     
     echo "🚀 Starting Para UI on port {{port}}"
+    
+    # Export the port for both Vite and any other components that need it
     export VITE_PORT={{port}}
+    export PORT={{port}}
+    
+    # Override Tauri's dev URL
+    export TAURI_DEV_URL="http://localhost:{{port}}"
+    
+    # Start the full Tauri development environment
     npm run tauri dev
 
 # Build the application for production
