@@ -87,3 +87,42 @@ impl TerminalManager {
         debug!("Event bridge started for terminal {id}");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_close_all_kills_all_terminals() {
+        let manager = TerminalManager::new();
+
+        manager
+            .create_terminal("test-mgr-1".to_string(), "/tmp".to_string())
+            .await
+            .unwrap();
+        manager
+            .create_terminal("test-mgr-2".to_string(), "/tmp".to_string())
+            .await
+            .unwrap();
+
+        assert!(manager
+            .terminal_exists("test-mgr-1".to_string())
+            .await
+            .unwrap());
+        assert!(manager
+            .terminal_exists("test-mgr-2".to_string())
+            .await
+            .unwrap());
+
+        manager.close_all().await.unwrap();
+
+        assert!(!manager
+            .terminal_exists("test-mgr-1".to_string())
+            .await
+            .unwrap());
+        assert!(!manager
+            .terminal_exists("test-mgr-2".to_string())
+            .await
+            .unwrap());
+    }
+}
