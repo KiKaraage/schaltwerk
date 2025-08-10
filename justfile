@@ -1,5 +1,15 @@
 # Para UI Development Commands
 
+# Install all dependencies for development
+install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "📦 Installing npm dependencies..."
+    npm install
+    echo "🦀 Installing Rust dependencies..."
+    cd src-tauri && cargo build --release
+    echo "✅ All dependencies installed successfully!"
+
 # Find an available port starting from a base port
 _find_available_port base_port:
     #!/usr/bin/env bash
@@ -87,7 +97,10 @@ run-port port:
     temp_config=$(mktemp)
     echo '{' > "$temp_config"
     echo '  "build": {' >> "$temp_config"
-    echo '    "devUrl": "http://localhost:{{port}}"' >> "$temp_config"
+    echo '    "devUrl": "http://localhost:{{port}}",' >> "$temp_config"
+    echo '    "beforeDevCommand": "npm run dev",' >> "$temp_config"
+    echo '    "beforeBuildCommand": "npm run build",' >> "$temp_config"
+    echo '    "frontendDist": "../dist"' >> "$temp_config"
     echo '  }' >> "$temp_config"
     echo '}' >> "$temp_config"
     
