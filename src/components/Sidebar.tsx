@@ -293,14 +293,14 @@ export function Sidebar() {
                             <button
                                 key={`c-${s.session_id}`}
                                 onClick={() => handleSelectSession(i)}
-                                className={clsx('group w-full text-left p-3 rounded-md mb-2 border border-slate-800 bg-slate-900/40 transition-all duration-300',
+                                className={clsx('group w-full text-left p-3 rounded-md mb-2 border transition-all duration-300',
                                     isSelected
-                                        ? clsx('session-ring', 
+                                        ? clsx('session-ring border-transparent', 
                                             color === 'green' && 'session-ring-green',
                                             color === 'violet' && 'session-ring-violet',
                                             color === 'amber' && 'session-ring-amber',
                                             color === 'gray' && 'session-ring-gray')
-                                        : 'hover:bg-slate-800/30',
+                                        : 'border-slate-800 bg-slate-900/40 hover:bg-slate-800/30',
                                     hasStuckTerminals && !isSelected && 'ring-2 ring-amber-400/50 shadow-lg shadow-amber-400/20 bg-amber-950/20')}
                                 title={isSelected 
                                     ? `Selected session • Cancel with ⌘D` 

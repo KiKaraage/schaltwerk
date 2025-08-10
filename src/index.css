@@ -50,23 +50,28 @@ body {
 }
 
 .session-ring-blue {
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.45);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.8), 0 0 0 4px rgba(59, 130, 246, 0.2);
+  background-color: rgba(59, 130, 246, 0.08) !important;
 }
 
 .session-ring-green {
-  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.45);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.8), 0 0 0 4px rgba(34, 197, 94, 0.2);
+  background-color: rgba(34, 197, 94, 0.08) !important;
 }
 
 .session-ring-violet {
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.45);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.8), 0 0 0 4px rgba(139, 92, 246, 0.2);
+  background-color: rgba(139, 92, 246, 0.08) !important;
 }
 
 .session-ring-amber {
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.45);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.8), 0 0 0 4px rgba(245, 158, 11, 0.2);
+  background-color: rgba(245, 158, 11, 0.08) !important;
 }
 
 .session-ring-gray {
-  box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.45);
+  box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.8), 0 0 0 4px rgba(107, 114, 128, 0.2);
+  background-color: rgba(107, 114, 128, 0.08) !important;
 }
 
 /* Subtle header ruler to visually continue the frame into the content */
