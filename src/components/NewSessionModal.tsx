@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useClaudeSession } from '../hooks/useClaudeSession'
+import { generateDockerStyleName } from '../utils/dockerNames'
 
 interface Props {
     open: boolean
@@ -13,26 +14,22 @@ interface Props {
 }
 
 export function NewSessionModal({ open, onClose, onCreate }: Props) {
-    const [name, setName] = useState('')
+    const [name, setName] = useState(() => generateDockerStyleName())
     const [prompt, setPrompt] = useState('')
     const [baseBranch, setBaseBranch] = useState('main')
     const [skipPermissions, setSkipPermissions] = useState(false)
     const [color, setColor] = useState<'green' | 'violet' | 'amber'>('green')
     const [validationError, setValidationError] = useState('')
     const { getSkipPermissions, setSkipPermissions: saveSkipPermissions } = useClaudeSession()
-
-    useEffect(() => {
-        if (open) {
-            getSkipPermissions().then(setSkipPermissions)
-        }
-    }, [open, getSkipPermissions])
+    const nameInputRef = useRef<HTMLInputElement>(null)
+    const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
 
     const handleSkipPermissionsChange = async (checked: boolean) => {
         setSkipPermissions(checked)
         await saveSkipPermissions(checked)
     }
 
-    const validateSessionName = (sessionName: string): string | null => {
+    const validateSessionName = useCallback((sessionName: string): string | null => {
         if (!sessionName.trim()) {
             return 'Session name is required'
         }
@@ -43,7 +40,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             return 'Session name can only contain letters, numbers, hyphens, and underscores'
         }
         return null
-    }
+    }, [])
 
     const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newName = e.target.value
@@ -55,20 +52,59 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
         }
     }
 
-    const handleCreate = () => {
-        const error = validateSessionName(name)
+    const handleCreate = useCallback(() => {
+        // Generate new name if current name is empty or if we're creating with a prompt
+        const finalName = name.trim() || generateDockerStyleName()
+        
+        const error = validateSessionName(finalName)
         if (error) {
             setValidationError(error)
             return
         }
         
         onCreate({ 
-            name, 
+            name: finalName, 
             prompt: prompt || undefined, 
             baseBranch, 
             color 
         })
-    }
+    }, [name, prompt, baseBranch, color, onCreate, validateSessionName])
+
+    useEffect(() => {
+        if (open) {
+            // Generate a fresh Docker-style name each time the modal opens
+            setName(generateDockerStyleName())
+            setPrompt('')
+            setValidationError('')
+            
+            getSkipPermissions().then(setSkipPermissions)
+            
+            // Focus the prompt textarea when modal opens
+            setTimeout(() => {
+                promptTextareaRef.current?.focus()
+            }, 100)
+        }
+    }, [open, getSkipPermissions])
+
+    useEffect(() => {
+        if (!open) return
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault()
+                onClose()
+            } else if (e.key === 'Enter' && !e.shiftKey) {
+                const isTextArea = (e.target as HTMLElement)?.tagName === 'TEXTAREA'
+                if (!isTextArea) {
+                    e.preventDefault()
+                    handleCreate()
+                }
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [open, onClose, handleCreate])
 
     if (!open) return null
 
@@ -80,12 +116,13 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                     <div>
                         <label className="block text-sm text-slate-300 mb-1">Session name</label>
                         <input 
+                            ref={nameInputRef}
                             value={name} 
                             onChange={handleNameChange} 
                             className={`w-full bg-slate-800 text-slate-100 rounded px-3 py-2 border ${
                                 validationError ? 'border-red-500' : 'border-slate-700'
                             }`} 
-                            placeholder="e.g. eager_cosmos" 
+                            placeholder={name || "e.g. eager_cosmos"} 
                         />
                         {validationError && (
                             <p className="text-xs text-red-400 mt-1">{validationError}</p>
@@ -95,7 +132,13 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
 
                     <div>
                         <label className="block text-sm text-slate-300 mb-1">Initial prompt (optional)</label>
-                        <textarea value={prompt} onChange={e => setPrompt(e.target.value)} className="w-full h-28 bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700" placeholder="Describe the task for the Claude session" />
+                        <textarea 
+                            ref={promptTextareaRef}
+                            value={prompt} 
+                            onChange={e => setPrompt(e.target.value)} 
+                            className="w-full h-28 bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700" 
+                            placeholder="Describe the task for the Claude session" 
+                        />
                         <p className="text-xs text-slate-400 mt-1">Equivalent to: para start &lt;name&gt; -p "&lt;prompt&gt;"</p>
                     </div>
 
@@ -121,13 +164,22 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                     </div>
                 </div>
                 <div className="px-4 py-3 border-t border-slate-800 flex justify-end gap-2">
-                    <button onClick={onClose} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded">Cancel</button>
+                    <button 
+                        onClick={onClose} 
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded group relative"
+                        title="Cancel (Esc)"
+                    >
+                        Cancel
+                        <span className="ml-1.5 text-xs opacity-60 group-hover:opacity-100">Esc</span>
+                    </button>
                     <button 
                         onClick={handleCreate} 
                         disabled={!name.trim()}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-white"
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-white group relative"
+                        title="Create session (Enter)"
                     >
                         Create
+                        <span className="ml-1.5 text-xs opacity-60 group-hover:opacity-100">↵</span>
                     </button>
                 </div>
             </div>

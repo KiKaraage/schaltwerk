@@ -9,6 +9,7 @@ import { NewSessionModal } from './components/NewSessionModal'
 import { CancelConfirmation } from './components/CancelConfirmation'
 import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from './contexts/SelectionContext'
+import { FocusProvider } from './contexts/FocusContext'
 
 export interface SessionActionEvent {
   action: 'cancel'
@@ -39,6 +40,40 @@ export default function App() {
     window.addEventListener('para-ui:session-action' as any, handleSessionAction)
     return () => window.removeEventListener('para-ui:session-action' as any, handleSessionAction)
   }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+      const modifierKey = isMac ? e.metaKey : e.ctrlKey
+      
+      if (modifierKey && e.key === 'n') {
+        // Don't interfere if a modal is already open or if we're typing in an input
+        const isInputFocused = document.activeElement?.tagName === 'INPUT' || 
+                               document.activeElement?.tagName === 'TEXTAREA' ||
+                               document.activeElement?.getAttribute('contenteditable') === 'true'
+        
+        if (!newSessionOpen && !cancelModalOpen && !isInputFocused) {
+          e.preventDefault()
+          setNewSessionOpen(true)
+        }
+      }
+    }
+
+    const handleGlobalNewSession = () => {
+      // Handle ⌘N from terminal (custom event)
+      if (!newSessionOpen && !cancelModalOpen) {
+        setNewSessionOpen(true)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('global-new-session-shortcut', handleGlobalNewSession)
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('global-new-session-shortcut', handleGlobalNewSession)
+    }
+  }, [newSessionOpen, cancelModalOpen])
   
   
   const handleCancelSession = async (_force: boolean) => {
@@ -107,7 +142,14 @@ export default function App() {
             <Sidebar />
           </div>
           <div className="p-2 border-t border-slate-800">
-            <button onClick={() => setNewSessionOpen(true)} className="w-full bg-slate-800/60 hover:bg-slate-700/60 text-sm px-3 py-1.5 rounded">Start new session</button>
+            <button 
+              onClick={() => setNewSessionOpen(true)} 
+              className="w-full bg-slate-800/60 hover:bg-slate-700/60 text-sm px-3 py-1.5 rounded group flex items-center justify-between"
+              title="Start new session (⌘N)"
+            >
+              <span>Start new session</span>
+              <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">⌘N</span>
+            </button>
           </div>
         </div>
       </div>
@@ -115,14 +157,16 @@ export default function App() {
       <div className="relative h-full">
         {/* Unified session ring around center + right (Claude, Terminal, Diff) */}
         <div id="work-ring" className="absolute inset-2 rounded-xl pointer-events-none" />
-        <Split className="h-full w-full flex" sizes={[70, 30]} minSize={[400, 280]} gutterSize={8}>
-          <main className="bg-slate-950 h-full">
-            <TerminalGrid />
-          </main>
-          <section className="overflow-hidden">
-            <SimpleDiffPanel onFileSelect={handleFileSelect} />
-          </section>
-        </Split>
+        <FocusProvider>
+          <Split className="h-full w-full flex" sizes={[70, 30]} minSize={[400, 280]} gutterSize={8}>
+            <main className="bg-slate-950 h-full">
+              <TerminalGrid />
+            </main>
+            <section className="overflow-hidden">
+              <SimpleDiffPanel onFileSelect={handleFileSelect} />
+            </section>
+          </Split>
+        </FocusProvider>
       </div>
       <NewSessionModal open={newSessionOpen} onClose={() => setNewSessionOpen(false)} onCreate={handleCreateSession} />
       

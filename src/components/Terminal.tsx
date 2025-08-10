@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { invoke } from '@tauri-apps/api/core';
@@ -15,7 +15,11 @@ interface TerminalProps {
     isOrchestrator?: boolean; // explicitly provided orchestrator flag
 }
 
-export function Terminal({ terminalId, className = '', sessionName, isOrchestrator = false }: TerminalProps) {
+export interface TerminalHandle {
+    focus: () => void;
+}
+
+export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId, className = '', sessionName, isOrchestrator = false }, ref) => {
     const termRef = useRef<HTMLDivElement>(null);
     const terminal = useRef<XTerm | null>(null);
     const fitAddon = useRef<FitAddon | null>(null);
@@ -24,6 +28,14 @@ export function Terminal({ terminalId, className = '', sessionName, isOrchestrat
     const pendingOutput = useRef<string[]>([]);
     const startAttempts = useRef<Map<string, number>>(new Map());
     const startingTerminals = useRef<Map<string, boolean>>(new Map());
+
+    useImperativeHandle(ref, () => ({
+        focus: () => {
+            if (terminal.current) {
+                terminal.current.focus();
+            }
+        }
+    }), []);
 
     useEffect(() => {
         console.log(`[Terminal ${terminalId}] Mounting/re-mounting terminal component`);
@@ -67,6 +79,20 @@ export function Terminal({ terminalId, className = '', sessionName, isOrchestrat
         fitAddon.current = new FitAddon();
         terminal.current.loadAddon(fitAddon.current);
         terminal.current.open(termRef.current);
+
+        // Intercept ⌘N before xterm.js processes it
+        terminal.current.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+            const modifierKey = isMac ? event.metaKey : event.ctrlKey
+            
+            if (modifierKey && event.key === 'n') {
+                // Dispatch a custom event to trigger the global new session handler
+                window.dispatchEvent(new CustomEvent('global-new-session-shortcut'))
+                return false // Prevent xterm.js from processing this event
+            }
+            
+            return true // Allow xterm.js to process other events
+        })
         
         // Do an immediate fit to get initial size
         fitAddon.current.fit();
@@ -250,4 +276,6 @@ export function Terminal({ terminalId, className = '', sessionName, isOrchestrat
 
 
     return <div ref={termRef} className={`h-full w-full ${className}`} />;
-}
+});
+
+Terminal.displayName = 'Terminal';

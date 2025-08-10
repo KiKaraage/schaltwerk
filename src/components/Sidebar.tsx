@@ -244,11 +244,15 @@ export function Sidebar() {
             <div className="px-2 pt-2">
                 <button
                     onClick={handleSelectOrchestrator}
-                    className={clsx('w-full text-left px-3 py-2 rounded-md mb-2', selection.kind === 'orchestrator' ? 'bg-slate-800/60 session-ring session-ring-blue' : 'hover:bg-slate-800/30')}
+                    className={clsx('w-full text-left px-3 py-2 rounded-md mb-2 group', selection.kind === 'orchestrator' ? 'bg-slate-800/60 session-ring session-ring-blue' : 'hover:bg-slate-800/30')}
+                    title="Select orchestrator (⌘1)"
                 >
                     <div className="flex items-center justify-between">
                         <div className="font-medium text-slate-100">main (orchestrator)</div>
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-600/20 text-blue-400">main repo</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">⌘1</span>
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-blue-600/20 text-blue-400">main repo</span>
+                        </div>
                     </div>
                     <div className="text-xs text-slate-500">Original repository from which sessions are created</div>
                 </button>
@@ -291,6 +295,7 @@ export function Sidebar() {
                                             color === 'gray' && 'session-ring-gray')
                                         : 'hover:bg-slate-800/30',
                                     hasStuckTerminals && !isSelected && 'ring-2 ring-amber-400/50 shadow-lg shadow-amber-400/20 bg-amber-950/20')}
+                                title={i < 8 ? `Select session (⌘${i + 2})` : `Select session`}
                             >
                                 <div className="flex items-center justify-between">
                                     <div>
@@ -309,6 +314,11 @@ export function Sidebar() {
                                         <div className="text-[11px] text-slate-400">{s.branch}</div>
                                     </div>
                                     <div className="flex items-center gap-2">
+                                        {i < 8 && (
+                                            <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                ⌘{i + 2}
+                                            </span>
+                                        )}
                                         <span
                                             className={clsx('text-xs px-1.5 py-0.5 rounded', {
                                                 'bg-green-600/20 text-green-400': state === 'active',

@@ -1,3 +1,5 @@
+import { useEffect, useCallback } from 'react'
+
 interface CancelConfirmationProps {
   open: boolean
   sessionName: string
@@ -13,6 +15,27 @@ export function CancelConfirmation({
   onConfirm, 
   onCancel 
 }: CancelConfirmationProps) {
+  const handleConfirm = useCallback(() => {
+    onConfirm(hasUncommittedChanges)
+  }, [onConfirm, hasUncommittedChanges])
+
+  useEffect(() => {
+    if (!open) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onCancel()
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        handleConfirm()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, onCancel, handleConfirm])
+
   if (!open) return null
 
   return (
@@ -38,19 +61,23 @@ export function CancelConfirmation({
         <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-zinc-300 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-500"
+            className="px-4 py-2 text-sm font-medium text-zinc-300 bg-zinc-800 border border-zinc-700 rounded-md hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-500 group"
+            title="Keep session (Esc)"
           >
             Keep Session
+            <span className="ml-1.5 text-xs opacity-60 group-hover:opacity-100">Esc</span>
           </button>
           <button
-            onClick={() => onConfirm(hasUncommittedChanges)}
-            className={`px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 ${
+            onClick={handleConfirm}
+            className={`px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 group ${
               hasUncommittedChanges 
                 ? 'bg-red-700 hover:bg-red-600 focus:ring-red-500' 
                 : 'bg-amber-700 hover:bg-amber-600 focus:ring-amber-500'
             }`}
+            title="Cancel session (Enter)"
           >
             {hasUncommittedChanges ? 'Force Cancel' : 'Cancel Session'}
+            <span className="ml-1.5 text-xs opacity-60 group-hover:opacity-100">↵</span>
           </button>
         </div>
       </div>
