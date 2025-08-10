@@ -26,7 +26,6 @@ interface SessionInfo {
     session_type: 'worktree' | 'container'
     container_status?: string
     // Monitor fields
-    session_state?: string
     current_task?: string
     test_status?: string
     todo_percentage?: number
@@ -40,15 +39,8 @@ interface EnrichedSession {
     terminals: string[]
 }
 
-function getSessionStateColor(state?: string): 'green' | 'violet' | 'amber' | 'gray' {
-    switch (state) {
-        case 'active': return 'green'
-        case 'idle': return 'amber'
-        case 'review':
-        case 'ready': return 'violet'
-        case 'stale': 
-        default: return 'gray'
-    }
+function getSessionStateColor(): 'green' | 'violet' | 'amber' | 'gray' {
+    return 'green'
 }
 
 interface TerminalStuckNotification {
@@ -71,7 +63,7 @@ export function Sidebar() {
         const session = sessions[index]
         if (session) {
             const s = session.info
-            const color = getSessionStateColor(s.session_state)
+            const color = getSessionStateColor()
             
             // Clear stuck terminal indicator when user selects the session
             setStuckTerminals(prev => {
@@ -210,7 +202,6 @@ export function Sidebar() {
                         is_current: false,
                         session_type: 'worktree',
                         container_status: undefined,
-                        session_state: 'active',
                         current_task: undefined,
                         test_status: undefined,
                         todo_percentage: undefined,
@@ -286,8 +277,7 @@ export function Sidebar() {
                 ) : (
                     sessions.map((session, i) => {
                         const s = session.info
-                        const state = s.session_state || 'unknown'
-                        const color = getSessionStateColor(s.session_state)
+                        const color = getSessionStateColor()
                         const task = s.current_task || `Working on ${s.session_id}`
                         const testStatus = s.test_status || 'unknown'
                         const progressPercent = s.todo_percentage || 0
@@ -340,16 +330,6 @@ export function Sidebar() {
                                                 ⌘{i + 2}
                                             </span>
                                         )}
-                                        <span
-                                            className={clsx('text-xs px-1.5 py-0.5 rounded flex-shrink-0', {
-                                                'bg-green-600/20 text-green-400': state === 'active',
-                                                'bg-amber-600/20 text-amber-400': state === 'idle',
-                                                'bg-violet-600/20 text-violet-400': state === 'review' || state === 'ready',
-                                                'bg-slate-600/20 text-slate-400': state === 'stale' || state === 'unknown',
-                                            })}
-                                        >
-                                            {state}
-                                        </span>
                                     </div>
                                 </div>
                                 <div className="mt-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">

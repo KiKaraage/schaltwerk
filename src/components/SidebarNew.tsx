@@ -6,7 +6,6 @@ import clsx from 'clsx'
 interface EnrichedSession {
     info: {
         session_id: string
-        session_state?: string
         current_task?: string
         test_status?: string
         todo_percentage?: number
@@ -22,13 +21,8 @@ interface EnrichedSession {
     }
 }
 
-function getSessionStateColor(state?: string): 'green' | 'violet' | 'amber' | 'gray' {
-    switch (state) {
-        case 'working': return 'green'
-        case 'thinking': return 'violet'
-        case 'blocked': return 'amber'
-        default: return 'gray'
-    }
+function getSessionStateColor(): 'green' | 'violet' | 'amber' | 'gray' {
+    return 'green'
 }
 
 function formatLastActivity(lastModified?: string): string {
@@ -78,7 +72,7 @@ export function SidebarNew() {
     }
     
     const handleSelectSession = async (session: EnrichedSession) => {
-        const color = getSessionStateColor(session.info.session_state)
+        const color = getSessionStateColor()
         await setSelection({
             kind: 'session',
             payload: session.info.session_id,
@@ -114,7 +108,7 @@ export function SidebarNew() {
                 ) : (
                     sessions.map((session) => {
                         const s = session.info
-                        const color = getSessionStateColor(s.session_state)
+                        const color = getSessionStateColor()
                         const task = s.current_task || `Working on ${s.session_id}`
                         const testStatus = s.test_status || 'unknown'
                         const progressPercent = s.todo_percentage || 0

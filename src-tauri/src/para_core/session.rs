@@ -233,7 +233,6 @@ impl SessionManager {
                 is_current: false,
                 session_type: SessionType::Worktree,
                 container_status: None,
-                session_state: Some(session.status.as_str().to_string()),
                 current_task: session.initial_prompt.clone(),
                 test_status: None,
                 todo_percentage: None,

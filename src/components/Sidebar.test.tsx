@@ -52,7 +52,6 @@ interface SessionInfo {
   is_current: boolean
   session_type: 'worktree' | 'container'
   container_status?: string
-  session_state?: string
   current_task?: string
   test_status?: string
   todo_percentage?: number
@@ -128,7 +127,6 @@ export const sessionReducers = {
       is_current: false,
       session_type: 'worktree',
       container_status: undefined,
-      session_state: 'active',
       current_task: undefined,
       test_status: undefined,
       todo_percentage: undefined,
@@ -228,8 +226,7 @@ describe('Sidebar', () => {
             status: 'active',
             is_current: false,
             session_type: 'worktree',
-            session_state: 'active',
-            current_task: 'Simple task',
+                  current_task: 'Simple task',
             test_status: 'passed',
             has_uncommitted_changes: false
           },
@@ -246,7 +243,6 @@ describe('Sidebar', () => {
         expect(screen.getByText('simple-session')).toBeInTheDocument()
         expect(screen.getByText('feature/simple')).toBeInTheDocument()
         expect(screen.getByText('Simple task')).toBeInTheDocument()
-        expect(screen.getByText('active')).toBeInTheDocument()
         expect(screen.getByText('Tests: passed')).toBeInTheDocument()
       })
     })

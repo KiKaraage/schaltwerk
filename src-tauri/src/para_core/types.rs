@@ -125,8 +125,6 @@ pub struct SessionInfo {
     pub session_type: SessionType,
     pub container_status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_state: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub current_task: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub test_status: Option<String>,
