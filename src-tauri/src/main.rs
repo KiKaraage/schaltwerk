@@ -18,6 +18,82 @@ use tokio::sync::{OnceCell, Mutex};
 static TERMINAL_MANAGER: OnceCell<Arc<TerminalManager>> = OnceCell::const_new();
 static PARA_CORE: OnceCell<Arc<Mutex<para_core::ParaCore>>> = OnceCell::const_new();
 
+fn parse_claude_command(command: &str) -> Result<(String, Vec<String>), String> {
+    // Command format: "cd /path/to/worktree && claude [args]"
+    let parts: Vec<&str> = command.split(" && ").collect();
+    if parts.len() != 2 {
+        return Err(format!("Invalid command format: {command}"));
+    }
+    
+    // Extract working directory from cd command
+    let cd_part = parts[0];
+    if !cd_part.starts_with("cd ") {
+        return Err(format!("Command doesn't start with 'cd': {command}"));
+    }
+    let cwd = cd_part[3..].to_string();
+    
+    // Parse claude command and arguments
+    let claude_part = parts[1];
+    if !claude_part.starts_with("claude") {
+        return Err(format!("Second part doesn't start with 'claude': {command}"));
+    }
+    
+    // Split the claude command into arguments, handling quoted strings
+    let mut args = Vec::new();
+    let mut current_arg = String::new();
+    let mut in_quotes = false;
+    let mut chars = claude_part.chars().peekable();
+    
+    // Skip "claude" part
+    for _ in 0..6 {
+        chars.next();
+    }
+    
+    // Skip any leading whitespace
+    while chars.peek() == Some(&' ') {
+        chars.next();
+    }
+    
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' => {
+                in_quotes = !in_quotes;
+                if !in_quotes && !current_arg.is_empty() {
+                    args.push(current_arg.clone());
+                    current_arg.clear();
+                }
+            }
+            ' ' if !in_quotes => {
+                if !current_arg.is_empty() {
+                    args.push(current_arg.clone());
+                    current_arg.clear();
+                }
+            }
+            '\\' if in_quotes => {
+                // Handle escaped characters in quotes
+                if let Some(next_ch) = chars.next() {
+                    if next_ch == '"' {
+                        current_arg.push('"');
+                    } else {
+                        current_arg.push('\\');
+                        current_arg.push(next_ch);
+                    }
+                }
+            }
+            _ => {
+                current_arg.push(ch);
+            }
+        }
+    }
+    
+    // Add any remaining argument
+    if !current_arg.is_empty() {
+        args.push(current_arg);
+    }
+    
+    Ok((cwd, args))
+}
+
 async fn get_terminal_manager() -> Arc<TerminalManager> {
     TERMINAL_MANAGER.get_or_init(|| async {
         Arc::new(TerminalManager::new())
@@ -81,7 +157,7 @@ async fn close_terminal(id: String) -> Result<(), String> {
 #[tauri::command]
 async fn terminal_exists(id: String) -> Result<bool, String> {
     let manager = get_terminal_manager().await;
-    manager.terminal_exists(id).await
+    manager.terminal_exists(&id).await
 }
 
 #[tauri::command]
@@ -223,17 +299,29 @@ async fn para_core_start_claude(session_name: String) -> Result<String, String> 
     
     log::info!("Claude command for session {session_name}: {command}");
     
-    // Write command to terminal
+    // Parse command to extract working directory and arguments
+    let (cwd, claude_args) = parse_claude_command(&command)?;
+    
+    // Create terminal with Claude directly
     let terminal_id = format!("session-{session_name}-top");
     let terminal_manager = get_terminal_manager().await;
-    log::info!("Writing to terminal: {terminal_id}");
-    terminal_manager.write_terminal(terminal_id.clone(), format!("{command}\r").into_bytes()).await
-        .map_err(|e| {
-            log::error!("Failed to write to terminal {terminal_id}: {e}");
-            e
-        })?;
     
-    log::info!("Successfully sent Claude command to terminal: {terminal_id}");
+    // Close existing terminal if it exists
+    if terminal_manager.terminal_exists(&terminal_id).await? {
+        terminal_manager.close_terminal(terminal_id.clone()).await?;
+    }
+    
+    // Create new terminal with Claude directly
+    log::info!("Creating terminal with Claude directly: {terminal_id}");
+    terminal_manager.create_terminal_with_app(
+        terminal_id.clone(),
+        cwd,
+        "claude".to_string(),
+        claude_args,
+        vec![],
+    ).await?;
+    
+    log::info!("Successfully started Claude in terminal: {terminal_id}");
     Ok(command)
 }
 
@@ -250,16 +338,29 @@ async fn para_core_start_claude_orchestrator() -> Result<String, String> {
     
     log::info!("Claude command for orchestrator: {command}");
     
-    // Write command to terminal
-    let terminal_manager = get_terminal_manager().await;
-    let terminal_id = "orchestrator-top".to_string();
-    terminal_manager.write_terminal(terminal_id.clone(), format!("{command}\r").into_bytes()).await
-        .map_err(|e| {
-            log::error!("Failed to write to terminal {terminal_id}: {e}");
-            e
-        })?;
+    // Parse command to extract working directory and arguments
+    let (cwd, claude_args) = parse_claude_command(&command)?;
     
-    log::info!("Successfully sent Claude command to orchestrator terminal");
+    // Create terminal with Claude directly
+    let terminal_id = "orchestrator-top".to_string();
+    let terminal_manager = get_terminal_manager().await;
+    
+    // Close existing terminal if it exists
+    if terminal_manager.terminal_exists(&terminal_id).await? {
+        terminal_manager.close_terminal(terminal_id.clone()).await?;
+    }
+    
+    // Create new terminal with Claude directly
+    log::info!("Creating terminal with Claude directly: {terminal_id}");
+    terminal_manager.create_terminal_with_app(
+        terminal_id.clone(),
+        cwd,
+        "claude".to_string(),
+        claude_args,
+        vec![],
+    ).await?;
+    
+    log::info!("Successfully started Claude in terminal: {terminal_id}");
     Ok(command)
 }
 

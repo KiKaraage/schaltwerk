@@ -1,4 +1,4 @@
-use super::{CreateParams, LocalPtyAdapter, TerminalBackend};
+use super::{ApplicationSpec, CreateParams, LocalPtyAdapter, TerminalBackend};
 use log::{debug, error, info};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -44,6 +44,38 @@ impl TerminalManager {
         Ok(())
     }
     
+    pub async fn create_terminal_with_app(
+        &self,
+        id: String,
+        cwd: String,
+        command: String,
+        args: Vec<String>,
+        env: Vec<(String, String)>,
+    ) -> Result<(), String> {
+        info!("Creating terminal with app through manager: id={id}, cwd={cwd}, command={command}");
+        
+        let app_spec = ApplicationSpec {
+            command,
+            args,
+            env,
+            ready_timeout_ms: 5000,
+        };
+        
+        let params = CreateParams {
+            id: id.clone(),
+            cwd,
+            app: Some(app_spec),
+        };
+        
+        self.backend.create(params).await?;
+        self.active_ids.write().await.insert(id.clone());
+        
+        // Start event bridge for this terminal
+        self.start_event_bridge(id).await;
+        
+        Ok(())
+    }
+    
     pub async fn write_terminal(&self, id: String, data: Vec<u8>) -> Result<(), String> {
         self.backend.write(&id, &data).await
     }
@@ -59,8 +91,8 @@ impl TerminalManager {
         self.backend.close(&id).await
     }
     
-    pub async fn terminal_exists(&self, id: String) -> Result<bool, String> {
-        self.backend.exists(&id).await
+    pub async fn terminal_exists(&self, id: &str) -> Result<bool, String> {
+        self.backend.exists(id).await
     }
     
     pub async fn get_terminal_buffer(&self, id: String) -> Result<String, String> {
@@ -106,22 +138,22 @@ mod tests {
             .unwrap();
 
         assert!(manager
-            .terminal_exists("test-mgr-1".to_string())
+            .terminal_exists("test-mgr-1")
             .await
             .unwrap());
         assert!(manager
-            .terminal_exists("test-mgr-2".to_string())
+            .terminal_exists("test-mgr-2")
             .await
             .unwrap());
 
         manager.close_all().await.unwrap();
 
         assert!(!manager
-            .terminal_exists("test-mgr-1".to_string())
+            .terminal_exists("test-mgr-1")
             .await
             .unwrap());
         assert!(!manager
-            .terminal_exists("test-mgr-2".to_string())
+            .terminal_exists("test-mgr-2")
             .await
             .unwrap());
     }
