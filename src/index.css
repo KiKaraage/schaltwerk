@@ -2,24 +2,86 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Make split gutter handles more visible */
+/* Stylish split gutters (handles) */
 .gutter {
-  @apply bg-slate-700 hover:bg-slate-600 transition-colors cursor-col-resize;
-  background-image: repeating-linear-gradient(
-    90deg,
-    transparent,
-    transparent 2px,
-    rgba(255, 255, 255, 0.1) 2px,
-    rgba(255, 255, 255, 0.1) 4px
-  );
+  position: relative;
+  background: transparent !important;
 }
 
-.gutter.gutter-horizontal {
-  @apply cursor-col-resize;
+.gutter.gutter-horizontal { @apply cursor-col-resize; }
+.gutter.gutter-vertical { @apply cursor-row-resize; }
+
+/* Centered rounded handle with subtle glow */
+.gutter.gutter-horizontal::before,
+.gutter.gutter-vertical::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: linear-gradient(180deg, rgba(148,163,184,0.45), rgba(148,163,184,0.25));
+  box-shadow:
+    0 0 0 1px rgba(148,163,184,0.15),
+    inset 0 0 0 1px rgba(15,23,42,0.5),
+    0 6px 12px rgba(2,6,23,0.45);
+  opacity: 0.7;
+  transition: opacity 150ms ease, box-shadow 150ms ease, transform 120ms ease;
+  pointer-events: none; /* ensure dragging works anywhere on the gutter */
 }
 
+.gutter.gutter-horizontal::after,
+.gutter.gutter-vertical::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(148,163,184,0.25);
+  opacity: 0.6;
+  transition: opacity 150ms ease;
+  pointer-events: none;
+}
+
+.gutter.gutter-horizontal::after { /* center hairline for vertical gutter */
+  width: 1px;
+  height: 100%;
+}
+
+.gutter.gutter-vertical::after { /* center hairline for horizontal gutter */
+  width: 100%;
+  height: 1px;
+}
+
+.gutter:hover::after { opacity: 0.9; }
+
+.gutter.gutter-horizontal::before { /* vertical pill for left/right split */
+  width: 4px;
+  height: 44px;
+}
+
+.gutter.gutter-vertical::before { /* horizontal pill for top/bottom split */
+  width: 44px;
+  height: 4px;
+}
+
+/* Ensure Split.js vertical gutter is visually centered between panels */
 .gutter.gutter-vertical {
-  @apply cursor-row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gutter:hover::before {
+  opacity: 1;
+  box-shadow:
+    0 0 0 1px rgba(148,163,184,0.25),
+    inset 0 0 0 1px rgba(15,23,42,0.6),
+    0 8px 16px rgba(2,6,23,0.55);
+}
+
+.gutter:active::before {
+  transform: translate(-50%, -50%) scale(0.96);
 }
 
 /* Hide scrollbars globally */

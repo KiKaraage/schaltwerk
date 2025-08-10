@@ -1,4 +1,5 @@
 import { Terminal, TerminalHandle } from './Terminal'
+import Split from 'react-split'
 import { useSelection } from '../contexts/SelectionContext'
 import { useClaudeSession } from '../hooks/useClaudeSession'
 import { useFocus } from '../contexts/FocusContext'
@@ -74,40 +75,42 @@ export function TerminalGrid() {
     }
 
     return (
-        <div className="h-full flex flex-col p-2 gap-2">
-            <div className="flex-[2] bg-panel rounded border border-slate-800 overflow-hidden min-h-0 flex flex-col">
-                <div 
-                    className="px-2 py-1 text-xs text-slate-400 border-b border-slate-800 cursor-pointer hover:bg-slate-800 flex-shrink-0"
-                    onClick={handleClaudeSessionClick}
-                >
-                    {selection.kind === 'orchestrator' ? 'Orchestrator — main repo' : `Session — ${selection.payload ?? ''}`}
+        <div className="h-full p-2">
+            <Split className="h-full flex flex-col" direction="vertical" sizes={[65, 35]} minSize={120} gutterSize={8}>
+                <div className="bg-panel rounded border border-slate-800 overflow-hidden min-h-0 flex flex-col">
+                    <div 
+                        className="px-2 py-1 text-xs text-slate-400 border-b border-slate-800 cursor-pointer hover:bg-slate-800 flex-shrink-0 text-center"
+                        onClick={handleClaudeSessionClick}
+                    >
+                        {selection.kind === 'orchestrator' ? 'Orchestrator — main repo' : `Session — ${selection.payload ?? ''}`}
+                    </div>
+                    <div className="session-header-ruler flex-shrink-0" />
+                    <div className="flex-1 min-h-0" onClick={handleClaudeSessionClick}>
+                        <Terminal 
+                            ref={claudeTerminalRef}
+                            terminalId={terminals.top} 
+                            className="h-full w-full" 
+                            sessionName={selection.kind === 'session' ? selection.payload ?? undefined : undefined}
+                            isOrchestrator={selection.kind === 'orchestrator'}
+                        />
+                    </div>
                 </div>
-                <div className="session-header-ruler flex-shrink-0" />
-                <div className="flex-1 min-h-0" onClick={handleClaudeSessionClick}>
-                    <Terminal 
-                        ref={claudeTerminalRef}
-                        terminalId={terminals.top} 
-                        className="h-full w-full" 
-                        sessionName={selection.kind === 'session' ? selection.payload ?? undefined : undefined}
-                        isOrchestrator={selection.kind === 'orchestrator'}
-                    />
+                <div className="bg-panel rounded border border-slate-800 overflow-hidden min-h-0 flex flex-col">
+                    <div 
+                        className="px-2 py-1 text-xs text-slate-400 border-b border-slate-800 cursor-pointer hover:bg-slate-800 flex-shrink-0 text-center"
+                        onClick={handleTerminalClick}
+                    >
+                        Terminal — {selection.kind === 'orchestrator' ? 'main' : selection.payload}
+                    </div>
+                    <div className="flex-1 min-h-0" onClick={handleTerminalClick}>
+                        <Terminal 
+                            ref={regularTerminalRef}
+                            terminalId={terminals.bottom} 
+                            className="h-full w-full" 
+                        />
+                    </div>
                 </div>
-            </div>
-            <div className="flex-1 bg-panel rounded border border-slate-800 overflow-hidden min-h-0 flex flex-col">
-                <div 
-                    className="px-2 py-1 text-xs text-slate-400 border-b border-slate-800 cursor-pointer hover:bg-slate-800 flex-shrink-0"
-                    onClick={handleTerminalClick}
-                >
-                    Terminal — {selection.kind === 'orchestrator' ? 'main' : selection.payload}
-                </div>
-                <div className="flex-1 min-h-0" onClick={handleTerminalClick}>
-                    <Terminal 
-                        ref={regularTerminalRef}
-                        terminalId={terminals.bottom} 
-                        className="h-full w-full" 
-                    />
-                </div>
-            </div>
+            </Split>
         </div>
     )
 }
