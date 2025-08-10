@@ -49,9 +49,30 @@ export function useClaudeSession() {
         }
     }, [])
 
+    const getAgentType = useCallback(async (): Promise<string> => {
+        try {
+            return await invoke<string>('para_core_get_agent_type')
+        } catch (error) {
+            console.error('Failed to get agent type:', error)
+            return 'claude'
+        }
+    }, [])
+
+    const setAgentType = useCallback(async (agentType: string): Promise<boolean> => {
+        try {
+            await invoke('para_core_set_agent_type', { agentType })
+            return true
+        } catch (error) {
+            console.error('Failed to set agent type:', error)
+            return false
+        }
+    }, [])
+
     return {
         startClaude,
         getSkipPermissions,
         setSkipPermissions,
+        getAgentType,
+        setAgentType,
     }
 }

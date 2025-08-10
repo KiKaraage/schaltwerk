@@ -88,13 +88,27 @@ impl Database {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS app_config (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
-                skip_permissions BOOLEAN DEFAULT FALSE
+                skip_permissions BOOLEAN DEFAULT FALSE,
+                agent_type TEXT DEFAULT 'claude'
             )",
             [],
         )?;
         
+        // Handle migration: Add agent_type column if it doesn't exist
+        let column_exists = {
+            let result = conn.prepare("SELECT agent_type FROM app_config LIMIT 1");
+            match result {
+                Ok(mut stmt) => stmt.query([]).is_ok(),
+                Err(_) => false,
+            }
+        };
+        
+        if !column_exists {
+            conn.execute("ALTER TABLE app_config ADD COLUMN agent_type TEXT DEFAULT 'claude'", [])?;
+        }
+        
         conn.execute(
-            "INSERT OR IGNORE INTO app_config (id, skip_permissions) VALUES (1, FALSE)",
+            "INSERT OR IGNORE INTO app_config (id, skip_permissions, agent_type) VALUES (1, FALSE, 'claude')",
             [],
         )?;
         
@@ -387,6 +401,32 @@ impl Database {
         
         Ok(())
     }
+    
+    pub fn get_agent_type(&self) -> Result<String> {
+        let conn = self.conn.lock().unwrap();
+        
+        let result: SqlResult<String> = conn.query_row(
+            "SELECT agent_type FROM app_config WHERE id = 1",
+            [],
+            |row| row.get(0),
+        );
+        
+        match result {
+            Ok(value) => Ok(value),
+            Err(_) => Ok("claude".to_string()),
+        }
+    }
+    
+    pub fn set_agent_type(&self, agent_type: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        
+        conn.execute(
+            "UPDATE app_config SET agent_type = ?1 WHERE id = 1",
+            params![agent_type],
+        )?;
+        
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -478,5 +518,83 @@ mod database_tests {
         
         let result_set = db.set_skip_permissions(true);
         assert!(result_set.is_ok());
+    }
+    
+    #[test]
+    fn test_get_agent_type_default() {
+        let (db, _temp_dir) = create_test_database();
+        
+        let result = db.get_agent_type().unwrap();
+        assert_eq!(result, "claude");
+    }
+    
+    #[test]
+    fn test_set_agent_type_cursor() {
+        let (db, _temp_dir) = create_test_database();
+        
+        db.set_agent_type("cursor").unwrap();
+        let result = db.get_agent_type().unwrap();
+        assert_eq!(result, "cursor");
+    }
+    
+    #[test]
+    fn test_agent_type_persistence() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("agent_type_persistence_test.db");
+        
+        {
+            let db = Database::new(Some(db_path.clone())).unwrap();
+            db.set_agent_type("cursor").unwrap();
+        }
+        
+        let db = Database::new(Some(db_path)).unwrap();
+        let result = db.get_agent_type().unwrap();
+        assert_eq!(result, "cursor");
+    }
+    
+    #[test]
+    fn test_agent_type_toggle() {
+        let (db, _temp_dir) = create_test_database();
+        
+        assert_eq!(db.get_agent_type().unwrap(), "claude");
+        
+        db.set_agent_type("cursor").unwrap();
+        assert_eq!(db.get_agent_type().unwrap(), "cursor");
+        
+        db.set_agent_type("claude").unwrap();
+        assert_eq!(db.get_agent_type().unwrap(), "claude");
+    }
+    
+    #[test]
+    fn test_migration_adds_agent_type_column() {
+        use tempfile::TempDir;
+        use rusqlite::Connection;
+        
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("migration_test.db");
+        
+        // Create database with old schema (without agent_type)
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute(
+                "CREATE TABLE app_config (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    skip_permissions BOOLEAN DEFAULT FALSE
+                )",
+                [],
+            ).unwrap();
+            conn.execute(
+                "INSERT INTO app_config (id, skip_permissions) VALUES (1, FALSE)",
+                [],
+            ).unwrap();
+        }
+        
+        // Open with our Database struct which should run migration
+        let db = Database::new(Some(db_path)).unwrap();
+        
+        // Verify the column was added and works
+        assert_eq!(db.get_agent_type().unwrap(), "claude");
+        db.set_agent_type("cursor").unwrap();
+        assert_eq!(db.get_agent_type().unwrap(), "cursor");
     }
 }

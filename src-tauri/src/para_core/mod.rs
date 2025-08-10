@@ -5,6 +5,7 @@ pub mod session;
 pub mod activity;
 pub mod types;
 pub mod claude;
+pub mod cursor;
 #[cfg(test)]
 mod tests;
 

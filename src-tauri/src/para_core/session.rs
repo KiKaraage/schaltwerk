@@ -260,30 +260,56 @@ impl SessionManager {
     pub fn start_claude_in_session(&self, session_name: &str) -> Result<String> {
         let session = self.db.get_session_by_name(&self.repo_path, session_name)?;
         let skip_permissions = self.db.get_skip_permissions()?;
+        let agent_type = self.db.get_agent_type()?;
         
-        // Check for existing Claude session
-        let session_id = crate::para_core::claude::find_claude_session(&session.worktree_path);
-        
-        let command = crate::para_core::claude::build_claude_command(
-            &session.worktree_path,
-            session_id.as_deref(),
-            if session_id.is_none() { session.initial_prompt.as_deref() } else { None },
-            skip_permissions,
-        );
+        let command = match agent_type.as_str() {
+            "cursor" => {
+                let session_id = crate::para_core::cursor::find_cursor_session(&session.worktree_path);
+                crate::para_core::cursor::build_cursor_command(
+                    &session.worktree_path,
+                    session_id.as_deref(),
+                    if session_id.is_none() { session.initial_prompt.as_deref() } else { None },
+                    skip_permissions,
+                )
+            }
+            _ => {
+                let session_id = crate::para_core::claude::find_claude_session(&session.worktree_path);
+                crate::para_core::claude::build_claude_command(
+                    &session.worktree_path,
+                    session_id.as_deref(),
+                    if session_id.is_none() { session.initial_prompt.as_deref() } else { None },
+                    skip_permissions,
+                )
+            }
+        };
         
         Ok(command)
     }
     
     pub fn start_claude_in_orchestrator(&self) -> Result<String> {
         let skip_permissions = self.db.get_skip_permissions()?;
-        let session_id = crate::para_core::claude::find_claude_session(&self.repo_path);
+        let agent_type = self.db.get_agent_type()?;
         
-        let command = crate::para_core::claude::build_claude_command(
-            &self.repo_path,
-            session_id.as_deref(),
-            None,
-            skip_permissions,
-        );
+        let command = match agent_type.as_str() {
+            "cursor" => {
+                let session_id = crate::para_core::cursor::find_cursor_session(&self.repo_path);
+                crate::para_core::cursor::build_cursor_command(
+                    &self.repo_path,
+                    session_id.as_deref(),
+                    None,
+                    skip_permissions,
+                )
+            }
+            _ => {
+                let session_id = crate::para_core::claude::find_claude_session(&self.repo_path);
+                crate::para_core::claude::build_claude_command(
+                    &self.repo_path,
+                    session_id.as_deref(),
+                    None,
+                    skip_permissions,
+                )
+            }
+        };
         
         Ok(command)
     }

@@ -18,8 +18,8 @@ use tokio::sync::{OnceCell, Mutex};
 static TERMINAL_MANAGER: OnceCell<Arc<TerminalManager>> = OnceCell::const_new();
 static PARA_CORE: OnceCell<Arc<Mutex<para_core::ParaCore>>> = OnceCell::const_new();
 
-fn parse_claude_command(command: &str) -> Result<(String, Vec<String>), String> {
-    // Command format: "cd /path/to/worktree && claude [args]"
+fn parse_agent_command(command: &str) -> Result<(String, String, Vec<String>), String> {
+    // Command format: "cd /path/to/worktree && {claude|cursor-agent} [args]"
     let parts: Vec<&str> = command.split(" && ").collect();
     if parts.len() != 2 {
         return Err(format!("Invalid command format: {command}"));
@@ -32,20 +32,24 @@ fn parse_claude_command(command: &str) -> Result<(String, Vec<String>), String> 
     }
     let cwd = cd_part[3..].to_string();
     
-    // Parse claude command and arguments
-    let claude_part = parts[1];
-    if !claude_part.starts_with("claude") {
-        return Err(format!("Second part doesn't start with 'claude': {command}"));
-    }
+    // Parse agent command and arguments
+    let agent_part = parts[1];
+    let agent_name = if agent_part.starts_with("claude") {
+        "claude"
+    } else if agent_part.starts_with("cursor-agent") {
+        "cursor-agent"
+    } else {
+        return Err(format!("Second part doesn't start with 'claude' or 'cursor-agent': {command}"));
+    };
     
-    // Split the claude command into arguments, handling quoted strings
+    // Split the agent command into arguments, handling quoted strings
     let mut args = Vec::new();
     let mut current_arg = String::new();
     let mut in_quotes = false;
-    let mut chars = claude_part.chars().peekable();
+    let mut chars = agent_part.chars().peekable();
     
-    // Skip "claude" part
-    for _ in 0..6 {
+    // Skip agent name part
+    for _ in 0..agent_name.len() {
         chars.next();
     }
     
@@ -91,7 +95,7 @@ fn parse_claude_command(command: &str) -> Result<(String, Vec<String>), String> 
         args.push(current_arg);
     }
     
-    Ok((cwd, args))
+    Ok((cwd, agent_name.to_string(), args))
 }
 
 async fn get_terminal_manager() -> Arc<TerminalManager> {
@@ -394,10 +398,10 @@ async fn para_core_start_claude(session_name: String) -> Result<String, String> 
     
     log::info!("Claude command for session {session_name}: {command}");
     
-    // Parse command to extract working directory and arguments
-    let (cwd, claude_args) = parse_claude_command(&command)?;
+    // Parse command to extract working directory, agent name, and arguments
+    let (cwd, agent_name, agent_args) = parse_agent_command(&command)?;
     
-    // Create terminal with Claude directly
+    // Create terminal with the appropriate agent
     let terminal_id = format!("session-{session_name}-top");
     let terminal_manager = get_terminal_manager().await;
     
@@ -406,13 +410,13 @@ async fn para_core_start_claude(session_name: String) -> Result<String, String> 
         terminal_manager.close_terminal(terminal_id.clone()).await?;
     }
     
-    // Create new terminal with Claude directly
-    log::info!("Creating terminal with Claude directly: {terminal_id}");
+    // Create new terminal with the agent directly
+    log::info!("Creating terminal with {agent_name} directly: {terminal_id}");
     terminal_manager.create_terminal_with_app(
         terminal_id.clone(),
         cwd,
-        "claude".to_string(),
-        claude_args,
+        agent_name,
+        agent_args,
         vec![],
     ).await?;
     
@@ -433,10 +437,10 @@ async fn para_core_start_claude_orchestrator() -> Result<String, String> {
     
     log::info!("Claude command for orchestrator: {command}");
     
-    // Parse command to extract working directory and arguments
-    let (cwd, claude_args) = parse_claude_command(&command)?;
+    // Parse command to extract working directory, agent name, and arguments
+    let (cwd, agent_name, agent_args) = parse_agent_command(&command)?;
     
-    // Create terminal with Claude directly
+    // Create terminal with the appropriate agent
     let terminal_id = "orchestrator-top".to_string();
     let terminal_manager = get_terminal_manager().await;
     
@@ -445,13 +449,13 @@ async fn para_core_start_claude_orchestrator() -> Result<String, String> {
         terminal_manager.close_terminal(terminal_id.clone()).await?;
     }
     
-    // Create new terminal with Claude directly
-    log::info!("Creating terminal with Claude directly: {terminal_id}");
+    // Create new terminal with the agent directly
+    log::info!("Creating terminal with {agent_name} directly: {terminal_id}");
     terminal_manager.create_terminal_with_app(
         terminal_id.clone(),
         cwd,
-        "claude".to_string(),
-        claude_args,
+        agent_name,
+        agent_args,
         vec![],
     ).await?;
     
@@ -475,6 +479,24 @@ async fn para_core_get_skip_permissions() -> Result<bool, String> {
     
     core.db.get_skip_permissions()
         .map_err(|e| format!("Failed to get skip permissions: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_set_agent_type(agent_type: String) -> Result<(), String> {
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    
+    core.db.set_agent_type(&agent_type)
+        .map_err(|e| format!("Failed to set agent type: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_get_agent_type() -> Result<String, String> {
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    
+    core.db.get_agent_type()
+        .map_err(|e| format!("Failed to get agent type: {e}"))
 }
 
 #[tauri::command]
@@ -555,6 +577,8 @@ fn main() {
             para_core_get_skip_permissions,
             para_core_mark_session_ready,
             para_core_unmark_session_ready,
+            para_core_set_agent_type,
+            para_core_get_agent_type,
             open_in_vscode,
             diff_commands::get_changed_files_from_main,
             diff_commands::get_file_diff_from_main,

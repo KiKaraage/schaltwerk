@@ -19,14 +19,20 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [baseBranch, setBaseBranch] = useState('main')
     const [skipPermissions, setSkipPermissions] = useState(false)
     const [color, setColor] = useState<'green' | 'violet' | 'amber'>('green')
+    const [agentType, setAgentType] = useState<'claude' | 'cursor'>('claude')
     const [validationError, setValidationError] = useState('')
-    const { getSkipPermissions, setSkipPermissions: saveSkipPermissions } = useClaudeSession()
+    const { getSkipPermissions, setSkipPermissions: saveSkipPermissions, getAgentType, setAgentType: saveAgentType } = useClaudeSession()
     const nameInputRef = useRef<HTMLInputElement>(null)
     const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
 
     const handleSkipPermissionsChange = async (checked: boolean) => {
         setSkipPermissions(checked)
         await saveSkipPermissions(checked)
+    }
+
+    const handleAgentTypeChange = async (type: 'claude' | 'cursor') => {
+        setAgentType(type)
+        await saveAgentType(type)
     }
 
     const validateSessionName = useCallback((sessionName: string): string | null => {
@@ -81,13 +87,14 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             setValidationError('')
             
             getSkipPermissions().then(setSkipPermissions)
+            getAgentType().then(type => setAgentType(type as 'claude' | 'cursor'))
             
             // Focus the prompt textarea when modal opens
             setTimeout(() => {
                 promptTextareaRef.current?.focus()
             }, 100)
         }
-    }, [open, getSkipPermissions])
+    }, [open, getSkipPermissions, getAgentType])
 
     useEffect(() => {
         if (!open) return
@@ -141,7 +148,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                         <p className="text-xs text-slate-400 mt-1">Equivalent to: para start &lt;name&gt; -p "&lt;prompt&gt;"</p>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-4 gap-3">
                         <div>
                             <label className="block text-sm text-slate-300 mb-1">Base branch</label>
                             <input value={baseBranch} onChange={e => setBaseBranch(e.target.value)} className="w-full bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700" />
@@ -156,9 +163,29 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                             </div>
                             <p className="text-xs text-slate-400 mt-1">Used for the session ring and accents</p>
                         </div>
+                        <div>
+                            <label className="block text-sm text-slate-300 mb-1">Agent</label>
+                            <div className="flex gap-2">
+                                <button 
+                                    type="button" 
+                                    onClick={() => handleAgentTypeChange('claude')} 
+                                    className={`px-3 py-1.5 text-sm rounded border ${agentType === 'claude' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-300'}`}
+                                >
+                                    Claude
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => handleAgentTypeChange('cursor')} 
+                                    className={`px-3 py-1.5 text-sm rounded border ${agentType === 'cursor' ? 'bg-purple-600 border-purple-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-300'}`}
+                                >
+                                    Cursor
+                                </button>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-1">AI agent to use for this session</p>
+                        </div>
                         <div className="flex items-center gap-2">
                             <input id="skipPerms" type="checkbox" checked={skipPermissions} onChange={e => handleSkipPermissionsChange(e.target.checked)} />
-                            <label htmlFor="skipPerms" className="text-sm text-slate-300">Skip permissions</label>
+                            <label htmlFor="skipPerms" className="text-sm text-slate-300">{agentType === 'cursor' ? 'Force flag' : 'Skip permissions'}</label>
                         </div>
                     </div>
                 </div>

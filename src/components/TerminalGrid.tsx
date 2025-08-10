@@ -80,7 +80,7 @@ export function TerminalGrid() {
                     className="px-2 py-1 text-xs text-slate-400 border-b border-slate-800 cursor-pointer hover:bg-slate-800 flex-shrink-0"
                     onClick={handleClaudeSessionClick}
                 >
-                    {selection.kind === 'orchestrator' ? 'Orchestrator — main repo' : `Claude session — ${selection.payload ?? ''}`}
+                    {selection.kind === 'orchestrator' ? 'Orchestrator — main repo' : `Session — ${selection.payload ?? ''}`}
                 </div>
                 <div className="session-header-ruler flex-shrink-0" />
                 <div className="flex-1 min-h-0" onClick={handleClaudeSessionClick}>

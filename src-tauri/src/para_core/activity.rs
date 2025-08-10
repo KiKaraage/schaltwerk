@@ -262,7 +262,8 @@ mod tests {
     #[test]
     fn test_get_last_modification_nonexistent_path() {
         let temp_dir = TempDir::new().unwrap();
-        let db = Arc::new(Database::new(None).unwrap());
+        let db_path = temp_dir.path().join("test.db");
+        let db = Arc::new(Database::new(Some(db_path)).unwrap());
         let mock_emitter = MockEmitter::new();
         let tracker = ActivityTracker::new(db, mock_emitter);
         
@@ -279,7 +280,8 @@ mod tests {
         std::fs::write(git_dir.join("config"), "git config").unwrap();
         std::fs::write(temp_dir.path().join("regular.txt"), "content").unwrap();
         
-        let db = Arc::new(Database::new(None).unwrap());
+        let db_path = temp_dir.path().join("test.db");
+        let db = Arc::new(Database::new(Some(db_path)).unwrap());
         let mock_emitter = MockEmitter::new();
         let tracker = ActivityTracker::new(db, mock_emitter);
         
