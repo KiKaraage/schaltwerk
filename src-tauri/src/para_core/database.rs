@@ -384,6 +384,28 @@ impl Database {
         Ok(())
     }
     
+    pub fn get_git_stats(&self, session_id: &str) -> Result<Option<GitStats>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT session_id, files_changed, lines_added, lines_removed, has_uncommitted, calculated_at
+             FROM git_stats WHERE session_id = ?1",
+        )?;
+        let result: SqlResult<GitStats> = stmt.query_row(params![session_id], |row| {
+            Ok(GitStats {
+                session_id: row.get(0)?,
+                files_changed: row.get(1)?,
+                lines_added: row.get(2)?,
+                lines_removed: row.get(3)?,
+                has_uncommitted: row.get(4)?,
+                calculated_at: Utc.timestamp_opt(row.get(5)?, 0).unwrap(),
+            })
+        });
+        match result {
+            Ok(stats) => Ok(Some(stats)),
+            Err(_) => Ok(None),
+        }
+    }
+
     
     pub fn should_update_stats(&self, session_id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
