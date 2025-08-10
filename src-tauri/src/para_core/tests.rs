@@ -388,4 +388,72 @@ mod tests {
         let sessions = manager.list_sessions().unwrap();
         assert_eq!(sessions.len(), 5);
     }
+
+    #[test]
+    fn test_list_enriched_sessions_performance_caching() {
+        use std::time::Instant;
+
+        let env = TestEnvironment::new().unwrap();
+        let manager = env.get_session_manager().unwrap();
+
+        // Create multiple sessions to amplify the effect
+        let session_count = 8usize;
+        for i in 0..session_count {
+            let name = format!("perf-{}", i);
+            manager.create_session(&name, None, None).unwrap();
+        }
+
+        // First call: cold (computes git stats for each session)
+        let start_cold = Instant::now();
+        let enriched_cold = manager.list_enriched_sessions().unwrap();
+        let dur_cold = start_cold.elapsed();
+        assert_eq!(enriched_cold.len(), session_count);
+
+        // Second call: warm (should mostly use cached stats)
+        let start_warm = Instant::now();
+        let enriched_warm = manager.list_enriched_sessions().unwrap();
+        let dur_warm = start_warm.elapsed();
+        assert_eq!(enriched_warm.len(), session_count);
+
+        // Expect warm run to be no slower than cold (with some tolerance)
+        // Using 10% tolerance to avoid flakiness on fast CI machines.
+        assert!(
+            dur_warm <= dur_cold + dur_cold / 10,
+            "Expected warm ( {:?} ) to be <= 1.1x cold ( {:?} )",
+            dur_warm, dur_cold
+        );
+    }
+
+    #[test]
+    fn test_list_enriched_sessions_caches_to_db_and_refreshes_when_stale() {
+        use chrono::{Duration as ChronoDuration, Utc};
+
+        let env = TestEnvironment::new().unwrap();
+        let manager = env.get_session_manager().unwrap();
+
+        // Create some sessions
+        let s1 = manager.create_session("cache-a", None, None).unwrap();
+        let s2 = manager.create_session("cache-b", None, None).unwrap();
+
+        // Trigger caching by listing
+        let _ = manager.list_enriched_sessions().unwrap();
+
+        // Verify stats exist in DB
+        let stats1 = manager.db_ref().get_git_stats(&s1.id).unwrap();
+        let stats2 = manager.db_ref().get_git_stats(&s2.id).unwrap();
+        assert!(stats1.is_some());
+        assert!(stats2.is_some());
+
+        // Force stats to be stale by overwriting with an older timestamp
+        let mut stale1 = stats1.unwrap();
+        stale1.calculated_at = Utc::now() - ChronoDuration::seconds(31);
+        manager.db_ref().save_git_stats(&stale1).unwrap();
+
+        // Call listing again to trigger refresh for stale session
+        let _ = manager.list_enriched_sessions().unwrap();
+
+        // New timestamp should be fresher than the stale timestamp
+        let refreshed1 = manager.db_ref().get_git_stats(&s1.id).unwrap().unwrap();
+        assert!(refreshed1.calculated_at > stale1.calculated_at);
+    }
 }

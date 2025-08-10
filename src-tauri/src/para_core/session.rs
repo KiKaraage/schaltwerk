@@ -205,7 +205,24 @@ impl SessionManager {
             if session.status == SessionStatus::Cancelled {
                 continue;
             }
-            let git_stats = git::calculate_git_stats(&session.worktree_path, &session.parent_branch).ok();
+            // Use cached git stats where fresh; compute only when stale
+            let git_stats = match self.db.get_git_stats(&session.id)? {
+                Some(existing) => {
+                    let is_stale = (Utc::now() - existing.calculated_at).num_seconds() > 30;
+                    if is_stale {
+                        let mut updated = git::calculate_git_stats(&session.worktree_path, &session.parent_branch).ok();
+                        if let Some(ref mut s) = updated { s.session_id = session.id.clone(); let _ = self.db.save_git_stats(s); }
+                        updated.or(Some(existing))
+                    } else {
+                        Some(existing)
+                    }
+                }
+                None => {
+                    let mut computed = git::calculate_git_stats(&session.worktree_path, &session.parent_branch).ok();
+                    if let Some(ref mut s) = computed { s.session_id = session.id.clone(); let _ = self.db.save_git_stats(s); }
+                    computed
+                }
+            };
             let has_uncommitted = git_stats.as_ref().map(|s| s.has_uncommitted).unwrap_or(false);
             
             let diff_stats = git_stats.as_ref().map(|stats| DiffStats {
@@ -337,6 +354,11 @@ impl SessionManager {
         let session = self.db.get_session_by_name(&self.repo_path, session_name)?;
         self.db.update_session_ready_to_merge(&session.id, false)?;
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub fn db_ref(&self) -> &Database {
+        &self.db
     }
 }
 

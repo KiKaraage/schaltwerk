@@ -229,10 +229,8 @@ pub fn calculate_git_stats(worktree_path: &Path, parent_branch: &str) -> Result<
         for line in String::from_utf8_lossy(&untracked_output.stdout).lines() {
             if !line.is_empty() {
                 changed_files.insert(line.to_string());
-                // For untracked files, count lines as added (estimate)
-                if let Ok(content) = std::fs::read_to_string(worktree_path.join(line)) {
-                    total_lines_added += content.lines().count() as u32;
-                }
+                // Performance: avoid per-file IO to count lines for untracked files.
+                // We only mark the file as changed without summing line counts.
             }
         }
     }
