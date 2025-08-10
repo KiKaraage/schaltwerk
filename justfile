@@ -83,15 +83,29 @@ run-port port:
     
     echo "🚀 Starting Para UI on port {{port}}"
     
-    # Export the port for both Vite and any other components that need it
+    # Create temporary config override
+    temp_config=$(mktemp)
+    echo '{' > "$temp_config"
+    echo '  "build": {' >> "$temp_config"
+    echo '    "devUrl": "http://localhost:{{port}}"' >> "$temp_config"
+    echo '  }' >> "$temp_config"
+    echo '}' >> "$temp_config"
+    
+    # Export the port for Vite
     export VITE_PORT={{port}}
     export PORT={{port}}
     
-    # Override Tauri's dev URL
-    export TAURI_DEV_URL="http://localhost:{{port}}"
+    # Cleanup function to remove temp config
+    cleanup() {
+        echo "🧹 Cleaning up temporary config..."
+        rm -f "$temp_config"
+    }
     
-    # Start the full Tauri development environment
-    npm run tauri dev
+    # Set trap to cleanup on exit
+    trap cleanup EXIT
+    
+    # Start Tauri with config override
+    npm run tauri dev -- --config "$temp_config"
 
 # Build the application for production
 build:
