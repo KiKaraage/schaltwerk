@@ -53,7 +53,6 @@ interface SessionInfo {
   session_type: 'worktree' | 'container'
   container_status?: string
   current_task?: string
-  test_status?: string
   todo_percentage?: number
   is_blocked?: boolean
   diff_stats?: DiffStats
@@ -128,7 +127,6 @@ export const sessionReducers = {
       session_type: 'worktree',
       container_status: undefined,
       current_task: undefined,
-      test_status: undefined,
       todo_percentage: undefined,
       is_blocked: undefined,
       diff_stats: undefined,
@@ -226,8 +224,7 @@ describe('Sidebar', () => {
             status: 'active',
             is_current: false,
             session_type: 'worktree',
-                  current_task: 'Simple task',
-            test_status: 'passed',
+            current_task: 'Simple task',
             has_uncommitted_changes: false
           },
           status: undefined,
@@ -243,7 +240,6 @@ describe('Sidebar', () => {
         expect(screen.getByText('simple-session')).toBeInTheDocument()
         expect(screen.getByText('feature/simple')).toBeInTheDocument()
         expect(screen.getByText('Simple task')).toBeInTheDocument()
-        expect(screen.getByText('Tests: passed')).toBeInTheDocument()
       })
     })
   })
@@ -483,7 +479,6 @@ describe('Sidebar', () => {
       await waitFor(() => {
         expect(screen.getByText('minimal-session')).toBeInTheDocument()
         expect(screen.getByText('Working on minimal-session')).toBeInTheDocument() // Default task
-        expect(screen.getByText('Tests: unknown')).toBeInTheDocument() // Default test status
       })
     })
 

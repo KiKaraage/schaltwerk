@@ -207,7 +207,7 @@ impl Database {
                     status, created_at, updated_at, last_activity, initial_prompt
              FROM sessions
              WHERE repository_path = ?1
-             ORDER BY updated_at DESC"
+             ORDER BY COALESCE(last_activity, updated_at) DESC"
         )?;
         
         let sessions = stmt.query_map(
@@ -244,7 +244,7 @@ impl Database {
                     status, created_at, updated_at, last_activity, initial_prompt
              FROM sessions
              WHERE status = 'active'
-             ORDER BY updated_at DESC"
+             ORDER BY COALESCE(last_activity, updated_at) DESC"
         )?;
         
         let sessions = stmt.query_map(

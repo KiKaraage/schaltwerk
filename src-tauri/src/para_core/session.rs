@@ -234,7 +234,6 @@ impl SessionManager {
                 session_type: SessionType::Worktree,
                 container_status: None,
                 current_task: session.initial_prompt.clone(),
-                test_status: None,
                 todo_percentage: None,
                 is_blocked: None,
                 diff_stats: diff_stats.clone(),

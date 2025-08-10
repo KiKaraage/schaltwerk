@@ -27,7 +27,6 @@ interface SessionInfo {
     container_status?: string
     // Monitor fields
     current_task?: string
-    test_status?: string
     todo_percentage?: number
     is_blocked?: boolean
     diff_stats?: DiffStats
@@ -203,7 +202,6 @@ export function Sidebar() {
                         session_type: 'worktree',
                         container_status: undefined,
                         current_task: undefined,
-                        test_status: undefined,
                         todo_percentage: undefined,
                         is_blocked: undefined,
                         diff_stats: undefined,
@@ -275,11 +273,16 @@ export function Sidebar() {
                 ) : sessions.length === 0 ? (
                     <div className="text-center text-slate-500 py-4">No active sessions</div>
                 ) : (
-                    sessions.map((session, i) => {
+                    sessions
+                        .sort((a, b) => {
+                            const aTime = a.info.last_modified ? new Date(a.info.last_modified).getTime() : 0
+                            const bTime = b.info.last_modified ? new Date(b.info.last_modified).getTime() : 0
+                            return bTime - aTime
+                        })
+                        .map((session, i) => {
                         const s = session.info
                         const color = getSessionStateColor()
                         const task = s.current_task || `Working on ${s.session_id}`
-                        const testStatus = s.test_status || 'unknown'
                         const progressPercent = s.todo_percentage || 0
                         const additions = s.diff_stats?.insertions || s.diff_stats?.additions || 0
                         const deletions = s.diff_stats?.deletions || 0
@@ -381,13 +384,6 @@ export function Sidebar() {
                                     </>
                                 )}
                                 <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-                                    <div className={clsx({
-                                        'text-green-400': testStatus === 'passed',
-                                        'text-red-400': testStatus === 'failed',
-                                        'text-slate-500': testStatus === 'unknown',
-                                    })}>
-                                        Tests: {testStatus}
-                                    </div>
                                     <div>
                                         {filesChanged > 0 && <span>{filesChanged} files, </span>}
                                         <span className="text-green-400">+{additions}</span>{' '}

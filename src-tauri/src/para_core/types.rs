@@ -127,8 +127,6 @@ pub struct SessionInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_task: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub test_status: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub todo_percentage: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_blocked: Option<bool>,

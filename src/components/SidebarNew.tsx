@@ -7,7 +7,6 @@ interface EnrichedSession {
     info: {
         session_id: string
         current_task?: string
-        test_status?: string
         todo_percentage?: number
         diff_stats?: {
             insertions?: number
@@ -106,11 +105,16 @@ export function SidebarNew() {
                 ) : sessions.length === 0 ? (
                     <div className="text-center text-slate-500 py-4">No active sessions</div>
                 ) : (
-                    sessions.map((session) => {
+                    sessions
+                        .sort((a, b) => {
+                            const aTime = a.info.last_modified ? new Date(a.info.last_modified).getTime() : 0
+                            const bTime = b.info.last_modified ? new Date(b.info.last_modified).getTime() : 0
+                            return bTime - aTime
+                        })
+                        .map((session) => {
                         const s = session.info
                         const color = getSessionStateColor()
                         const task = s.current_task || `Working on ${s.session_id}`
-                        const testStatus = s.test_status || 'unknown'
                         const progressPercent = s.todo_percentage || 0
                         const lastActivity = formatLastActivity(s.last_modified)
                         const isBlocked = s.is_blocked || false
@@ -149,16 +153,6 @@ export function SidebarNew() {
                                 <div className="text-xs text-slate-400 mb-2 line-clamp-2">{task}</div>
                                 
                                 <div className="flex items-center gap-2">
-                                    {testStatus !== 'unknown' && (
-                                        <span className={clsx('text-xs px-1.5 py-0.5 rounded',
-                                            testStatus === 'passed' && 'bg-green-500/20 text-green-400',
-                                            testStatus === 'failed' && 'bg-red-500/20 text-red-400',
-                                            testStatus === 'unknown' && 'bg-slate-500/20 text-slate-400'
-                                        )}>
-                                            {testStatus}
-                                        </span>
-                                    )}
-                                    
                                     {progressPercent > 0 && (
                                         <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
                                             <div 
