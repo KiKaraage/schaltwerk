@@ -2,12 +2,11 @@ use std::path::Path;
 use std::fs;
 
 pub fn find_cursor_session(path: &Path) -> Option<String> {
-    // For cursor-agent, we need a different approach than Claude
-    // Cursor sessions are not directly tied to project paths like Claude sessions
-    // 
-    // For now, we'll check if there's a .cursor-session file in the worktree
-    // that stores the session ID for this specific worktree
-    let session_file = path.join(".cursor-session");
+    // Resolve symlinks to a canonical path to keep behavior stable across restarts.
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    // Cursor sessions are tracked per worktree via a local file.
+    // We use the canonicalized worktree path when constructing the file path.
+    let session_file = canonical.join(".cursor-session");
     
     if session_file.exists() {
         fs::read_to_string(&session_file)
@@ -21,8 +20,7 @@ pub fn find_cursor_session(path: &Path) -> Option<String> {
                 }
             })
     } else {
-        // Don't try to find global cursor sessions
-        // Each Para session should have its own cursor session
+        // Don't try to find global cursor sessions; enforce per-worktree scoping
         None
     }
 }
