@@ -51,6 +51,7 @@ impl Database {
                 updated_at INTEGER NOT NULL,
                 last_activity INTEGER,
                 initial_prompt TEXT,
+                ready_to_merge BOOLEAN DEFAULT FALSE,
                 UNIQUE(repository_path, name)
             )",
             [],
@@ -97,6 +98,12 @@ impl Database {
             [],
         )?;
         
+        // Add ready_to_merge column if it doesn't exist (migration)
+        let _ = conn.execute(
+            "ALTER TABLE sessions ADD COLUMN ready_to_merge BOOLEAN DEFAULT FALSE",
+            [],
+        );
+        
         Ok(())
     }
     
@@ -107,8 +114,8 @@ impl Database {
             "INSERT INTO sessions (
                 id, name, repository_path, repository_name,
                 branch, parent_branch, worktree_path,
-                status, created_at, updated_at, last_activity, initial_prompt
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 session.id,
                 session.name,
@@ -122,6 +129,7 @@ impl Database {
                 session.updated_at.timestamp(),
                 session.last_activity.map(|dt| dt.timestamp()),
                 session.initial_prompt,
+                session.ready_to_merge,
             ],
         )?;
         
@@ -134,7 +142,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
-                    status, created_at, updated_at, last_activity, initial_prompt
+                    status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge
              FROM sessions
              WHERE repository_path = ?1 AND name = ?2"
         )?;
@@ -156,6 +164,7 @@ impl Database {
                     last_activity: row.get::<_, Option<i64>>(10)?
                         .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
                     initial_prompt: row.get(11)?,
+                    ready_to_merge: row.get(12).unwrap_or(false),
                 })
             }
         )?;
@@ -169,7 +178,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
-                    status, created_at, updated_at, last_activity, initial_prompt
+                    status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge
              FROM sessions
              WHERE id = ?1"
         )?;
@@ -191,6 +200,7 @@ impl Database {
                     last_activity: row.get::<_, Option<i64>>(10)?
                         .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
                     initial_prompt: row.get(11)?,
+                    ready_to_merge: row.get(12).unwrap_or(false),
                 })
             }
         )?;
@@ -204,10 +214,10 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
-                    status, created_at, updated_at, last_activity, initial_prompt
+                    status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge
              FROM sessions
              WHERE repository_path = ?1
-             ORDER BY COALESCE(last_activity, updated_at) DESC"
+             ORDER BY ready_to_merge ASC, COALESCE(last_activity, updated_at) DESC"
         )?;
         
         let sessions = stmt.query_map(
@@ -227,6 +237,7 @@ impl Database {
                     last_activity: row.get::<_, Option<i64>>(10)?
                         .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
                     initial_prompt: row.get(11)?,
+                    ready_to_merge: row.get(12).unwrap_or(false),
                 })
             }
         )?
@@ -241,10 +252,10 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
-                    status, created_at, updated_at, last_activity, initial_prompt
+                    status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge
              FROM sessions
              WHERE status = 'active'
-             ORDER BY COALESCE(last_activity, updated_at) DESC"
+             ORDER BY ready_to_merge ASC, COALESCE(last_activity, updated_at) DESC"
         )?;
         
         let sessions = stmt.query_map(
@@ -264,6 +275,7 @@ impl Database {
                     last_activity: row.get::<_, Option<i64>>(10)?
                         .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
                     initial_prompt: row.get(11)?,
+                    ready_to_merge: row.get(12).unwrap_or(false),
                 })
             }
         )?
@@ -293,6 +305,19 @@ impl Database {
              SET last_activity = ?1
              WHERE id = ?2 AND (last_activity IS NULL OR last_activity < ?1)",
             params![timestamp.timestamp(), id],
+        )?;
+        
+        Ok(())
+    }
+    
+    pub fn update_session_ready_to_merge(&self, id: &str, ready: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        
+        conn.execute(
+            "UPDATE sessions
+             SET ready_to_merge = ?1, updated_at = ?2
+             WHERE id = ?3",
+            params![ready, Utc::now().timestamp(), id],
         )?;
         
         Ok(())

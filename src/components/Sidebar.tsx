@@ -5,6 +5,7 @@ import { formatLastActivity } from '../utils/time'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { useSelection } from '../contexts/SelectionContext'
+import { MarkReadyConfirmation } from './MarkReadyConfirmation'
 
 interface DiffStats {
     files_changed: number
@@ -30,6 +31,7 @@ interface SessionInfo {
     todo_percentage?: number
     is_blocked?: boolean
     diff_stats?: DiffStats
+    ready_to_merge?: boolean
 }
 
 interface EnrichedSession {
@@ -53,6 +55,11 @@ export function Sidebar() {
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
     const [loading, setLoading] = useState(true)
     const [stuckTerminals, setStuckTerminals] = useState<Set<string>>(new Set())
+    const [markReadyModal, setMarkReadyModal] = useState<{ open: boolean; sessionName: string; hasUncommitted: boolean }>({
+        open: false,
+        sessionName: '',
+        hasUncommitted: false
+    })
 
     const handleSelectOrchestrator = async () => {
         await setSelection({ kind: 'orchestrator', color: 'blue' })
@@ -108,7 +115,13 @@ export function Sidebar() {
         const loadSessions = async () => {
             try {
                 const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                setSessions(result)
+                // Sort sessions: ready_to_merge at the bottom
+                const sorted = result.sort((a, b) => {
+                    if (a.info.ready_to_merge && !b.info.ready_to_merge) return 1
+                    if (!a.info.ready_to_merge && b.info.ready_to_merge) return -1
+                    return 0
+                })
+                setSessions(sorted)
             } catch (err) {
                 console.error('Failed to load sessions:', err)
             } finally {
@@ -205,6 +218,7 @@ export function Sidebar() {
                         todo_percentage: undefined,
                         is_blocked: undefined,
                         diff_stats: undefined,
+                        ready_to_merge: false,
                     }
                     const terminals = [
                         `session-${session_name}-top`,
@@ -212,7 +226,13 @@ export function Sidebar() {
                         `session-${session_name}-right`,
                     ]
                     const enriched: EnrichedSession = { info, status: undefined, terminals }
-                    return [enriched, ...prev]
+                    // Add new session and re-sort
+                    const updated = [enriched, ...prev]
+                    return updated.sort((a, b) => {
+                        if (a.info.ready_to_merge && !b.info.ready_to_merge) return 1
+                        if (!a.info.ready_to_merge && b.info.ready_to_merge) return -1
+                        return 0
+                    })
                 })
             })
             unlisteners.push(u3)
@@ -291,13 +311,16 @@ export function Sidebar() {
                         const isBlocked = s.is_blocked || false
                         const isSelected = selection.kind === 'session' && selection.payload === s.session_id
                         const hasStuckTerminals = stuckTerminals.has(s.session_id)
+                        const isReadyToMerge = s.ready_to_merge || false
 
                         return (
                             <button
                                 key={`c-${s.session_id}`}
                                 onClick={() => handleSelectSession(i)}
                                 className={clsx('group w-full text-left p-3 rounded-md mb-2 border transition-all duration-300',
-                                    isSelected
+                                    isReadyToMerge && !isSelected 
+                                        ? 'border-green-800/50 bg-green-950/20 opacity-75'
+                                        : isSelected
                                         ? clsx('session-ring border-transparent', 
                                             color === 'green' && 'session-ring-green',
                                             color === 'violet' && 'session-ring-violet',
@@ -315,8 +338,13 @@ export function Sidebar() {
                                     <div className="flex-1 min-w-0">
                                         <div className="font-medium text-slate-100 truncate">
                                             {s.session_id}
+                                            {isReadyToMerge && (
+                                                <span className="ml-2 text-xs text-green-400">
+                                                    ✓ Ready
+                                                </span>
+                                            )}
                                             {isBlocked && <span className="ml-2 text-xs text-red-400">⚠ blocked</span>}
-                                            {hasStuckTerminals && (
+                                            {hasStuckTerminals && !isReadyToMerge && (
                                                 <span className="ml-2 text-xs text-amber-400" title="Agent is idling and may need input">
                                                     <div className="inline-flex items-center gap-1">
                                                         <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
@@ -336,6 +364,45 @@ export function Sidebar() {
                                     </div>
                                 </div>
                                 <div className="mt-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                                    {!isReadyToMerge ? (
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setMarkReadyModal({
+                                                    open: true,
+                                                    sessionName: s.session_id,
+                                                    hasUncommitted: s.has_uncommitted_changes || false
+                                                })
+                                            }}
+                                            className="text-[11px] px-2 py-0.5 rounded bg-green-800/60 hover:bg-green-700/60"
+                                            title="Mark as ready for merge"
+                                        >
+                                            Mark Ready
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            onClick={async (e) => {
+                                                e.stopPropagation()
+                                                try {
+                                                    await invoke('para_core_unmark_session_ready', { name: s.session_id })
+                                                    // Reload sessions
+                                                    const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
+                                                    const sorted = result.sort((a, b) => {
+                                                        if (a.info.ready_to_merge && !b.info.ready_to_merge) return 1
+                                                        if (!a.info.ready_to_merge && b.info.ready_to_merge) return -1
+                                                        return 0
+                                                    })
+                                                    setSessions(sorted)
+                                                } catch (err) {
+                                                    console.error('Failed to unmark session:', err)
+                                                }
+                                            }}
+                                            className="text-[11px] px-2 py-0.5 rounded bg-slate-700/60 hover:bg-slate-600/60"
+                                            title="Unmark as ready"
+                                        >
+                                            Unmark
+                                        </button>
+                                    )}
                                     <button 
                                         onClick={async (e) => {
                                             e.stopPropagation()
@@ -396,6 +463,22 @@ export function Sidebar() {
                     })
                 )}
             </div>
+            <MarkReadyConfirmation
+                open={markReadyModal.open}
+                sessionName={markReadyModal.sessionName}
+                hasUncommittedChanges={markReadyModal.hasUncommitted}
+                onClose={() => setMarkReadyModal({ open: false, sessionName: '', hasUncommitted: false })}
+                onSuccess={async () => {
+                    // Reload sessions
+                    const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
+                    const sorted = result.sort((a, b) => {
+                        if (a.info.ready_to_merge && !b.info.ready_to_merge) return 1
+                        if (!a.info.ready_to_merge && b.info.ready_to_merge) return -1
+                        return 0
+                    })
+                    setSessions(sorted)
+                }}
+            />
         </div>
     )
 }

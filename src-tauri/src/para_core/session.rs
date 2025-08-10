@@ -72,6 +72,7 @@ impl SessionManager {
             updated_at: now,
             last_activity: None,
             initial_prompt: prompt.map(String::from),
+            ready_to_merge: false,
         };
         
         // Create worktree with new branch from specified base
@@ -237,6 +238,7 @@ impl SessionManager {
                 todo_percentage: None,
                 is_blocked: None,
                 diff_stats: diff_stats.clone(),
+                ready_to_merge: session.ready_to_merge,
             };
             
             let terminals = vec![
@@ -285,6 +287,32 @@ impl SessionManager {
         
         Ok(command)
     }
+    
+    pub fn mark_session_ready(&self, session_name: &str, auto_commit: bool) -> Result<bool> {
+        let session = self.db.get_session_by_name(&self.repo_path, session_name)?;
+        
+        // Check for uncommitted changes
+        let has_uncommitted = git::has_uncommitted_changes(&session.worktree_path)?;
+        
+        if has_uncommitted && auto_commit {
+            // Auto-commit changes
+            git::commit_all_changes(
+                &session.worktree_path,
+                &format!("Mark session {session_name} as ready for merge")
+            )?;
+        }
+        
+        // Update database
+        self.db.update_session_ready_to_merge(&session.id, true)?;
+        
+        Ok(!has_uncommitted || auto_commit)
+    }
+    
+    pub fn unmark_session_ready(&self, session_name: &str) -> Result<()> {
+        let session = self.db.get_session_by_name(&self.repo_path, session_name)?;
+        self.db.update_session_ready_to_merge(&session.id, false)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -317,6 +345,7 @@ mod session_tests {
             updated_at: Utc::now(),
             last_activity: None,
             initial_prompt: Some("implement feature X".to_string()),
+            ready_to_merge: false,
         };
         
         manager.db.create_session(&session).unwrap();
@@ -372,6 +401,7 @@ mod session_tests {
             updated_at: Utc::now(),
             last_activity: None,
             initial_prompt: None,
+            ready_to_merge: false,
         };
         
         manager.db.create_session(&session_no_prompt).unwrap();
@@ -445,6 +475,7 @@ mod session_tests {
             updated_at: Utc::now(),
             last_activity: None,
             initial_prompt: Some("test prompt".to_string()),
+            ready_to_merge: false,
         };
         
         manager.db.create_session(&session).unwrap();

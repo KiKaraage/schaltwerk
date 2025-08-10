@@ -475,6 +475,30 @@ async fn open_in_vscode(worktree_path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn para_core_mark_session_ready(name: String, auto_commit: bool) -> Result<bool, String> {
+    log::info!("Marking session {name} as ready for merge (auto_commit: {auto_commit})");
+    
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    let manager = core.session_manager();
+    
+    manager.mark_session_ready(&name, auto_commit)
+        .map_err(|e| format!("Failed to mark session as ready: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_unmark_session_ready(name: String) -> Result<(), String> {
+    log::info!("Unmarking session {name} as ready for merge");
+    
+    let core = get_para_core().await;
+    let core = core.lock().await;
+    let manager = core.session_manager();
+    
+    manager.unmark_session_ready(&name)
+        .map_err(|e| format!("Failed to unmark session as ready: {e}"))
+}
+
 fn main() {
     // Initialize logging
     logging::init_logging();
@@ -505,6 +529,8 @@ fn main() {
             para_core_start_claude_orchestrator,
             para_core_set_skip_permissions,
             para_core_get_skip_permissions,
+            para_core_mark_session_ready,
+            para_core_unmark_session_ready,
             open_in_vscode,
             diff_commands::get_changed_files_from_main,
             diff_commands::get_file_diff_from_main,

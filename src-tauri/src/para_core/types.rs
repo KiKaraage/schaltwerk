@@ -17,6 +17,7 @@ pub struct Session {
     pub updated_at: DateTime<Utc>,
     pub last_activity: Option<DateTime<Utc>>,
     pub initial_prompt: Option<String>,
+    pub ready_to_merge: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -132,6 +133,8 @@ pub struct SessionInfo {
     pub is_blocked: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub diff_stats: Option<DiffStats>,
+    #[serde(default)]
+    pub ready_to_merge: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

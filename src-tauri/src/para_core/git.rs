@@ -285,6 +285,40 @@ pub fn has_uncommitted_changes(worktree_path: &Path) -> Result<bool> {
     Ok(!output.stdout.is_empty())
 }
 
+pub fn commit_all_changes(worktree_path: &Path, message: &str) -> Result<()> {
+    // First add all changes
+    let add_output = Command::new("git")
+        .args([
+            "-C", worktree_path.to_str().unwrap(),
+            "add", "-A"
+        ])
+        .output()?;
+    
+    if !add_output.status.success() {
+        let stderr = String::from_utf8_lossy(&add_output.stderr);
+        return Err(anyhow!("Failed to stage changes: {}", stderr));
+    }
+    
+    // Then commit
+    let commit_output = Command::new("git")
+        .args([
+            "-C", worktree_path.to_str().unwrap(),
+            "commit", "-m", message
+        ])
+        .output()?;
+    
+    if !commit_output.status.success() {
+        let stderr = String::from_utf8_lossy(&commit_output.stderr);
+        if stderr.contains("nothing to commit") {
+            // This is not really an error
+            return Ok(());
+        }
+        return Err(anyhow!("Failed to commit changes: {}", stderr));
+    }
+    
+    Ok(())
+}
+
 
 pub fn list_worktrees(repo_path: &Path) -> Result<Vec<PathBuf>> {
     let output = Command::new("git")
