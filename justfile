@@ -124,6 +124,10 @@ run-port port:
 build:
     npm run build && npm run tauri build
 
+# Build and run the application in production mode
+run-build:
+    npm run build && npm run tauri build && ./src-tauri/target/release/para-ui
+
 # Run all tests and lints
 test:
     npm run test
