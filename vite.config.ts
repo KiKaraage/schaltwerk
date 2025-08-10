@@ -10,6 +10,8 @@ export default defineConfig(async () => ({
   //
   // 1. prevent Vite from obscuring rust errors
   clearScreen: false,
+  // Ensure built asset paths work when loaded from filesystem in the Tauri bundle
+  base: "./",
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: parseInt(process.env.VITE_PORT || "1420"),

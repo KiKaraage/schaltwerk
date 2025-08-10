@@ -6,6 +6,20 @@ use chrono::Utc;
 use crate::para_core::types::{GitStats, ChangedFile};
 
 pub fn discover_repository() -> Result<PathBuf> {
+    // 1) Allow explicit override via environment variable for packaged runs
+    if let Ok(repo_env) = std::env::var("PARA_REPO_PATH") {
+        if !repo_env.trim().is_empty() {
+            let output = Command::new("git")
+                .args(["-C", &repo_env, "rev-parse", "--show-toplevel"])
+                .output()?;
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                return Ok(PathBuf::from(path));
+            }
+        }
+    }
+
+    // 2) Fallback to current working directory
     let output = Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
         .output()?;

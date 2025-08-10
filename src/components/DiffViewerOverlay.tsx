@@ -4,8 +4,7 @@ import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
 import { useSelection } from '../contexts/SelectionContext'
 import { VscClose, VscChevronLeft, VscFile, VscDiffAdded, VscDiffModified, VscDiffRemoved } from 'react-icons/vsc'
 import clsx from 'clsx'
-import hljs from 'highlight.js/lib/common'
-import 'highlight.js/styles/github-dark-dimmed.css'
+import hljs from 'highlight.js'
 
 interface ChangedFile {
   path: string
