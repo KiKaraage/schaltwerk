@@ -124,8 +124,15 @@ impl SessionManager {
         // Remove worktree first (required before branch operations)
         if session.worktree_path.exists() {
             if let Err(e) = git::remove_worktree(&self.repo_path, &session.worktree_path) {
+                // If removal fails for reasons other than "not a worktree", surface the error
                 return Err(anyhow!("Failed to remove worktree: {}", e));
             }
+        } else {
+            // If directory is already gone, continue cancellation flow
+            log::warn!(
+                "Worktree path missing, continuing cancellation: {}",
+                session.worktree_path.display()
+            );
         }
         
         // Archive branch instead of deleting (following Para CLI pattern)

@@ -166,6 +166,10 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
     
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        // If the directory is not a registered worktree anymore, treat as already removed
+        if stderr.contains("is not a working tree") || stderr.contains("not a working tree") {
+            return Ok(());
+        }
         return Err(anyhow!("Failed to remove worktree: {}", stderr));
     }
     

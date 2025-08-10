@@ -18,6 +18,7 @@ export interface SessionActionEvent {
   hasUncommittedChanges?: boolean
 }
 
+
 export default function App() {
   const { setSelection } = useSelection()
   const [newSessionOpen, setNewSessionOpen] = useState(false)
