@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { clsx } from 'clsx'
 import { invoke } from '@tauri-apps/api/core'
 import { formatLastActivity } from '../utils/time'
-import { sortSessions } from '../utils/sessionSort'
+// We intentionally avoid activity-based sorting here.
+// Keyboard shortcuts must map to a stable order: alphabetical by session id.
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { useFocus } from '../contexts/FocusContext'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
@@ -74,7 +75,8 @@ export function Sidebar() {
     }
 
     const handleSelectSession = async (index: number) => {
-        const session = sessions[index]
+        const sorted = [...sessions].sort((a, b) => a.info.session_id.localeCompare(b.info.session_id))
+        const session = sorted[index]
         if (session) {
             const s = session.info
             const color = getSessionStateColor()
@@ -179,7 +181,7 @@ export function Sidebar() {
         const loadSessions = async () => {
             try {
                 const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                setSessions(sortSessions(result))
+                setSessions(result)
             } catch (err) {
                 console.error('Failed to load sessions:', err)
             } finally {
@@ -291,9 +293,8 @@ export function Sidebar() {
                         `session-${session_name}-right`,
                     ]
                     const enriched: EnrichedSession = { info, status: undefined, terminals }
-                    // Add new session and re-sort
-                    const updated = [enriched, ...prev]
-                    return sortSessions(updated)
+                    // Add new session; rendering sorts alphabetically
+                    return [enriched, ...prev]
                 })
             })
             unlisteners.push(u3)
@@ -367,7 +368,8 @@ export function Sidebar() {
                 ) : sessions.length === 0 ? (
                     <div className="text-center text-slate-500 py-4">No active sessions</div>
                 ) : (
-                    sortSessions(sessions)
+                    [...sessions]
+                        .sort((a, b) => a.info.session_id.localeCompare(b.info.session_id))
                         .map((session, i) => {
                         const s = session.info
                         const color = getSessionStateColor()
@@ -458,7 +460,7 @@ export function Sidebar() {
                                                     await invoke('para_core_unmark_session_ready', { name: s.session_id })
                                                     // Reload sessions
                                                     const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                                                    setSessions(sortSessions(result))
+                                                    setSessions(result)
                                                 } catch (err) {
                                                     console.error('Failed to unmark session:', err)
                                                 }
@@ -537,7 +539,7 @@ export function Sidebar() {
                 onSuccess={async () => {
                     // Reload sessions
                     const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                    setSessions(sortSessions(result))
+                    setSessions(result)
                 }}
             />
         </div>

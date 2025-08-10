@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
 import { useSelection } from '../contexts/SelectionContext'
 import { VscClose, VscChevronLeft, VscFile, VscDiffAdded, VscDiffModified, VscDiffRemoved } from 'react-icons/vsc'
 import clsx from 'clsx'
+import hljs from 'highlight.js/lib/common'
+import 'highlight.js/styles/github-dark-dimmed.css'
 
 interface ChangedFile {
   path: string
@@ -109,11 +111,85 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
     }
   }
   
+  const language = useMemo(() => {
+    if (!selectedFile) return undefined
+    const ext = selectedFile.split('.').pop()?.toLowerCase()
+    switch (ext) {
+      case 'ts':
+      case 'tsx':
+        return 'typescript'
+      case 'js':
+      case 'jsx':
+        return 'javascript'
+      case 'rs':
+        return 'rust'
+      case 'py':
+        return 'python'
+      case 'go':
+        return 'go'
+      case 'java':
+        return 'java'
+      case 'kt':
+        return 'kotlin'
+      case 'swift':
+        return 'swift'
+      case 'c':
+      case 'h':
+        return 'c'
+      case 'cpp':
+      case 'cc':
+      case 'cxx':
+      case 'hpp':
+      case 'hh':
+      case 'hxx':
+        return 'cpp'
+      case 'cs':
+        return 'csharp'
+      case 'rb':
+        return 'ruby'
+      case 'php':
+        return 'php'
+      case 'sh':
+      case 'bash':
+      case 'zsh':
+        return 'bash'
+      case 'json':
+        return 'json'
+      case 'yml':
+      case 'yaml':
+        return 'yaml'
+      case 'toml':
+        return 'toml'
+      case 'md':
+        return 'markdown'
+      case 'css':
+        return 'css'
+      case 'scss':
+        return 'scss'
+      case 'less':
+        return 'less'
+      default:
+        return undefined
+    }
+  }, [selectedFile])
+
   const renderSyntaxHighlight = (code: string) => {
+    let html: string
+    try {
+      if (language && hljs.getLanguage(language)) {
+        html = hljs.highlight(code, { language, ignoreIllegals: true }).value
+      } else {
+        const auto = hljs.highlightAuto(code)
+        html = auto.value
+      }
+    } catch {
+      html = code
+    }
     return (
-      <pre className="font-mono text-sm">
-        <code>{code}</code>
-      </pre>
+      <code
+        className="hljs block font-mono text-[12px] leading-[1.3] whitespace-pre"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     )
   }
   
@@ -230,40 +306,55 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
                     leftTitle={`${branchInfo?.baseBranch || 'base'} (${branchInfo?.baseCommit || 'base'})`}
                     rightTitle={`${branchInfo?.currentBranch || 'current'} (${branchInfo?.headCommit || 'HEAD'})`}
                     renderContent={renderSyntaxHighlight}
+                    showDiffOnly={false}
+                    hideLineNumbers={false}
                     useDarkTheme={true}
                     styles={{
                       variables: {
                         dark: {
-                          diffViewerBackground: '#0f172a',
+                          // Make unchanged code feel native to our panel
+                          diffViewerBackground: 'transparent',
                           diffViewerColor: '#cbd5e1',
-                          addedBackground: 'rgba(34, 197, 94, 0.15)',
-                          addedColor: '#cbd5e1',
-                          removedBackground: 'rgba(239, 68, 68, 0.15)',
-                          removedColor: '#cbd5e1',
-                          wordAddedBackground: 'rgba(34, 197, 94, 0.3)',
-                          wordRemovedBackground: 'rgba(239, 68, 68, 0.3)',
-                          addedGutterBackground: 'rgba(34, 197, 94, 0.2)',
-                          removedGutterBackground: 'rgba(239, 68, 68, 0.2)',
-                          gutterBackground: '#1e293b',
-                          gutterBackgroundDark: '#0f172a',
+                          gutterBackground: 'transparent',
+                          gutterBackgroundDark: 'transparent',
+                          codeFoldBackground: 'transparent',
+                          codeFoldGutterBackground: 'transparent',
+                          emptyLineBackground: 'transparent',
                           highlightBackground: '#334155',
                           highlightGutterBackground: '#475569',
-                          codeFoldGutterBackground: '#1e293b',
-                          codeFoldBackground: '#1e293b',
-                          emptyLineBackground: '#0f172a',
+                          // Keep changes clearly visible
+                          addedBackground: 'rgba(34, 197, 94, 0.12)',
+                          addedColor: '#cbd5e1',
+                          removedBackground: 'rgba(239, 68, 68, 0.12)',
+                          removedColor: '#cbd5e1',
+                          wordAddedBackground: 'rgba(34, 197, 94, 0.28)',
+                          wordRemovedBackground: 'rgba(239, 68, 68, 0.28)',
+                          addedGutterBackground: 'rgba(34, 197, 94, 0.18)',
+                          removedGutterBackground: 'rgba(239, 68, 68, 0.18)',
                           gutterColor: '#64748b',
                           addedGutterColor: '#cbd5e1',
                           removedGutterColor: '#cbd5e1',
                           codeFoldContentColor: '#64748b',
-                          diffViewerTitleBackground: '#1e293b',
+                          diffViewerTitleBackground: 'transparent',
                           diffViewerTitleColor: '#cbd5e1',
                           diffViewerTitleBorderColor: '#334155',
                         }
                       },
+                      // Unchanged content should not have a grey tile
+                      content: {
+                        background: 'transparent'
+                      },
+                      gutter: {
+                        background: 'transparent'
+                      },
+                      diffContainer: {
+                        background: 'transparent'
+                      },
                       line: {
                         fontFamily: 'SF Mono, Monaco, Consolas, monospace',
-                        fontSize: '13px',
-                        lineHeight: '1.4'
+                        fontSize: '12px',
+                        lineHeight: '1.3',
+                        whiteSpace: 'pre'
                       }
                     }}
                   />
