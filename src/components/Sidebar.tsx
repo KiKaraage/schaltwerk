@@ -297,9 +297,9 @@ export function Sidebar() {
                                     hasStuckTerminals && !isSelected && 'ring-2 ring-amber-400/50 shadow-lg shadow-amber-400/20 bg-amber-950/20')}
                                 title={i < 8 ? `Select session (⌘${i + 2})` : `Select session`}
                             >
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="font-medium text-slate-100">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-medium text-slate-100 truncate">
                                             {s.session_id}
                                             {isBlocked && <span className="ml-2 text-xs text-red-400">⚠ blocked</span>}
                                             {hasStuckTerminals && (
@@ -311,16 +311,16 @@ export function Sidebar() {
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="text-[11px] text-slate-400">{s.branch}</div>
+                                        <div className="text-[11px] text-slate-400 truncate">{s.branch}</div>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-shrink-0">
                                         {i < 8 && (
                                             <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 ⌘{i + 2}
                                             </span>
                                         )}
                                         <span
-                                            className={clsx('text-xs px-1.5 py-0.5 rounded', {
+                                            className={clsx('text-xs px-1.5 py-0.5 rounded flex-shrink-0', {
                                                 'bg-green-600/20 text-green-400': state === 'active',
                                                 'bg-amber-600/20 text-amber-400': state === 'idle',
                                                 'bg-violet-600/20 text-violet-400': state === 'review' || state === 'ready',
@@ -329,39 +329,39 @@ export function Sidebar() {
                                         >
                                             {state}
                                         </span>
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                                            <button 
-                                                onClick={async (e) => {
-                                                    e.stopPropagation()
-                                                    try {
-                                                        await invoke('open_in_vscode', { worktreePath: s.worktree_path })
-                                                    } catch (err) {
-                                                        console.error('Failed to open VSCode:', err)
-                                                    }
-                                                }}
-                                                className="text-[11px] px-2 py-0.5 rounded bg-blue-800/60 hover:bg-blue-700/60"
-                                                title="Open in VSCode"
-                                            >
-                                                VSCode
-                                            </button>
-                                            <button 
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    window.dispatchEvent(new CustomEvent('para-ui:session-action', {
-                                                        detail: {
-                                                            action: 'cancel',
-                                                            sessionId: s.session_id,
-                                                            sessionName: s.session_id,
-                                                            hasUncommittedChanges: s.has_uncommitted_changes || false
-                                                        }
-                                                    }))
-                                                }}
-                                                className="text-[11px] px-2 py-0.5 rounded bg-red-800/60 hover:bg-red-700/60"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
                                     </div>
+                                </div>
+                                <div className="mt-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                                    <button 
+                                        onClick={async (e) => {
+                                            e.stopPropagation()
+                                            try {
+                                                await invoke('open_in_vscode', { worktreePath: s.worktree_path })
+                                            } catch (err) {
+                                                console.error('Failed to open VSCode:', err)
+                                            }
+                                        }}
+                                        className="text-[11px] px-2 py-0.5 rounded bg-blue-800/60 hover:bg-blue-700/60"
+                                        title="Open in VSCode"
+                                    >
+                                        VSCode
+                                    </button>
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            window.dispatchEvent(new CustomEvent('para-ui:session-action', {
+                                                detail: {
+                                                    action: 'cancel',
+                                                    sessionId: s.session_id,
+                                                    sessionName: s.session_id,
+                                                    hasUncommittedChanges: s.has_uncommitted_changes || false
+                                                }
+                                            }))
+                                        }}
+                                        className="text-[11px] px-2 py-0.5 rounded bg-red-800/60 hover:bg-red-700/60"
+                                    >
+                                        Cancel
+                                    </button>
                                 </div>
                                 <div className="mt-2 text-[12px] text-slate-400 truncate">{task}</div>
                                 {progressPercent > 0 && (
