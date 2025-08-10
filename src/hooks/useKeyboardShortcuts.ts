@@ -3,10 +3,11 @@ import { useEffect } from 'react'
 interface KeyboardShortcutsProps {
     onSelectOrchestrator: () => void
     onSelectSession: (index: number) => void
+    onCancelSelectedSession?: () => void
     sessionCount: number
 }
 
-export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, sessionCount }: KeyboardShortcutsProps) {
+export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onCancelSelectedSession, sessionCount }: KeyboardShortcutsProps) {
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
@@ -25,6 +26,11 @@ export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, se
                 if (sessionIndex < sessionCount) {
                     onSelectSession(sessionIndex)
                 }
+            } else if (key === 'd' || key === 'D') {
+                if (onCancelSelectedSession) {
+                    event.preventDefault()
+                    onCancelSelectedSession()
+                }
             }
         }
         
@@ -33,5 +39,5 @@ export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, se
         return () => {
             window.removeEventListener('keydown', handleKeyDown)
         }
-    }, [sessionCount, onSelectOrchestrator, onSelectSession])
+    }, [sessionCount, onSelectOrchestrator, onSelectSession, onCancelSelectedSession])
 }

@@ -93,12 +93,9 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             if (e.key === 'Escape') {
                 e.preventDefault()
                 onClose()
-            } else if (e.key === 'Enter' && !e.shiftKey) {
-                const isTextArea = (e.target as HTMLElement)?.tagName === 'TEXTAREA'
-                if (!isTextArea) {
-                    e.preventDefault()
-                    handleCreate()
-                }
+            } else if (e.key === 'Enter' && e.metaKey) {
+                e.preventDefault()
+                handleCreate()
             }
         }
 
@@ -176,10 +173,10 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                         onClick={handleCreate} 
                         disabled={!name.trim()}
                         className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-white group relative"
-                        title="Create session (Enter)"
+                        title="Create session (Cmd+Enter)"
                     >
                         Create
-                        <span className="ml-1.5 text-xs opacity-60 group-hover:opacity-100">↵</span>
+                        <span className="ml-1.5 text-xs opacity-60 group-hover:opacity-100">⌘↵</span>
                     </button>
                 </div>
             </div>

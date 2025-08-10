@@ -89,9 +89,26 @@ export function Sidebar() {
         }
     }
 
+    const handleCancelSelectedSession = () => {
+        if (selection.kind === 'session') {
+            const selectedSession = sessions.find(s => s.info.session_id === selection.payload)
+            if (selectedSession) {
+                window.dispatchEvent(new CustomEvent('para-ui:session-action', {
+                    detail: {
+                        action: 'cancel',
+                        sessionId: selectedSession.info.session_id,
+                        sessionName: selectedSession.info.session_id,
+                        hasUncommittedChanges: selectedSession.info.has_uncommitted_changes || false
+                    }
+                }))
+            }
+        }
+    }
+
     useKeyboardShortcuts({
         onSelectOrchestrator: handleSelectOrchestrator,
         onSelectSession: handleSelectSession,
+        onCancelSelectedSession: handleCancelSelectedSession,
         sessionCount: sessions.length
     })
 
@@ -295,7 +312,11 @@ export function Sidebar() {
                                             color === 'gray' && 'session-ring-gray')
                                         : 'hover:bg-slate-800/30',
                                     hasStuckTerminals && !isSelected && 'ring-2 ring-amber-400/50 shadow-lg shadow-amber-400/20 bg-amber-950/20')}
-                                title={i < 8 ? `Select session (⌘${i + 2})` : `Select session`}
+                                title={isSelected 
+                                    ? `Selected session • Cancel with ⌘D` 
+                                    : i < 8 
+                                        ? `Select session (⌘${i + 2})` 
+                                        : `Select session`}
                             >
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="flex-1 min-w-0">
@@ -359,6 +380,7 @@ export function Sidebar() {
                                             }))
                                         }}
                                         className="text-[11px] px-2 py-0.5 rounded bg-red-800/60 hover:bg-red-700/60"
+                                        title="Cancel session (⌘D)"
                                     >
                                         Cancel
                                     </button>
