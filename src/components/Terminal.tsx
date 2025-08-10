@@ -162,22 +162,29 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             }
         };
 
-        // Use ResizeObserver without debouncing for immediate response
+        // Use ResizeObserver with slight debouncing for better performance
+        let resizeTimeout: NodeJS.Timeout | null = null;
         const resizeObserver = new ResizeObserver(() => {
-            handleResize();
+            if (resizeTimeout) clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                handleResize();
+            }, 16); // ~60fps
         });
         resizeObserver.observe(termRef.current);
         
-        // Single delayed resize to catch any layout shifts
-        const mountTimeout = setTimeout(() => {
-            handleResize();
-        }, 100);
+        // Multiple delayed resizes to catch layout shifts
+        const mountTimeout1 = setTimeout(() => handleResize(), 50);
+        const mountTimeout2 = setTimeout(() => handleResize(), 150);
+        const mountTimeout3 = setTimeout(() => handleResize(), 300);
 
         // Cleanup - dispose UI but keep terminal process running
         // Terminal processes will be cleaned up when the app exits
         return () => {
             console.log(`[Terminal ${terminalId}] Unmounting terminal component`);
-            clearTimeout(mountTimeout);
+            if (resizeTimeout) clearTimeout(resizeTimeout);
+            clearTimeout(mountTimeout1);
+            clearTimeout(mountTimeout2);
+            clearTimeout(mountTimeout3);
             unlisten.then(fn => fn());
             terminal.current?.dispose();
             resizeObserver.disconnect();

@@ -1,4 +1,3 @@
-import Split from 'react-split'
 import { Terminal, TerminalHandle } from './Terminal'
 import { useSelection } from '../contexts/SelectionContext'
 import { useClaudeSession } from '../hooks/useClaudeSession'
@@ -75,42 +74,40 @@ export function TerminalGrid() {
     }
 
     return (
-        <div className="h-full p-2">
-            <Split className="h-full flex flex-col gap-2" direction="vertical" sizes={[70, 30]} minSize={120} gutterSize={8}>
-                <div className={"bg-panel rounded border border-slate-800 overflow-hidden"}>
-                    <div 
-                        className="px-2 py-1 text-xs text-slate-400 border-b border-slate-800 cursor-pointer hover:bg-slate-800"
-                        onClick={handleClaudeSessionClick}
-                    >
-                        {selection.kind === 'orchestrator' ? 'Orchestrator — main repo' : `Claude session — ${selection.payload ?? ''}`}
-                    </div>
-                    <div className="session-header-ruler" />
-                    <div onClick={handleClaudeSessionClick}>
-                        <Terminal 
-                            ref={claudeTerminalRef}
-                            terminalId={terminals.top} 
-                            className="h-full min-h-[180px]" 
-                            sessionName={selection.kind === 'session' ? selection.payload ?? undefined : undefined}
-                            isOrchestrator={selection.kind === 'orchestrator'}
-                        />
-                    </div>
+        <div className="h-full flex flex-col p-2 gap-2">
+            <div className="flex-[2] bg-panel rounded border border-slate-800 overflow-hidden min-h-0 flex flex-col">
+                <div 
+                    className="px-2 py-1 text-xs text-slate-400 border-b border-slate-800 cursor-pointer hover:bg-slate-800 flex-shrink-0"
+                    onClick={handleClaudeSessionClick}
+                >
+                    {selection.kind === 'orchestrator' ? 'Orchestrator — main repo' : `Claude session — ${selection.payload ?? ''}`}
                 </div>
-                <div className={"bg-panel rounded border border-slate-800 overflow-hidden"}>
-                    <div 
-                        className="px-2 py-1 text-xs text-slate-400 border-b border-slate-800 cursor-pointer hover:bg-slate-800"
-                        onClick={handleTerminalClick}
-                    >
-                        Terminal — {selection.kind === 'orchestrator' ? 'main' : selection.payload}
-                    </div>
-                    <div onClick={handleTerminalClick}>
-                        <Terminal 
-                            ref={regularTerminalRef}
-                            terminalId={terminals.bottom} 
-                            className="h-full min-h-[140px]" 
-                        />
-                    </div>
+                <div className="session-header-ruler flex-shrink-0" />
+                <div className="flex-1 min-h-0" onClick={handleClaudeSessionClick}>
+                    <Terminal 
+                        ref={claudeTerminalRef}
+                        terminalId={terminals.top} 
+                        className="h-full w-full" 
+                        sessionName={selection.kind === 'session' ? selection.payload ?? undefined : undefined}
+                        isOrchestrator={selection.kind === 'orchestrator'}
+                    />
                 </div>
-            </Split>
+            </div>
+            <div className="flex-1 bg-panel rounded border border-slate-800 overflow-hidden min-h-0 flex flex-col">
+                <div 
+                    className="px-2 py-1 text-xs text-slate-400 border-b border-slate-800 cursor-pointer hover:bg-slate-800 flex-shrink-0"
+                    onClick={handleTerminalClick}
+                >
+                    Terminal — {selection.kind === 'orchestrator' ? 'main' : selection.payload}
+                </div>
+                <div className="flex-1 min-h-0" onClick={handleTerminalClick}>
+                    <Terminal 
+                        ref={regularTerminalRef}
+                        terminalId={terminals.bottom} 
+                        className="h-full w-full" 
+                    />
+                </div>
+            </div>
         </div>
     )
 }
