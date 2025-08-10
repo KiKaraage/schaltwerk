@@ -4,6 +4,7 @@ interface KeyboardShortcutsProps {
     onSelectOrchestrator: () => void
     onSelectSession: (index: number) => void
     onCancelSelectedSession?: (immediate: boolean) => void
+    onMarkSelectedSessionReady?: () => void
     sessionCount: number
     onSelectPrevSession?: () => void
     onSelectNextSession?: () => void
@@ -11,7 +12,7 @@ interface KeyboardShortcutsProps {
     onFocusClaude?: () => void
 }
 
-export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onCancelSelectedSession, sessionCount, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude }: KeyboardShortcutsProps) {
+export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onMarkSelectedSessionReady, sessionCount, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude }: KeyboardShortcutsProps) {
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
@@ -56,6 +57,11 @@ export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, on
                     const immediate = event.shiftKey === true
                     onCancelSelectedSession(immediate)
                 }
+            } else if (key === 'r' || key === 'R') {
+                if (onMarkSelectedSessionReady) {
+                    event.preventDefault()
+                    onMarkSelectedSessionReady()
+                }
             }
         }
         
@@ -64,5 +70,5 @@ export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, on
         return () => {
             window.removeEventListener('keydown', handleKeyDown)
         }
-    }, [sessionCount, onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude])
+    }, [sessionCount, onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onMarkSelectedSessionReady, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude])
 }

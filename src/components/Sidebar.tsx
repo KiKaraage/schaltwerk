@@ -143,10 +143,24 @@ export function Sidebar() {
         await handleSelectSession(index)
     }
 
+    const handleMarkSelectedSessionReady = () => {
+        if (selection.kind === 'session') {
+            const selectedSession = sessions.find(s => s.info.session_id === selection.payload)
+            if (selectedSession && !selectedSession.info.ready_to_merge) {
+                setMarkReadyModal({
+                    open: true,
+                    sessionName: selectedSession.info.session_id,
+                    hasUncommitted: selectedSession.info.has_uncommitted_changes || false
+                })
+            }
+        }
+    }
+
     useKeyboardShortcuts({
         onSelectOrchestrator: handleSelectOrchestrator,
         onSelectSession: handleSelectSession,
         onCancelSelectedSession: handleCancelSelectedSession,
+        onMarkSelectedSessionReady: handleMarkSelectedSessionReady,
         sessionCount: sessions.length,
         onSelectPrevSession: selectPrev,
         onSelectNextSession: selectNext,
@@ -176,8 +190,15 @@ export function Sidebar() {
         loadSessions()
     }, [])
     
+    // Global shortcut from terminal for Mark Ready (⌘R)
+    useEffect(() => {
+        const handler = () => handleMarkSelectedSessionReady()
+        window.addEventListener('global-mark-ready-shortcut', handler as any)
+        return () => window.removeEventListener('global-mark-ready-shortcut', handler as any)
+    }, [selection, sessions])
+
     // Selection is now restored by SelectionContext itself
-    
+
     // No longer need to listen for events - context handles everything
 
     // Subscribe to backend push updates and merge into sessions list incrementally
@@ -379,7 +400,7 @@ export function Sidebar() {
                                         'ring-2 ring-amber-400/50 shadow-lg shadow-amber-400/20 bg-amber-950/20'
                                 )}
                                 title={isSelected 
-                                    ? `Selected session • Cancel: ⌘D, Force: ⇧⌘D` 
+                                    ? `Selected session • Cancel: ⌘D (⇧⌘D force) • Mark Ready: ⌘R` 
                                     : i < 8 
                                         ? `Select session (⌘${i + 2})` 
                                         : `Select session`}
@@ -425,7 +446,7 @@ export function Sidebar() {
                                                 })
                                             }}
                                             className="text-[11px] px-2 py-0.5 rounded bg-green-800/60 hover:bg-green-700/60"
-                                            title="Mark as ready for merge"
+                                        title="Mark as ready for merge (⌘R)"
                                         >
                                             Mark Ready
                                         </button>

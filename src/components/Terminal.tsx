@@ -80,15 +80,20 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
         terminal.current.loadAddon(fitAddon.current);
         terminal.current.open(termRef.current);
 
-        // Intercept ⌘N before xterm.js processes it
+        // Intercept global shortcuts before xterm.js processes them
         terminal.current.attachCustomKeyEventHandler((event: KeyboardEvent) => {
             const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
             const modifierKey = isMac ? event.metaKey : event.ctrlKey
             
-            if (modifierKey && event.key === 'n') {
+            if (modifierKey && (event.key === 'n' || event.key === 'N')) {
                 // Dispatch a custom event to trigger the global new session handler
                 window.dispatchEvent(new CustomEvent('global-new-session-shortcut'))
                 return false // Prevent xterm.js from processing this event
+            }
+            if (modifierKey && (event.key === 'r' || event.key === 'R')) {
+                // Dispatch a custom event to trigger the global mark ready handler
+                window.dispatchEvent(new CustomEvent('global-mark-ready-shortcut'))
+                return false
             }
             
             return true // Allow xterm.js to process other events
