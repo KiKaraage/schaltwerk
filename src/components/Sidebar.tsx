@@ -287,6 +287,20 @@ export function Sidebar() {
                                         </span>
                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                                             <button 
+                                                onClick={async (e) => {
+                                                    e.stopPropagation()
+                                                    try {
+                                                        await invoke('open_in_vscode', { worktreePath: s.worktree_path })
+                                                    } catch (err) {
+                                                        console.error('Failed to open VSCode:', err)
+                                                    }
+                                                }}
+                                                className="text-[11px] px-2 py-0.5 rounded bg-blue-800/60 hover:bg-blue-700/60"
+                                                title="Open in VSCode"
+                                            >
+                                                VSCode
+                                            </button>
+                                            <button 
                                                 onClick={(e) => {
                                                     e.stopPropagation()
                                                     window.dispatchEvent(new CustomEvent('para-ui:session-action', {
