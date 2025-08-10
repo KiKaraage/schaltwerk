@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { Sidebar } from './Sidebar'
 import { SelectionProvider } from '../contexts/SelectionContext'
+import { FocusProvider } from '../contexts/FocusContext'
 
 // Mock dependencies
 vi.mock('@tauri-apps/api/core', () => ({
@@ -148,7 +149,11 @@ export const sessionReducers = {
 
 function createTestWrapper() {
   return ({ children }: { children: React.ReactNode }) => (
-    <SelectionProvider>{children}</SelectionProvider>
+    <SelectionProvider>
+      <FocusProvider>
+        {children}
+      </FocusProvider>
+    </SelectionProvider>
   )
 }
 

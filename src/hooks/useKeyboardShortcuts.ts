@@ -5,9 +5,13 @@ interface KeyboardShortcutsProps {
     onSelectSession: (index: number) => void
     onCancelSelectedSession?: (immediate: boolean) => void
     sessionCount: number
+    onSelectPrevSession?: () => void
+    onSelectNextSession?: () => void
+    onFocusSidebar?: () => void
+    onFocusClaude?: () => void
 }
 
-export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onCancelSelectedSession, sessionCount }: KeyboardShortcutsProps) {
+export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onCancelSelectedSession, sessionCount, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude }: KeyboardShortcutsProps) {
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
@@ -26,6 +30,26 @@ export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, on
                 if (sessionIndex < sessionCount) {
                     onSelectSession(sessionIndex)
                 }
+            } else if (key === 'ArrowUp') {
+                if (onSelectPrevSession) {
+                    event.preventDefault()
+                    onSelectPrevSession()
+                }
+            } else if (key === 'ArrowDown') {
+                if (onSelectNextSession) {
+                    event.preventDefault()
+                    onSelectNextSession()
+                }
+            } else if (key === 'ArrowLeft') {
+                if (onFocusSidebar) {
+                    event.preventDefault()
+                    onFocusSidebar()
+                }
+            } else if (key === 'ArrowRight') {
+                if (onFocusClaude) {
+                    event.preventDefault()
+                    onFocusClaude()
+                }
             } else if (key === 'd' || key === 'D') {
                 if (onCancelSelectedSession) {
                     event.preventDefault()
@@ -40,5 +64,5 @@ export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, on
         return () => {
             window.removeEventListener('keydown', handleKeyDown)
         }
-    }, [sessionCount, onSelectOrchestrator, onSelectSession, onCancelSelectedSession])
+    }, [sessionCount, onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude])
 }

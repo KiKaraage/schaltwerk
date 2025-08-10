@@ -8,7 +8,7 @@ import { useRef, useEffect } from 'react'
 export function TerminalGrid() {
     const { selection, terminals } = useSelection()
     const { startClaude } = useClaudeSession()
-    const { getFocusForSession, setFocusForSession } = useFocus()
+    const { getFocusForSession, setFocusForSession, currentFocus } = useFocus()
     
     const claudeTerminalRef = useRef<TerminalHandle>(null)
     const regularTerminalRef = useRef<TerminalHandle>(null)
@@ -44,6 +44,16 @@ export function TerminalGrid() {
             // TODO: Add diff focus handling when we implement it
         }, 150)
     }, [selection, getFocusForSession])
+
+    // If global focus changes to claude/terminal, apply it immediately
+    useEffect(() => {
+        if (!selection || !currentFocus) return
+        if (currentFocus === 'claude') {
+            claudeTerminalRef.current?.focus()
+        } else if (currentFocus === 'terminal') {
+            regularTerminalRef.current?.focus()
+        }
+    }, [currentFocus, selection])
 
     const handleClaudeSessionClick = async () => {
         console.log('[TerminalGrid] Claude session tab clicked', selection)

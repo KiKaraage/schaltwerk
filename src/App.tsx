@@ -9,7 +9,7 @@ import { NewSessionModal } from './components/NewSessionModal'
 import { CancelConfirmation } from './components/CancelConfirmation'
 import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from './contexts/SelectionContext'
-import { FocusProvider } from './contexts/FocusContext'
+// FocusProvider moved to root in main.tsx
 
 export interface SessionActionEvent {
   action: 'cancel' | 'cancel-immediate'
@@ -161,16 +161,14 @@ export default function App() {
       <div className="relative h-full">
         {/* Unified session ring around center + right (Claude, Terminal, Diff) */}
         <div id="work-ring" className="absolute inset-2 rounded-xl pointer-events-none" />
-        <FocusProvider>
-          <Split className="h-full w-full flex" sizes={[70, 30]} minSize={[400, 280]} gutterSize={8}>
-            <main className="bg-slate-950 h-full">
-              <TerminalGrid />
-            </main>
-            <section className="overflow-hidden">
-              <SimpleDiffPanel onFileSelect={handleFileSelect} />
-            </section>
-          </Split>
-        </FocusProvider>
+        <Split className="h-full w-full flex" sizes={[70, 30]} minSize={[400, 280]} gutterSize={8}>
+          <main className="bg-slate-950 h-full">
+            <TerminalGrid />
+          </main>
+          <section className="overflow-hidden">
+            <SimpleDiffPanel onFileSelect={handleFileSelect} />
+          </section>
+        </Split>
       </div>
       <NewSessionModal open={newSessionOpen} onClose={() => setNewSessionOpen(false)} onCreate={handleCreateSession} />
       

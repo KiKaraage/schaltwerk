@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
 
-type FocusArea = 'claude' | 'terminal' | 'diff'
+type FocusArea = 'claude' | 'terminal' | 'diff' | 'sidebar'
 
 interface FocusState {
   sessionFocus: Map<string, FocusArea>

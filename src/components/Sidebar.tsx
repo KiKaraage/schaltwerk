@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { formatLastActivity } from '../utils/time'
 import { sortSessions } from '../utils/sessionSort'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
+import { useFocus } from '../contexts/FocusContext'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { useSelection } from '../contexts/SelectionContext'
 import { MarkReadyConfirmation } from './MarkReadyConfirmation'
@@ -58,6 +59,7 @@ interface TerminalUnstuckNotification {
 
 export function Sidebar() {
     const { selection, setSelection } = useSelection()
+    const { setFocusForSession, setCurrentFocus } = useFocus()
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
     const [loading, setLoading] = useState(true)
     const [stuckTerminals, setStuckTerminals] = useState<Set<string>>(new Set())
@@ -121,11 +123,41 @@ export function Sidebar() {
         }
     }
 
+    const selectPrev = async () => {
+        if (sessions.length === 0) return
+        let index = 0
+        if (selection.kind === 'session') {
+            const currentIndex = sessions.findIndex(s => s.info.session_id === selection.payload)
+            index = currentIndex > 0 ? currentIndex - 1 : 0
+        }
+        await handleSelectSession(index)
+    }
+
+    const selectNext = async () => {
+        if (sessions.length === 0) return
+        let index = 0
+        if (selection.kind === 'session') {
+            const currentIndex = sessions.findIndex(s => s.info.session_id === selection.payload)
+            index = Math.min(currentIndex + 1, sessions.length - 1)
+        }
+        await handleSelectSession(index)
+    }
+
     useKeyboardShortcuts({
         onSelectOrchestrator: handleSelectOrchestrator,
         onSelectSession: handleSelectSession,
         onCancelSelectedSession: handleCancelSelectedSession,
-        sessionCount: sessions.length
+        sessionCount: sessions.length,
+        onSelectPrevSession: selectPrev,
+        onSelectNextSession: selectNext,
+        onFocusSidebar: () => {
+            setCurrentFocus('sidebar')
+        },
+        onFocusClaude: () => {
+            const sessionKey = selection.kind === 'orchestrator' ? 'orchestrator' : (selection.payload || 'unknown')
+            setFocusForSession(sessionKey, 'claude')
+            // Focus will be applied by TerminalGrid effect
+        }
     })
 
     // Initial load only; push updates keep it fresh thereafter
