@@ -243,7 +243,7 @@ describe('Sidebar', () => {
 
       await waitFor(() => {
         expect(screen.getByText('simple-session')).toBeInTheDocument()
-        expect(screen.getByText('feature/simple')).toBeInTheDocument()
+        // New Sidebar UI no longer shows branch here
         expect(screen.getByText('Simple task')).toBeInTheDocument()
       })
     })
@@ -420,10 +420,10 @@ describe('Sidebar', () => {
       render(<Sidebar />, { wrapper: createTestWrapper() })
 
       await waitFor(() => {
-        expect(screen.getByText('main (orchestrator)')).toBeInTheDocument()
+        expect(screen.getByText('Orchestrator')).toBeInTheDocument()
       })
 
-      const orchestratorButton = screen.getByRole('button', { name: /main \(orchestrator\)/ })
+      const orchestratorButton = screen.getByRole('button', { name: /Orchestrator/ })
       expect(orchestratorButton).toBeInTheDocument()
     })
 
