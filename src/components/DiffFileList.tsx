@@ -19,7 +19,8 @@ export function DiffFileList({ onFileSelect }: DiffFileListProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [branchInfo, setBranchInfo] = useState<{ 
     currentBranch: string, 
-    mainCommit: string, 
+    baseBranch: string,
+    baseCommit: string, 
     headCommit: string 
   } | null>(null)
   
@@ -31,11 +32,13 @@ export function DiffFileList({ onFileSelect }: DiffFileListProps) {
       setFiles(changedFiles)
       
       const currentBranch = await invoke<string>('get_current_branch_name', { sessionName })
-      const [mainCommit, headCommit] = await invoke<[string, string]>('get_commit_comparison_info', { sessionName })
+      const baseBranch = await invoke<string>('get_base_branch_name', { sessionName })
+      const [baseCommit, headCommit] = await invoke<[string, string]>('get_commit_comparison_info', { sessionName })
       
       setBranchInfo({
         currentBranch,
-        mainCommit,
+        baseBranch,
+        baseCommit,
         headCommit
       })
     } catch (error) {
@@ -68,10 +71,10 @@ export function DiffFileList({ onFileSelect }: DiffFileListProps) {
       <div className="px-3 py-2 border-b border-slate-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Changes from main</span>
+            <span className="text-sm font-medium">Changes from {branchInfo?.baseBranch || 'base'}</span>
             {branchInfo && (
               <span className="text-xs text-slate-500">
-                ({branchInfo.currentBranch} → main)
+                ({branchInfo.currentBranch} → {branchInfo.baseBranch})
               </span>
             )}
           </div>
@@ -122,11 +125,11 @@ export function DiffFileList({ onFileSelect }: DiffFileListProps) {
         <div className="flex-1 flex items-center justify-center text-slate-500">
           <div className="text-center">
             <VscFile className="mx-auto mb-2 text-4xl opacity-50" />
-            <div className="mb-1">No changes from main</div>
+            <div className="mb-1">No changes from {branchInfo?.baseBranch || 'base'}</div>
             <div className="text-xs">
-              {branchInfo?.currentBranch === 'main' 
-                ? 'You are on the main branch' 
-                : 'Your branch is up to date with main'
+              {branchInfo?.currentBranch === branchInfo?.baseBranch 
+                ? `You are on the ${branchInfo?.baseBranch} branch` 
+                : `Your branch is up to date with ${branchInfo?.baseBranch || 'base'}`
               }
             </div>
           </div>

@@ -25,7 +25,8 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
   const [loading, setLoading] = useState(false)
   const [branchInfo, setBranchInfo] = useState<{ 
     currentBranch: string, 
-    mainCommit: string, 
+    baseBranch: string,
+    baseCommit: string, 
     headCommit: string 
   } | null>(null)
   
@@ -41,11 +42,13 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
       setFiles(changedFiles)
       
       const currentBranch = await invoke<string>('get_current_branch_name', { sessionName })
-      const [mainCommit, headCommit] = await invoke<[string, string]>('get_commit_comparison_info', { sessionName })
+      const baseBranch = await invoke<string>('get_base_branch_name', { sessionName })
+      const [baseCommit, headCommit] = await invoke<[string, string]>('get_commit_comparison_info', { sessionName })
       
       setBranchInfo({
         currentBranch,
-        mainCommit,
+        baseBranch,
+        baseCommit,
         headCommit
       })
     } catch (error) {
@@ -197,7 +200,7 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
                   <div className="text-sm font-mono">{selectedFile}</div>
                   {branchInfo && (
                     <div className="text-xs text-slate-500 mt-0.5">
-                      Comparing {branchInfo.currentBranch} → main ({branchInfo.mainCommit}..{branchInfo.headCommit})
+                      Comparing {branchInfo.currentBranch} → {branchInfo.baseBranch} ({branchInfo.baseCommit}..{branchInfo.headCommit})
                     </div>
                   )}
                 </div>
@@ -224,7 +227,7 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
                     newValue={worktreeContent}
                     splitView={window.innerWidth > 1400}
                     compareMethod={DiffMethod.LINES}
-                    leftTitle={`main (${branchInfo?.mainCommit || 'base'})`}
+                    leftTitle={`${branchInfo?.baseBranch || 'base'} (${branchInfo?.baseCommit || 'base'})`}
                     rightTitle={`${branchInfo?.currentBranch || 'current'} (${branchInfo?.headCommit || 'HEAD'})`}
                     renderContent={renderSyntaxHighlight}
                     useDarkTheme={true}

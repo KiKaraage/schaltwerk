@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::collections::HashSet;
 use anyhow::{Result, anyhow};
 use chrono::Utc;
 use crate::para_core::types::GitStats;
@@ -158,37 +159,85 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
 }
 
 pub fn calculate_git_stats(worktree_path: &Path, parent_branch: &str) -> Result<GitStats> {
-    let diff_output = Command::new("git")
+    let mut changed_files: HashSet<String> = HashSet::new();
+    let mut total_lines_added = 0u32;
+    let mut total_lines_removed = 0u32;
+    
+    // 1. Get committed changes (parent_branch...HEAD)
+    let committed_output = Command::new("git")
         .args([
             "-C", worktree_path.to_str().unwrap(),
             "diff", "--numstat", &format!("{parent_branch}...HEAD")
         ])
         .output()?;
     
-    if !diff_output.status.success() {
-        return Err(anyhow!("Failed to get diff statistics"));
-    }
-    
-    let mut files_changed = 0u32;
-    let mut lines_added = 0u32;
-    let mut lines_removed = 0u32;
-    
-    for line in String::from_utf8_lossy(&diff_output.stdout).lines() {
-        if line.is_empty() { continue; }
-        
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 3 {
-            files_changed += 1;
-            
-            if parts[0] != "-" {
-                lines_added += parts[0].parse::<u32>().unwrap_or(0);
-            }
-            if parts[1] != "-" {
-                lines_removed += parts[1].parse::<u32>().unwrap_or(0);
+    if committed_output.status.success() {
+        for line in String::from_utf8_lossy(&committed_output.stdout).lines() {
+            if let Some((added, removed, file)) = parse_numstat_line(line) {
+                changed_files.insert(file.to_string());
+                total_lines_added += added;
+                total_lines_removed += removed;
             }
         }
     }
     
+    // 2. Get staged changes (changes in index)
+    let staged_output = Command::new("git")
+        .args([
+            "-C", worktree_path.to_str().unwrap(),
+            "diff", "--numstat", "--cached"
+        ])
+        .output()?;
+    
+    if staged_output.status.success() {
+        for line in String::from_utf8_lossy(&staged_output.stdout).lines() {
+            if let Some((added, removed, file)) = parse_numstat_line(line) {
+                changed_files.insert(file.to_string());
+                total_lines_added += added;
+                total_lines_removed += removed;
+            }
+        }
+    }
+    
+    // 3. Get unstaged changes (working directory changes)
+    let unstaged_output = Command::new("git")
+        .args([
+            "-C", worktree_path.to_str().unwrap(),
+            "diff", "--numstat"
+        ])
+        .output()?;
+    
+    if unstaged_output.status.success() {
+        for line in String::from_utf8_lossy(&unstaged_output.stdout).lines() {
+            if let Some((added, removed, file)) = parse_numstat_line(line) {
+                changed_files.insert(file.to_string());
+                total_lines_added += added;
+                total_lines_removed += removed;
+            }
+        }
+    }
+    
+    // 4. Get untracked files
+    let untracked_output = Command::new("git")
+        .args([
+            "-C", worktree_path.to_str().unwrap(),
+            "ls-files", "--others", "--exclude-standard"
+        ])
+        .output()?;
+    
+    if untracked_output.status.success() {
+        for line in String::from_utf8_lossy(&untracked_output.stdout).lines() {
+            if !line.is_empty() {
+                changed_files.insert(line.to_string());
+                // For untracked files, count lines as added (estimate)
+                if let Ok(content) = std::fs::read_to_string(worktree_path.join(line)) {
+                    total_lines_added += content.lines().count() as u32;
+                }
+            }
+        }
+    }
+    
+    // Check if there are any uncommitted changes
     let status_output = Command::new("git")
         .args([
             "-C", worktree_path.to_str().unwrap(),
@@ -200,12 +249,29 @@ pub fn calculate_git_stats(worktree_path: &Path, parent_branch: &str) -> Result<
     
     Ok(GitStats {
         session_id: String::new(),
-        files_changed,
-        lines_added,
-        lines_removed,
+        files_changed: changed_files.len() as u32,
+        lines_added: total_lines_added,
+        lines_removed: total_lines_removed,
         has_uncommitted,
         calculated_at: Utc::now(),
     })
+}
+
+fn parse_numstat_line(line: &str) -> Option<(u32, u32, &str)> {
+    if line.is_empty() {
+        return None;
+    }
+    
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    
+    let added = if parts[0] == "-" { 0 } else { parts[0].parse().unwrap_or(0) };
+    let removed = if parts[1] == "-" { 0 } else { parts[1].parse().unwrap_or(0) };
+    let file = parts[2];
+    
+    Some((added, removed, file))
 }
 
 pub fn has_uncommitted_changes(worktree_path: &Path) -> Result<bool> {
