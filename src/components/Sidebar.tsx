@@ -51,10 +51,17 @@ function getSessionStateColor(state?: string): 'green' | 'violet' | 'amber' | 'g
     }
 }
 
+interface TerminalStuckNotification {
+    terminal_id: string
+    session_id?: string
+    elapsed_seconds: number
+}
+
 export function Sidebar() {
     const { selection, setSelection } = useSelection()
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
     const [loading, setLoading] = useState(true)
+    const [stuckTerminals, setStuckTerminals] = useState<Set<string>>(new Set())
 
     const handleSelectOrchestrator = async () => {
         await setSelection({ kind: 'orchestrator', color: 'blue' })
@@ -65,6 +72,14 @@ export function Sidebar() {
         if (session) {
             const s = session.info
             const color = getSessionStateColor(s.session_state)
+            
+            // Clear stuck terminal indicator when user selects the session
+            setStuckTerminals(prev => {
+                const updated = new Set(prev)
+                updated.delete(s.session_id)
+                return updated
+            })
+            
             await setSelection({
                 kind: 'session',
                 payload: s.session_id,
@@ -206,6 +221,15 @@ export function Sidebar() {
                 }
             })
             unlisteners.push(u4)
+            
+            // Listen for stuck terminal notifications
+            const u5 = await listen<TerminalStuckNotification>('para-ui:terminal-stuck', (event) => {
+                const { session_id } = event.payload
+                if (session_id) {
+                    setStuckTerminals(prev => new Set([...prev, session_id]))
+                }
+            })
+            unlisteners.push(u5)
         }
         attach()
         
@@ -252,25 +276,35 @@ export function Sidebar() {
                         const lastActivity = formatLastActivity(s.last_modified)
                         const isBlocked = s.is_blocked || false
                         const isSelected = selection.kind === 'session' && selection.payload === s.session_id
+                        const hasStuckTerminals = stuckTerminals.has(s.session_id)
 
                         return (
                             <button
                                 key={`c-${s.session_id}`}
                                 onClick={() => handleSelectSession(i)}
-                                className={clsx('group w-full text-left p-3 rounded-md mb-2 border border-slate-800 bg-slate-900/40',
+                                className={clsx('group w-full text-left p-3 rounded-md mb-2 border border-slate-800 bg-slate-900/40 transition-all duration-300',
                                     isSelected
                                         ? clsx('session-ring', 
                                             color === 'green' && 'session-ring-green',
                                             color === 'violet' && 'session-ring-violet',
                                             color === 'amber' && 'session-ring-amber',
                                             color === 'gray' && 'session-ring-gray')
-                                        : 'hover:bg-slate-800/30')}
+                                        : 'hover:bg-slate-800/30',
+                                    hasStuckTerminals && !isSelected && 'ring-2 ring-amber-400/50 shadow-lg shadow-amber-400/20 bg-amber-950/20')}
                             >
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <div className="font-medium text-slate-100">
                                             {s.session_id}
                                             {isBlocked && <span className="ml-2 text-xs text-red-400">⚠ blocked</span>}
+                                            {hasStuckTerminals && (
+                                                <span className="ml-2 text-xs text-amber-400" title="Agent is idling and may need input">
+                                                    <div className="inline-flex items-center gap-1">
+                                                        <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
+                                                        idle
+                                                    </div>
+                                                </span>
+                                            )}
                                         </div>
                                         <div className="text-[11px] text-slate-400">{s.branch}</div>
                                     </div>

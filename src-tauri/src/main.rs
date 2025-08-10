@@ -108,6 +108,65 @@ async fn get_para_core() -> Arc<Mutex<para_core::ParaCore>> {
     }).await.clone()
 }
 
+async fn start_terminal_monitoring(app: tauri::AppHandle) {
+    use tauri::Emitter;
+    use tokio::time::{interval, Duration};
+    use serde::Serialize;
+    use std::collections::HashSet;
+    
+    #[derive(Serialize, Clone)]
+    struct TerminalStuckNotification {
+        terminal_id: String,
+        session_id: Option<String>,
+        elapsed_seconds: u64,
+    }
+    
+    tokio::spawn(async move {
+        let mut interval = interval(Duration::from_secs(30));
+        let mut notified_terminals = HashSet::new();
+        
+        loop {
+            interval.tick().await;
+            
+            let manager = get_terminal_manager().await;
+            let stuck_terminals = manager.get_all_terminal_activity().await;
+            let mut currently_stuck = HashSet::new();
+            
+            for (terminal_id, is_stuck, elapsed) in stuck_terminals {
+                if is_stuck {
+                    currently_stuck.insert(terminal_id.clone());
+                    
+                    // Only notify once per terminal until it becomes unstuck
+                    if !notified_terminals.contains(&terminal_id) {
+                        let session_id = if terminal_id.starts_with("session-") {
+                            terminal_id.split('-').nth(1).map(|s| s.to_string())
+                        } else {
+                            None
+                        };
+                        
+                        let notification = TerminalStuckNotification {
+                            terminal_id: terminal_id.clone(),
+                            session_id,
+                            elapsed_seconds: elapsed,
+                        };
+                        
+                        log::info!("Terminal {terminal_id} pondering for {elapsed} seconds");
+                        
+                        if let Err(e) = app.emit("para-ui:terminal-stuck", &notification) {
+                            log::error!("Failed to emit terminal stuck notification: {e}");
+                        }
+                        
+                        notified_terminals.insert(terminal_id);
+                    }
+                }
+            }
+            
+            // Remove terminals that are no longer stuck from the notified set
+            notified_terminals.retain(|terminal_id| currently_stuck.contains(terminal_id));
+        }
+    });
+}
+
 #[tauri::command]
 async fn para_core_list_enriched_sessions() -> Result<Vec<para_core::EnrichedSession>, String> {
     log::debug!("Listing enriched sessions from para_core");
@@ -164,6 +223,18 @@ async fn terminal_exists(id: String) -> Result<bool, String> {
 async fn get_terminal_buffer(id: String) -> Result<String, String> {
     let manager = get_terminal_manager().await;
     manager.get_terminal_buffer(id).await
+}
+
+#[tauri::command]
+async fn get_terminal_activity_status(id: String) -> Result<(bool, u64), String> {
+    let manager = get_terminal_manager().await;
+    manager.get_terminal_activity_status(id).await
+}
+
+#[tauri::command]
+async fn get_all_terminal_activity() -> Result<Vec<(String, bool, u64)>, String> {
+    let manager = get_terminal_manager().await;
+    Ok(manager.get_all_terminal_activity().await)
 }
 
 #[tauri::command]
@@ -420,6 +491,8 @@ fn main() {
             close_terminal,
             terminal_exists,
             get_terminal_buffer,
+            get_terminal_activity_status,
+            get_all_terminal_activity,
             get_current_directory,
             para_core_create_session,
             para_core_list_sessions,
@@ -441,6 +514,12 @@ fn main() {
         .setup(|app| {
             // Start activity tracking for para_core sessions
             let app_handle = app.handle().clone();
+            
+            // Start terminal monitoring for stuck detection
+            let monitor_handle = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                start_terminal_monitoring(monitor_handle).await;
+            });
             tauri::async_runtime::spawn(async move {
                 let core = get_para_core().await;
                 let db = {

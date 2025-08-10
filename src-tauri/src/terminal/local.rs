@@ -4,7 +4,7 @@ use portable_pty::{Child, CommandBuilder, MasterPty, NativePtySystem, PtySize, P
 use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{Mutex, RwLock};
 
@@ -20,6 +20,7 @@ lazy_static::lazy_static! {
 struct TerminalState {
     buffer: Vec<u8>,
     seq: u64,
+    last_output: SystemTime,
 }
 
 pub struct LocalPtyAdapter {
@@ -108,8 +109,9 @@ impl LocalPtyAdapter {
                                     state.buffer.drain(0..excess);
                                 }
                                 
-                                // Increment sequence
+                                // Increment sequence and update last output time
                                 state.seq += 1;
+                                state.last_output = SystemTime::now();
                                 
                                 // Emit Tauri event
                                 if let Some(handle) = app_handle_clone.lock().await.as_ref() {
@@ -207,6 +209,7 @@ impl TerminalBackend for LocalPtyAdapter {
         let state = TerminalState {
             buffer: Vec::new(),
             seq: 0,
+            last_output: SystemTime::now(),
         };
         
         self.terminals.write().await.insert(id.clone(), state);
@@ -310,6 +313,37 @@ impl TerminalBackend for LocalPtyAdapter {
         } else {
             Ok((0, Vec::new()))
         }
+    }
+}
+
+impl LocalPtyAdapter {
+    pub async fn get_activity_status(&self, id: &str) -> Result<(bool, u64), String> {
+        let terminals = self.terminals.read().await;
+        if let Some(state) = terminals.get(id) {
+            let elapsed = SystemTime::now()
+                .duration_since(state.last_output)
+                .map_err(|e| format!("Time error: {e}"))?
+                .as_secs();
+            let is_stuck = elapsed > 30;
+            Ok((is_stuck, elapsed))
+        } else {
+            Err(format!("Terminal {id} not found"))
+        }
+    }
+    
+    pub async fn get_all_terminal_activity(&self) -> Vec<(String, bool, u64)> {
+        let terminals = self.terminals.read().await;
+        let mut results = Vec::new();
+        
+        for (id, state) in terminals.iter() {
+            if let Ok(duration) = SystemTime::now().duration_since(state.last_output) {
+                let elapsed = duration.as_secs();
+                let is_stuck = elapsed > 30;
+                results.push((id.clone(), is_stuck, elapsed));
+            }
+        }
+        
+        results
     }
 }
 
