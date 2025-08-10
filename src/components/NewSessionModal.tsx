@@ -36,7 +36,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
         if (sessionName.length > 100) {
             return 'Session name must be 100 characters or less'
         }
-        if (!/^[a-zA-Z0-9_-]+$/.test(sessionName)) {
+        if (!/^[a-zA-Z0-9_\- ]+$/.test(sessionName)) {
             return 'Session name can only contain letters, numbers, hyphens, and underscores'
         }
         return null
@@ -54,13 +54,16 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
 
     const handleCreate = useCallback(() => {
         // Generate new name if current name is empty or if we're creating with a prompt
-        const finalName = name.trim() || generateDockerStyleName()
+        let finalName = name.trim() || generateDockerStyleName()
         
         const error = validateSessionName(finalName)
         if (error) {
             setValidationError(error)
             return
         }
+        
+        // Replace spaces with underscores for the actual session name
+        finalName = finalName.replace(/ /g, '_')
         
         onCreate({ 
             name: finalName, 
@@ -124,7 +127,6 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                         {validationError && (
                             <p className="text-xs text-red-400 mt-1">{validationError}</p>
                         )}
-                        <p className="text-xs text-slate-400 mt-1">Only letters, numbers, hyphens, and underscores allowed</p>
                     </div>
 
                     <div>
