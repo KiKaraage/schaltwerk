@@ -134,3 +134,74 @@ async fn get_base_branch(session_name: Option<String>) -> Result<String, String>
         Ok("main".to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use std::process::Command;
+    use std::env;
+    use serial_test::serial;
+
+    #[tokio::test]
+    #[serial]
+    async fn test_get_repo_path_without_session_uses_current_dir() {
+        let tmp = TempDir::new().unwrap();
+        let prev = env::current_dir().unwrap();
+        env::set_current_dir(tmp.path()).unwrap();
+
+        let path = get_repo_path(None).await.unwrap();
+        // On macOS, current_dir may canonicalize to /private/...; compare canonical forms
+        let exp = std::fs::canonicalize(tmp.path()).unwrap();
+        let got = std::fs::canonicalize(&path).unwrap();
+        assert_eq!(got, exp);
+
+        env::set_current_dir(prev).unwrap();
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_get_repo_path_in_src_tauri_returns_parent() {
+        let tmp = TempDir::new().unwrap();
+        let src_tauri = tmp.path().join("src-tauri");
+        std::fs::create_dir_all(&src_tauri).unwrap();
+
+        let prev = env::current_dir().unwrap();
+        env::set_current_dir(&src_tauri).unwrap();
+
+        let path = get_repo_path(None).await.unwrap();
+        let exp = std::fs::canonicalize(tmp.path()).unwrap();
+        let got = std::fs::canonicalize(&path).unwrap();
+        assert_eq!(got, exp);
+
+        env::set_current_dir(prev).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_base_branch_without_session_defaults_to_main() {
+        let result = get_base_branch(None).await.unwrap();
+        assert_eq!(result, "main");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_get_current_branch_name_reads_git_branch() {
+        let tmp = TempDir::new().unwrap();
+        let repo = tmp.path();
+        // initialize a git repo with a branch
+        Command::new("git").args(["init"]).current_dir(repo).output().unwrap();
+        Command::new("git").args(["config","user.email","test@example.com"]).current_dir(repo).output().unwrap();
+        Command::new("git").args(["config","user.name","Test User"]).current_dir(repo).output().unwrap();
+        std::fs::write(repo.join("README.md"), "hi").unwrap();
+        Command::new("git").args(["add","."]).current_dir(repo).output().unwrap();
+        Command::new("git").args(["commit","-m","init"]).current_dir(repo).output().unwrap();
+        // create and checkout branch
+        Command::new("git").args(["checkout","-b","feature/test"]).current_dir(repo).output().unwrap();
+
+        let prev = env::current_dir().unwrap();
+        env::set_current_dir(repo).unwrap();
+        let branch = get_current_branch_name(None).await.unwrap();
+        env::set_current_dir(prev).unwrap();
+        assert_eq!(branch, "feature/test");
+    }
+}

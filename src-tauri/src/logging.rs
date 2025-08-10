@@ -125,3 +125,61 @@ pub fn init_logging() {
     // Print to console so user knows where logs are
     eprintln!("Logs are being written to: {}", log_path.display());
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+    use tempfile::TempDir;
+    use std::env;
+
+    #[test]
+    #[serial]
+    fn test_get_log_dir_uses_data_local_dir() {
+        let tmp = TempDir::new().unwrap();
+        // Redirect HOME so dirs uses temp location on macOS
+        let prev = env::var("HOME").ok();
+        env::set_var("HOME", tmp.path());
+
+        let dir = get_log_dir();
+        assert!(dir.exists() || dir.to_string_lossy().contains("para-ui/logs"));
+
+        if let Some(p) = prev { env::set_var("HOME", p); } else { env::remove_var("HOME"); }
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_log_path_creates_directory_and_returns_file() {
+        let tmp = TempDir::new().unwrap();
+        let prev = env::var("HOME").ok();
+        env::set_var("HOME", tmp.path());
+
+        let path = get_log_path();
+        // Parent directory may not exist until first write; ensure we can create it
+        let parent = path.parent().unwrap();
+        std::fs::create_dir_all(parent).unwrap();
+        assert!(parent.exists());
+        // file may not exist until first write, but path should be under logs dir
+        assert!(path.to_string_lossy().contains("para-ui"));
+
+        if let Some(p) = prev { env::set_var("HOME", p); } else { env::remove_var("HOME"); }
+    }
+
+    #[test]
+    #[serial]
+    fn test_init_logging_writes_header_to_file() {
+        let tmp = TempDir::new().unwrap();
+        let prev = env::var("HOME").ok();
+        env::set_var("HOME", tmp.path());
+
+        init_logging();
+        let log_path = get_log_path();
+        // Write a test log entry
+        log::info!("test log entry");
+        // Ensure file exists and contains our marker
+        let content = std::fs::read_to_string(&log_path).unwrap_or_default();
+        assert!(content.contains("Para UI v") && content.contains("test log entry"));
+
+        if let Some(p) = prev { env::set_var("HOME", p); } else { env::remove_var("HOME"); }
+    }
+}

@@ -618,3 +618,80 @@ fn main() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use tempfile::TempDir;
+    use serial_test::serial;
+
+    #[test]
+    fn test_parse_agent_command_claude_with_prompt() {
+        let cmd = r#"cd /tmp/work && claude --dangerously-skip-permissions "do the thing""#;
+        let (cwd, agent, args) = parse_agent_command(cmd).unwrap();
+        assert_eq!(cwd, "/tmp/work");
+        assert_eq!(agent, "claude");
+        assert_eq!(args, vec!["--dangerously-skip-permissions", "do the thing"]);
+    }
+
+    #[test]
+    fn test_parse_agent_command_claude_resume() {
+        let cmd = r#"cd /repo && claude -r "1234""#;
+        let (cwd, agent, args) = parse_agent_command(cmd).unwrap();
+        assert_eq!(cwd, "/repo");
+        assert_eq!(agent, "claude");
+        assert_eq!(args, vec!["-r", "1234"]);
+    }
+
+    #[test]
+    fn test_parse_agent_command_cursor_with_force_and_prompt() {
+        let cmd = r#"cd /a/b && cursor-agent -f "implement \"feature\"""#;
+        let (cwd, agent, args) = parse_agent_command(cmd).unwrap();
+        assert_eq!(cwd, "/a/b");
+        assert_eq!(agent, "cursor-agent");
+        assert_eq!(args, vec!["-f", "implement \"feature\""]);
+    }
+
+    #[test]
+    fn test_parse_agent_command_invalid_format() {
+        let cmd = "echo hi";
+        let res = parse_agent_command(cmd);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_current_directory_from_src_tauri_returns_parent() {
+        let tmp = TempDir::new().unwrap();
+        let project_root = tmp.path();
+        let src_tauri = project_root.join("src-tauri");
+        std::fs::create_dir_all(&src_tauri).unwrap();
+
+        let prev = env::current_dir().unwrap();
+        env::set_current_dir(&src_tauri).unwrap();
+
+        let dir = get_current_directory().unwrap();
+        // canonicalize to handle /private prefix on macOS temp dirs
+        let exp = std::fs::canonicalize(project_root).unwrap();
+        let got = std::fs::canonicalize(dir).unwrap();
+        assert_eq!(got, exp);
+
+        env::set_current_dir(prev).unwrap();
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_current_directory_from_non_src_tauri_returns_current() {
+        let tmp = TempDir::new().unwrap();
+        let prev = env::current_dir().unwrap();
+        env::set_current_dir(tmp.path()).unwrap();
+
+        let dir = get_current_directory().unwrap();
+        let exp = std::fs::canonicalize(tmp.path()).unwrap();
+        let got = std::fs::canonicalize(dir).unwrap();
+        assert_eq!(got, exp);
+
+        env::set_current_dir(prev).unwrap();
+    }
+}
