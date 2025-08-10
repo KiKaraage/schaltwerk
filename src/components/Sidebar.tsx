@@ -23,30 +23,23 @@ interface EnrichedSession {
     }
 }
 
-function getSessionStateColor(): 'green' | 'violet' | 'amber' | 'gray' {
-    return 'green'
-}
-
 export function Sidebar() {
     const { selection, setSelection } = useSelection()
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
     const [loading, setLoading] = useState(true)
 
     const handleSelectOrchestrator = async () => {
-        await setSelection({ kind: 'orchestrator', color: 'blue' })
+        await setSelection({ kind: 'orchestrator' })
     }
 
     const handleSelectSession = async (session: EnrichedSession) => {
-        const color = getSessionStateColor()
         await setSelection({
             kind: 'session',
             payload: session.info.session_id,
-            color,
             worktreePath: session.info.worktree_path
         })
     }
 
-    // Keyboard navigation mirrors rendered order
     useKeyboardShortcuts({
         onSelectOrchestrator: handleSelectOrchestrator,
         onSelectSession: (index: number) => {
@@ -81,7 +74,6 @@ export function Sidebar() {
         },
     })
 
-    // Initial load
     useEffect(() => {
         const loadSessions = async () => {
             try {
@@ -123,7 +115,6 @@ export function Sidebar() {
                 ) : (
                     sortSessions<EnrichedSession>(sessions).map((session) => {
                         const s = session.info
-                        const color = getSessionStateColor()
                         const task = s.current_task || `Working on ${s.session_id}`
                         const progressPercent = s.todo_percentage || 0
                         const lastActivity = formatLastActivity(s.last_modified)
@@ -136,24 +127,13 @@ export function Sidebar() {
                                 onClick={() => handleSelectSession(session)}
                                 className={clsx('group w-full text-left p-3 rounded-md mb-2 border border-slate-800 bg-slate-900/40',
                                     isSelected
-                                        ? clsx('session-ring', 
-                                            color === 'green' && 'session-ring-green',
-                                            color === 'violet' && 'session-ring-violet',
-                                            color === 'amber' && 'session-ring-amber',
-                                            color === 'gray' && 'session-ring-gray')
+                                        ? 'border-blue-500 bg-blue-500/10 text-blue-300'
                                         : 'hover:border-slate-700'
                                 )}
                             >
                                 <div className="flex items-start justify-between mb-2">
                                     <span className={clsx('text-sm font-medium',
-                                        isSelected 
-                                            ? clsx(
-                                                color === 'green' && 'text-green-400',
-                                                color === 'violet' && 'text-violet-400',
-                                                color === 'amber' && 'text-amber-400',
-                                                color === 'gray' && 'text-gray-400'
-                                            )
-                                            : 'text-slate-300'
+                                        isSelected ? 'text-blue-300' : 'text-slate-300'
                                     )}>
                                         {s.session_id}
                                     </span>
@@ -164,12 +144,7 @@ export function Sidebar() {
                                     {progressPercent > 0 && (
                                         <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
                                             <div 
-                                                className={clsx('h-full transition-all',
-                                                    color === 'green' && 'bg-green-500',
-                                                    color === 'violet' && 'bg-violet-500',
-                                                    color === 'amber' && 'bg-amber-500',
-                                                    color === 'gray' && 'bg-gray-500'
-                                                )}
+                                                className="h-full transition-all bg-blue-500"
                                                 style={{ width: `${progressPercent}%` }}
                                             />
                                         </div>

@@ -9,7 +9,6 @@ interface Props {
         name: string
         prompt?: string
         baseBranch: string
-        color: 'green' | 'violet' | 'amber'
     }) => void
 }
 
@@ -18,7 +17,6 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [prompt, setPrompt] = useState('')
     const [baseBranch, setBaseBranch] = useState('main')
     const [skipPermissions, setSkipPermissions] = useState(false)
-    const [color, setColor] = useState<'green' | 'violet' | 'amber'>('green')
     const [agentType, setAgentType] = useState<'claude' | 'cursor'>('claude')
     const [validationError, setValidationError] = useState('')
     const { getSkipPermissions, setSkipPermissions: saveSkipPermissions, getAgentType, setAgentType: saveAgentType } = useClaudeSession()
@@ -74,10 +72,9 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
         onCreate({ 
             name: finalName, 
             prompt: prompt || undefined, 
-            baseBranch, 
-            color 
+            baseBranch
         })
-    }, [name, prompt, baseBranch, color, onCreate, validateSessionName])
+    }, [name, prompt, baseBranch, onCreate, validateSessionName])
 
     useEffect(() => {
         if (open) {
@@ -148,20 +145,11 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                         <p className="text-xs text-slate-400 mt-1">Equivalent to: para start &lt;name&gt; -p "&lt;prompt&gt;"</p>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                         <div>
                             <label className="block text-sm text-slate-300 mb-1">Base branch</label>
                             <input value={baseBranch} onChange={e => setBaseBranch(e.target.value)} className="w-full bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700" />
                             <p className="text-xs text-slate-400 mt-1">--branch from which to create the worktree</p>
-                        </div>
-                        <div>
-                            <label className="block text-sm text-slate-300 mb-1">Session color</label>
-                            <div className="flex gap-2">
-                                {(['green', 'violet', 'amber'] as const).map(c => (
-                                    <button key={c} type="button" onClick={() => setColor(c)} className={`w-8 h-8 rounded-full border ${color === c ? 'ring-2 ring-offset-2 ring-slate-300' : ''}`} style={{ backgroundColor: c === 'green' ? '#22c55e' : c === 'violet' ? '#8b5cf6' : '#f59e0b' }} />
-                                ))}
-                            </div>
-                            <p className="text-xs text-slate-400 mt-1">Used for the session ring and accents</p>
                         </div>
                         <div>
                             <label className="block text-sm text-slate-300 mb-1">Agent</label>

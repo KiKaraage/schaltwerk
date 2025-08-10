@@ -4,7 +4,6 @@ import { invoke } from '@tauri-apps/api/core'
 export interface Selection {
     kind: 'session' | 'orchestrator'
     payload?: string
-    color?: 'blue' | 'green' | 'violet' | 'amber' | 'gray'
     worktreePath?: string
     isNewSession?: boolean  // Flag to indicate this is a newly created session
 }

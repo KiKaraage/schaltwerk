@@ -91,7 +91,7 @@ export default function App() {
       setCancelModalOpen(false)
       
       // Switch back to orchestrator after canceling session
-      await setSelection({ kind: 'orchestrator', color: 'blue' })
+      await setSelection({ kind: 'orchestrator' })
     } catch (error) {
       console.error('Failed to cancel session:', error)
       alert(`Failed to cancel session: ${error}`)
@@ -111,7 +111,6 @@ export default function App() {
     name: string
     prompt?: string
     baseBranch: string
-    color: 'green' | 'violet' | 'amber'
   }) => {
     try {
       await invoke('para_core_create_session', { 
@@ -128,7 +127,6 @@ export default function App() {
       await setSelection({
         kind: 'session',
         payload: data.name,
-        color: data.color,
         worktreePath: sessionData.worktree_path,
         isNewSession: true  // This triggers Claude to start
       })
