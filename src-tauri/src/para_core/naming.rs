@@ -105,7 +105,7 @@ Respond with just the short kebab-case name:"#
     if agent_type == "cursor" {
         log::info!("Attempting to generate name with cursor-agent");
         let cursor_future = Command::new("cursor-agent")
-            .args(["-p", "--output-format", "json", "-m", "gpt-5", &prompt_plain])
+            .args(cursor_namegen_args(&prompt_plain))
             .current_dir(worktree_path)
             .env("NO_COLOR", "1")
             .env("CLICOLOR", "0")
@@ -227,4 +227,35 @@ Respond with just the short kebab-case name:"#
 
     log::warn!("No name could be generated for session_id '{session_id}'");
     Ok(None)
+}
+
+// Build arguments for cursor-agent name generation
+fn cursor_namegen_args(prompt_plain: &str) -> Vec<String> {
+    // Be explicit: use gpt-5 which is available per cursor-agent help
+    vec![
+        "-p".to_string(),
+        "--output-format".to_string(),
+        "json".to_string(),
+        "-m".to_string(),
+        "gpt-5".to_string(),
+        prompt_plain.to_string(),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cursor_namegen_arg_shape_with_gpt5() {
+        let prompt = "Generate a short name";
+        let args = cursor_namegen_args(prompt);
+        // Expect shape: -p --output-format json -m gpt-5 <prompt>
+        assert_eq!(args[0], "-p");
+        assert_eq!(args[1], "--output-format");
+        assert_eq!(args[2], "json");
+        assert_eq!(args[3], "-m");
+        assert_eq!(args[4], "gpt-5");
+        assert_eq!(args[5], prompt);
+    }
 }
