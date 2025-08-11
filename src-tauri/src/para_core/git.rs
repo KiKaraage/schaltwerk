@@ -775,7 +775,6 @@ mod performance_tests {
     }
     
     #[test]
-    #[ignore] // Flaky performance test - sometimes fast version is slower due to system load
     fn test_git_stats_performance_with_many_files() {
         let (_temp, _repo_path, worktree_path) = setup_test_repo_with_many_files(100);
         

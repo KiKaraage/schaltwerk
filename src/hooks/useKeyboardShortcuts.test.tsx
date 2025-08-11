@@ -14,8 +14,8 @@ describe('useKeyboardShortcuts', () => {
 
     renderHook(() => useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, sessionCount: 0 }))
 
-    // Simulate mac with meta by setting platform
-    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true })
+    // Simulate mac with meta by setting userAgent
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', configurable: true })
 
     pressKey('1', { metaKey: true })
     expect(onSelectOrchestrator).toHaveBeenCalled()

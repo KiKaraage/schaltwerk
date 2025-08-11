@@ -193,8 +193,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     setLineSelection(null)
     setShowCommentForm(false)
     
-    // Keep current view mode; do not override user preference here
-    
     try {
       const [mainText, worktreeText] = await invoke<[string, string]>('get_file_diff_from_main', {
         sessionName,
@@ -285,7 +283,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     if (!isOpen) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isMac = navigator.platform.toUpperCase().includes('MAC')
+      const isMac = navigator.userAgent.includes('Mac')
       const modifierKey = isMac ? e.metaKey : e.ctrlKey
 
       if (e.key === 'Escape') {
@@ -362,21 +360,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     }
   }, [])
 
-  // Add missing state for mouse selection
-  const [isSelecting, setIsSelecting] = useState(false)
-  
-  // Helper function to get line info from target element
-  const getLineInfo = useCallback((target: HTMLElement): { side: 'old' | 'new', line: number } | null => {
-    const lineElement = target.closest('[data-line-number]')
-    if (!lineElement) return null
-    
-    const lineNumber = parseInt(lineElement.getAttribute('data-line-number') || '0')
-    const side = lineElement.closest('[data-side]')?.getAttribute('data-side') as 'old' | 'new'
-    
-    if (!side || !lineNumber) return null
-    return { side, line: lineNumber }
-  }, [])
-  
   const handleLineSelect = useCallback((side: 'old' | 'new', startLine: number, endLine: number, content: string[]) => {
     setLineSelection({
       side,
@@ -386,80 +369,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     })
     setShowCommentForm(false)
   }, [])
-  
-  const handleLineMouseDown = useCallback((e: MouseEvent) => {
-    const target = e.target as HTMLElement
-    const lineInfo = getLineInfo(target)
-    
-    if (lineInfo) {
-      const isTextSelection = window.getSelection()?.toString()
-      if (isTextSelection) return
-      
-      if (target.closest('code') || target.closest('span') || target.classList.contains('select-text')) {
-        return
-      }
-      
-      e.preventDefault()
-      setIsSelecting(true)
-      setLineSelection({
-        side: lineInfo.side,
-        startLine: lineInfo.line,
-        endLine: lineInfo.line,
-        content: []
-      })
-      setShowCommentForm(false)
-    }
-  }, [getLineInfo])
-
-  const handleLineMouseMove = useCallback((e: MouseEvent) => {
-    if (!isSelecting) return
-    
-    const target = e.target as HTMLElement
-    const lineInfo = getLineInfo(target)
-    if (!lineInfo || !lineSelection) return
-    
-    if (lineInfo.side === lineSelection.side) {
-      // Only update if the line actually changed to avoid unnecessary re-renders
-      if (lineInfo.line !== lineSelection.endLine) {
-        setLineSelection({
-          ...lineSelection,
-          endLine: lineInfo.line
-        })
-      }
-    }
-  }, [isSelecting, lineSelection, getLineInfo])
-
-  const handleLineMouseUp = useCallback(() => {
-    if (isSelecting && lineSelection) {
-      // Extract the actual content for the selected lines
-      const lines = lineSelection.side === 'old' ? mainContent.split('\n') : worktreeContent.split('\n')
-      const startIdx = Math.min(lineSelection.startLine - 1, lineSelection.endLine - 1)
-      const endIdx = Math.max(lineSelection.startLine - 1, lineSelection.endLine - 1)
-      const content = lines.slice(startIdx, endIdx + 1)
-      
-      setLineSelection({
-        ...lineSelection,
-        startLine: Math.min(lineSelection.startLine, lineSelection.endLine),
-        endLine: Math.max(lineSelection.startLine, lineSelection.endLine),
-        content
-      })
-    }
-    setIsSelecting(false)
-  }, [isSelecting, lineSelection, mainContent, worktreeContent])
-
-  useEffect(() => {
-    if (!isOpen) return
-    
-    document.addEventListener('mousedown', handleLineMouseDown)
-    document.addEventListener('mousemove', handleLineMouseMove)
-    document.addEventListener('mouseup', handleLineMouseUp)
-    
-    return () => {
-      document.removeEventListener('mousedown', handleLineMouseDown)
-      document.removeEventListener('mousemove', handleLineMouseMove)
-      document.removeEventListener('mouseup', handleLineMouseUp)
-    }
-  }, [isOpen, handleLineMouseDown, handleLineMouseMove, handleLineMouseUp])
 
   // Apply visual highlighting to selected lines with better performance
   useEffect(() => {
@@ -538,7 +447,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     }
     return languageMap[ext || ''] || undefined
   }, [selectedFile])
-
 
   const fileComments = selectedFile ? getCommentsForFile(selectedFile) : []
   

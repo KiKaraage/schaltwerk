@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     #[serial]
-    #[ignore] // Flaky test - logging initialization timing issue
+    #[ignore] // Test has race condition with async logging initialization - keeping ignored
     fn test_init_logging_writes_header_to_file() {
         let tmp = TempDir::new().unwrap();
         let prev = env::var("HOME").ok();
@@ -175,13 +175,27 @@ mod tests {
 
         init_logging();
         let log_path = get_log_path();
-        // Write a test log entry
+        
+        // Write a test log entry and wait for file to be created
         log::info!("test log entry");
-        // Give logger time to flush
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        // Ensure file exists and contains our marker
-        let content = std::fs::read_to_string(&log_path).unwrap_or_default();
-        assert!(content.contains("Schaltwerk v") || content.contains("test log entry"));
+        
+        // Wait for the log file to be created and contain content
+        let mut attempts = 0;
+        let max_attempts = 20; // 2 seconds max
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            if log_path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&log_path) {
+                    if content.contains("Schaltwerk v") || content.contains("test log entry") {
+                        break;
+                    }
+                }
+            }
+            attempts += 1;
+            if attempts >= max_attempts {
+                panic!("Log file was not created or didn't contain expected content after {} attempts", max_attempts);
+            }
+        }
 
         if let Some(p) = prev { env::set_var("HOME", p); } else { env::remove_var("HOME"); }
     }

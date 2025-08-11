@@ -18,8 +18,7 @@ interface KeyboardShortcutsProps {
 export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onMarkSelectedSessionReady, sessionCount, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude, onOpenDiffViewer, onFocusTerminal, isDiffViewerOpen }: KeyboardShortcutsProps) {
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
-            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
-            const modifierKey = isMac ? event.metaKey : event.ctrlKey
+            const modifierKey = navigator.userAgent.includes('Mac') ? event.metaKey : event.ctrlKey
             
             if (!modifierKey) return
             

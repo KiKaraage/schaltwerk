@@ -46,7 +46,7 @@ describe('Sidebar navigation with arrow keys including orchestrator', () => {
     eventListeners = new Map()
 
     // Simulate mac for meta key
-    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true })
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', configurable: true })
 
     const sessions = [
       {
