@@ -442,6 +442,20 @@ async fn para_core_cancel_session(app: tauri::AppHandle, name: String) -> Result
                 "para-ui:session-removed",
                 SessionRemovedPayload { session_name: name.clone() },
             );
+            // Best-effort: close known session terminals to avoid orphaned PTYs
+            let manager = get_terminal_manager().await;
+            let ids = vec![
+                format!("session-{}-top", name),
+                format!("session-{}-bottom", name),
+                format!("session-{}-right", name),
+            ];
+            for id in ids {
+                if let Ok(true) = manager.terminal_exists(&id).await {
+                    if let Err(e) = manager.close_terminal(id.clone()).await {
+                        log::warn!("Failed to close terminal {id} on cancel: {e}");
+                    }
+                }
+            }
             Ok(())
         },
         Err(e) => {

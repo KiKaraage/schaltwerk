@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 're
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import 'xterm/css/xterm.css';
 
 // Global guard to avoid starting Claude multiple times for the same terminal id across remounts
@@ -25,8 +25,16 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
     const fitAddon = useRef<FitAddon | null>(null);
     const lastSize = useRef<{ cols: number; rows: number }>({ cols: 80, rows: 24 });
     const [hydrated, setHydrated] = useState(false);
+    const hydratedRef = useRef<boolean>(false);
     const pendingOutput = useRef<string[]>([]);
+    // Batch terminal writes to reduce xterm parse/render overhead
+    const writeQueueRef = useRef<string[]>([]);
+    const rafIdRef = useRef<number | null>(null);
+    const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const unlistenRef = useRef<UnlistenFn | null>(null);
+    const unlistenPromiseRef = useRef<Promise<UnlistenFn> | null>(null);
     const startAttempts = useRef<Map<string, number>>(new Map());
+    const mountedRef = useRef<boolean>(false);
     const startingTerminals = useRef<Map<string, boolean>>(new Map());
 
     useImperativeHandle(ref, () => ({
@@ -37,15 +45,26 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
         }
     }), []);
 
+    // Keep hydratedRef in sync so listeners see the latest state
+    useEffect(() => {
+        hydratedRef.current = hydrated;
+    }, [hydrated]);
+
     useEffect(() => {
         console.log(`[Terminal ${terminalId}] Mounting/re-mounting terminal component`);
+        mountedRef.current = true;
+        let cancelled = false;
         if (!termRef.current) {
             console.error(`[Terminal ${terminalId}] No ref available!`);
             return;
         }
 
         setHydrated(false);
+        hydratedRef.current = false;
         pendingOutput.current = [];
+        writeQueueRef.current = [];
+        if (rafIdRef.current != null) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null; }
+        if (flushTimerRef.current) { clearTimeout(flushTimerRef.current); flushTimerRef.current = null; }
 
         terminal.current = new XTerm({
             theme: {
@@ -107,16 +126,19 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             return !!el && el.isConnected && el.clientWidth > 0 && el.clientHeight > 0;
         };
 
-        // Do an immediate fit to get initial size, only if container is measurable
+        // Do an initial fit via RAF once container is measurable
+        const scheduleInitialFit = () => {
+            requestAnimationFrame(() => {
+                if (!isReadyForFit() || !fitAddon.current) return;
+                try {
+                    fitAddon.current.fit();
+                } catch {
+                    // ignore single-shot fit error; RO will retry
+                }
+            });
+        };
         if (isReadyForFit()) {
-            try {
-                fitAddon.current.fit();
-            } catch (e) {
-                console.warn(`[Terminal ${terminalId}] Initial fit failed; will retry on next resize`, e);
-            }
-        } else {
-            // Skip now; upcoming ResizeObserver ticks will attempt a fit
-            console.debug(`[Terminal ${terminalId}] Skipping initial fit; container not ready`);
+            scheduleInitialFit();
         }
 
         const initialCols = terminal.current.cols;
@@ -126,15 +148,39 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
         // Send initial size to backend immediately
         invoke('resize_terminal', { id: terminalId, cols: initialCols, rows: initialRows }).catch(console.error);
 
+        // Flush queued writes once per frame
+        const flushQueuedWrites = () => {
+            if (flushTimerRef.current) return;
+            // Use a short timeout to coalesce multiple events and be test-friendly with fake timers
+            flushTimerRef.current = setTimeout(() => {
+                flushTimerRef.current = null;
+                if (!terminal.current || writeQueueRef.current.length === 0) return;
+                const chunk = writeQueueRef.current.join('');
+                writeQueueRef.current = [];
+                terminal.current.write(chunk);
+            }, 16);
+        };
+
+        // Immediate flush helper (no debounce), used during hydration transitions
+        const flushNow = () => {
+            if (!terminal.current || writeQueueRef.current.length === 0) return;
+            const chunk = writeQueueRef.current.join('');
+            writeQueueRef.current = [];
+            terminal.current.write(chunk);
+        };
+
         // Listen for terminal output from backend (buffer until hydrated)
-        const unlisten = listen(`terminal-output-${terminalId}`, (event) => {
+        unlistenRef.current = null;
+        unlistenPromiseRef.current = listen(`terminal-output-${terminalId}`, (event) => {
+            if (cancelled) return;
             const output = event.payload as string;
-            if (!hydrated) {
+            if (!hydratedRef.current) {
                 pendingOutput.current.push(output);
-            } else if (terminal.current) {
-                terminal.current.write(output);
+            } else {
+                writeQueueRef.current.push(output);
+                flushQueuedWrites();
             }
-        });
+        }).then((fn) => { unlistenRef.current = fn; return fn; });
 
         // Hydrate from buffer
         const hydrateTerminal = async () => {
@@ -142,24 +188,33 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
                 console.log(`[Terminal ${terminalId}] Fetching buffer for hydration`);
                 const snapshot = await invoke<string>('get_terminal_buffer', { id: terminalId });
                 
-                if (snapshot && terminal.current) {
-                    terminal.current.write(snapshot);
-                    console.log(`[Terminal ${terminalId}] Hydrated with ${snapshot.length} bytes`);
+                if (snapshot) {
+                    writeQueueRef.current.push(snapshot);
                 }
-
-                // Flush any pending output that arrived during hydration
-                if (pendingOutput.current.length > 0 && terminal.current) {
-                    console.log(`[Terminal ${terminalId}] Flushing ${pendingOutput.current.length} pending outputs`);
+                // Queue any pending output that arrived during hydration
+                if (pendingOutput.current.length > 0) {
                     for (const output of pendingOutput.current) {
-                        terminal.current.write(output);
+                        writeQueueRef.current.push(output);
                     }
                     pendingOutput.current = [];
                 }
-
                 setHydrated(true);
+                hydratedRef.current = true;
+                // Flush immediately to avoid dropping output on rapid remounts/tests
+                flushNow();
             } catch (error) {
                 console.error(`[Terminal ${terminalId}] Failed to hydrate:`, error);
+                // On failure, still shift to live streaming and flush any buffered output to avoid drops
                 setHydrated(true);
+                hydratedRef.current = true;
+                if (pendingOutput.current.length > 0) {
+                    for (const output of pendingOutput.current) {
+                        writeQueueRef.current.push(output);
+                    }
+                    pendingOutput.current = [];
+                    // Flush immediately; subsequent events will be batched
+                    flushNow();
+                }
             }
         };
 
@@ -167,7 +222,10 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
 
         // Send input to backend
         terminal.current.onData((data) => {
-            console.log(`[Terminal ${terminalId}] Input received, data length=${data.length}`);
+            // Gate noisy logs behind a debug flag if needed
+            // if (import.meta.env.VITE_DEBUG_TERMINAL) {
+            //     console.log(`[Terminal ${terminalId}] Input length=${data.length}`)
+            // }
             invoke('write_terminal', { id: terminalId, data }).catch(console.error);
         });
 
@@ -195,34 +253,41 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             }
         };
 
-        // Use ResizeObserver with slight debouncing for better performance
+        // Use ResizeObserver with a more conservative debounce for better performance
         let resizeTimeout: NodeJS.Timeout | null = null;
         const resizeObserver = new ResizeObserver(() => {
             if (resizeTimeout) clearTimeout(resizeTimeout);
             resizeTimeout = setTimeout(() => {
                 handleResize();
-            }, 16); // ~60fps
+            }, 160); // reduce chatter during layout changes
         });
         resizeObserver.observe(termRef.current);
-        
-        // Multiple delayed resizes to catch layout shifts
-        const mountTimeout1 = setTimeout(() => handleResize(), 50);
-        const mountTimeout2 = setTimeout(() => handleResize(), 150);
-        const mountTimeout3 = setTimeout(() => handleResize(), 300);
+        // Initial fit pass after mount
+        const mountTimeout = setTimeout(() => handleResize(), 60);
 
         // Cleanup - dispose UI but keep terminal process running
         // Terminal processes will be cleaned up when the app exits
         return () => {
             console.log(`[Terminal ${terminalId}] Unmounting terminal component`);
+            mountedRef.current = false;
+            cancelled = true;
             if (resizeTimeout) clearTimeout(resizeTimeout);
-            clearTimeout(mountTimeout1);
-            clearTimeout(mountTimeout2);
-            clearTimeout(mountTimeout3);
-            unlisten.then(fn => fn());
+            clearTimeout(mountTimeout);
+            // Synchronously detach if possible to avoid races in tests
+            const fn = unlistenRef.current;
+            if (fn) { try { fn(); } catch { /* ignore */ } }
+            else if (unlistenPromiseRef.current) {
+                // Detach once promise resolves
+                unlistenPromiseRef.current.then((resolved) => { try { resolved(); } catch { /* ignore */ } });
+            }
             terminal.current?.dispose();
+            terminal.current = null;
             resizeObserver.disconnect();
             setHydrated(false);
             pendingOutput.current = [];
+            writeQueueRef.current = [];
+            if (rafIdRef.current != null) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null; }
+            if (flushTimerRef.current) { clearTimeout(flushTimerRef.current); flushTimerRef.current = null; }
             // Note: We intentionally don't close terminals here to allow switching between sessions
             // All terminals are cleaned up when the app exits via the backend cleanup handler
         };

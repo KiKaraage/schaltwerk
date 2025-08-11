@@ -8,7 +8,7 @@ use std::time::{Instant, SystemTime};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{Mutex, RwLock};
 
-const MAX_BUFFER_SIZE: usize = 5 * 1024 * 1024;
+const MAX_BUFFER_SIZE: usize = 2 * 1024 * 1024;
 
 // Global state maps to avoid Sync issues with trait objects
 lazy_static::lazy_static! {
@@ -27,6 +27,10 @@ pub struct LocalPtyAdapter {
     terminals: Arc<RwLock<HashMap<String, TerminalState>>>,
     creating: Arc<Mutex<HashSet<String>>>,
     app_handle: Arc<Mutex<Option<AppHandle>>>,
+    // Coalesced emitter buffers per terminal id
+    emit_buffers: Arc<RwLock<HashMap<String, Vec<u8>>>>,
+    // Tracks whether a flush task is scheduled per terminal id
+    emit_scheduled: Arc<RwLock<HashMap<String, bool>>>,
 }
 
 impl LocalPtyAdapter {
@@ -35,6 +39,8 @@ impl LocalPtyAdapter {
             terminals: Arc::new(RwLock::new(HashMap::new())),
             creating: Arc::new(Mutex::new(HashSet::new())),
             app_handle: Arc::new(Mutex::new(None)),
+            emit_buffers: Arc::new(RwLock::new(HashMap::new())),
+            emit_scheduled: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -82,6 +88,8 @@ impl LocalPtyAdapter {
         mut reader: Box<dyn Read + Send>,
         terminals: Arc<RwLock<HashMap<String, TerminalState>>>,
         app_handle: Arc<Mutex<Option<AppHandle>>>,
+        emit_buffers: Arc<RwLock<HashMap<String, Vec<u8>>>>,
+        emit_scheduled: Arc<RwLock<HashMap<String, bool>>>,
     ) {
         tokio::task::spawn_blocking(move || {
             let runtime = tokio::runtime::Handle::current();
@@ -91,6 +99,27 @@ impl LocalPtyAdapter {
                 match reader.read(&mut buf) {
                     Ok(0) => {
                         info!("Terminal {id} EOF");
+                        // Clean up terminal maps and notify UI about closure
+                        let id_clone_for_cleanup = id.clone();
+                        let terminals_clone2 = Arc::clone(&terminals);
+                        let app_handle_clone2 = Arc::clone(&app_handle);
+                        runtime.block_on(async move {
+                            // Remove terminal state
+                            terminals_clone2.write().await.remove(&id_clone_for_cleanup);
+                            // Remove PTY resources
+                            if let Some(mut child) = PTY_CHILDREN.lock().await.remove(&id_clone_for_cleanup) {
+                                let _ = child.kill();
+                            }
+                            PTY_MASTERS.lock().await.remove(&id_clone_for_cleanup);
+                            PTY_WRITERS.lock().await.remove(&id_clone_for_cleanup);
+                            // Emit terminal closed event
+                            if let Some(handle) = app_handle_clone2.lock().await.as_ref() {
+                                let _ = handle.emit(
+                                    "para-ui:terminal-closed",
+                                    &serde_json::json!({"terminal_id": id_clone_for_cleanup}),
+                                );
+                            }
+                        });
                         break;
                     }
                     Ok(n) => {
@@ -98,6 +127,8 @@ impl LocalPtyAdapter {
                         let id_clone = id.clone();
                         let terminals_clone = Arc::clone(&terminals);
                         let app_handle_clone = Arc::clone(&app_handle);
+                        let emit_buffers_clone = Arc::clone(&emit_buffers);
+                        let emit_scheduled_clone = Arc::clone(&emit_scheduled);
                         
                         runtime.block_on(async move {
                             let mut terminals = terminals_clone.write().await;
@@ -113,12 +144,53 @@ impl LocalPtyAdapter {
                                 state.seq += 1;
                                 state.last_output = SystemTime::now();
                                 
-                                // Emit Tauri event
-                                if let Some(handle) = app_handle_clone.lock().await.as_ref() {
-                                    let event_name = format!("terminal-output-{id_clone}");
-                                    if let Err(e) = handle.emit(&event_name, data) {
-                                        warn!("Failed to emit terminal output: {e}");
+                                // Coalesce and schedule emit
+                                drop(terminals); // release lock before awaits below
+                                {
+                                    let mut buffers = emit_buffers_clone.write().await;
+                                    let buf_ref = buffers.entry(id_clone.clone()).or_insert_with(Vec::new);
+                                    buf_ref.extend_from_slice(&data);
+                                }
+                                let mut should_schedule = false;
+                                {
+                                    let mut scheduled = emit_scheduled_clone.write().await;
+                                    let entry = scheduled.entry(id_clone.clone()).or_insert(false);
+                                    if !*entry {
+                                        *entry = true;
+                                        should_schedule = true;
                                     }
+                                }
+                                if should_schedule {
+                                    let app_for_emit = Arc::clone(&app_handle_clone);
+                                    let emit_buffers_for_task = Arc::clone(&emit_buffers_clone);
+                                    let emit_scheduled_for_task = Arc::clone(&emit_scheduled_clone);
+                                    let id_for_task = id_clone.clone();
+                                    // Flush after ~16ms (one frame)
+                                    tokio::spawn(async move {
+                                        use tokio::time::{sleep, Duration};
+                                        sleep(Duration::from_millis(16)).await;
+                                        // Take buffer
+                                        let data_to_emit: Option<Vec<u8>> = {
+                                            let mut buffers = emit_buffers_for_task.write().await;
+                                            buffers.remove(&id_for_task)
+                                        };
+                                        // Mark unscheduled
+                                        {
+                                            let mut scheduled = emit_scheduled_for_task.write().await;
+                                            if let Some(flag) = scheduled.get_mut(&id_for_task) {
+                                                *flag = false;
+                                            }
+                                        }
+                                        if let Some(bytes) = data_to_emit {
+                                            if let Some(handle) = app_for_emit.lock().await.as_ref() {
+                                                let event_name = format!("terminal-output-{id_for_task}");
+                                                let payload = String::from_utf8_lossy(&bytes).to_string();
+                                                if let Err(e) = handle.emit(&event_name, payload) {
+                                                    warn!("Failed to emit terminal output: {e}");
+                                                }
+                                            }
+                                        }
+                                    });
                                 }
                             }
                         });
@@ -126,6 +198,24 @@ impl LocalPtyAdapter {
                     Err(e) => {
                         if e.kind() != std::io::ErrorKind::WouldBlock {
                             error!("Terminal {id} read error: {e}");
+                            // On read error, clean up and notify
+                            let id_clone_for_cleanup = id.clone();
+                            let terminals_clone2 = Arc::clone(&terminals);
+                            let app_handle_clone2 = Arc::clone(&app_handle);
+                            runtime.block_on(async move {
+                                terminals_clone2.write().await.remove(&id_clone_for_cleanup);
+                                if let Some(mut child) = PTY_CHILDREN.lock().await.remove(&id_clone_for_cleanup) {
+                                    let _ = child.kill();
+                                }
+                                PTY_MASTERS.lock().await.remove(&id_clone_for_cleanup);
+                                PTY_WRITERS.lock().await.remove(&id_clone_for_cleanup);
+                                if let Some(handle) = app_handle_clone2.lock().await.as_ref() {
+                                    let _ = handle.emit(
+                                        "para-ui:terminal-closed",
+                                        &serde_json::json!({"terminal_id": id_clone_for_cleanup}),
+                                    );
+                                }
+                            });
                             break;
                         }
                     }
@@ -220,6 +310,8 @@ impl TerminalBackend for LocalPtyAdapter {
             reader,
             Arc::clone(&self.terminals),
             Arc::clone(&self.app_handle),
+            Arc::clone(&self.emit_buffers),
+            Arc::clone(&self.emit_scheduled),
         )
         .await;
         

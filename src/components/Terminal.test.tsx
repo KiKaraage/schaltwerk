@@ -193,7 +193,7 @@ describe('Terminal component', () => {
     expect(lastArgs).toMatchObject({ id: 'orchestrator-top', cols: 80, rows: 24 })
   })
 
-  it('hydrates from buffer and flushes pending output in order', async () => {
+  it('hydrates from buffer and flushes pending output in order (batched)', async () => {
     ;(TauriCore as any).__setInvokeHandler('get_terminal_buffer', () => 'SNAP')
 
     render(<Terminal terminalId="session-demo-top" sessionName="demo" />)
@@ -205,10 +205,9 @@ describe('Terminal component', () => {
     await flushAll()
 
     const xterm = getLastXtermInstance()
-    expect(xterm.write).toHaveBeenCalledTimes(3)
-    expect(xterm.write.mock.calls[0][0]).toBe('SNAP')
-    expect(xterm.write.mock.calls[1][0]).toBe('A')
-    expect(xterm.write.mock.calls[2][0]).toBe('B')
+    // With batching, expect a single coalesced write
+    expect(xterm.write).toHaveBeenCalledTimes(1)
+    expect(xterm.write.mock.calls[0][0]).toBe('SNAPAB')
   })
 
   it('sends input data to backend', async () => {
@@ -356,24 +355,30 @@ describe('Terminal component', () => {
     // Unmount by rendering a different instance id
     render(<Terminal terminalId="session-other-top" sessionName="other" />)
     await flushAll()
+    // Ensure any pending coalesced flushes are drained before emitting on old channel
+    await advanceAndFlush(200)
+    const baselineAfterUnmount = xterm.write.mock.calls.length
     // emit again on old channel -> should NOT write anymore
     ;(TauriEvent as any).__emit('terminal-output-session-unmount-top', 'Y')
     await flushAll()
-    expect(xterm.write.mock.calls.length).toBe(writeCallsBeforeUnmount)
+    const afterEmitCalls = xterm.write.mock.calls.slice(baselineAfterUnmount)
+    // Ensure the old terminal did not process the emitted payload 'Y'
+    expect(afterEmitCalls.some((c: any[]) => c[0] === 'Y')).toBe(false)
   })
 
-  it('handles hydration failure and does not auto-write subsequent output (buffers)', async () => {
+  it('handles hydration failure and still flushes buffered output (batched)', async () => {
     ;(TauriCore as any).__setInvokeHandler('get_terminal_buffer', () => { throw new Error('fail') })
     render(<Terminal terminalId="session-hydratefail-top" sessionName="hf" />)
     // Emit before hydration completes -> should be buffered but not flushed due to failure
     ;(TauriEvent as any).__emit('terminal-output-session-hydratefail-top', 'A')
     await flushAll()
     const xterm = getLastXtermInstance()
-    // Now hydrated true despite failure; emit again and this should write
+    // Now hydrated true despite failure; emit again and this should batch with previous where possible
     ;(TauriEvent as any).__emit('terminal-output-session-hydratefail-top', 'B')
     await flushAll()
-    // With current implementation, following a hydrate failure, listener still buffers
-    expect(xterm.write).not.toHaveBeenCalled()
+    expect(xterm.write).toHaveBeenCalled()
+    const combined = xterm.write.mock.calls.map((c: any[]) => c[0]).join('')
+    expect(combined).toBe('AB')
   })
 
   it('exposes focus via ref', async () => {
