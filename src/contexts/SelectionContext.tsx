@@ -142,29 +142,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             
             // Mark as ready
             setIsReady(true)
-            
-            // If this is a new session, start Claude after a short delay
-            if (newSelection.isNewSession && newSelection.kind === 'session' && newSelection.payload) {
-                console.log('[SelectionContext] Starting Claude for new session:', newSelection.payload)
-                setTimeout(async () => {
-                    try {
-                        const command = await invoke<string>('para_core_get_claude_command', { 
-                            sessionName: newSelection.payload 
-                        })
-                        console.log('[SelectionContext] Claude command:', command)
-                        
-                        // Write command to terminal
-                        await invoke('write_terminal', {
-                            id: terminalIds.top,
-                            data: `${command}\r`
-                        })
-                        console.log('[SelectionContext] Claude command sent to terminal')
-                    } catch (err) {
-                        console.error('[SelectionContext] Failed to start Claude:', err)
-                    }
-                }, 1000) // Give terminal time to initialize
-            }
-            
+
             console.log('[SelectionContext] Selection change complete')
         } catch (error) {
             console.error('[SelectionContext] Failed to set selection:', error)

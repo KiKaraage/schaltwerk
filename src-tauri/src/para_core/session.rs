@@ -97,7 +97,9 @@ impl SessionManager {
             ready_to_merge: false,
             original_agent_type: None,
             original_skip_permissions: None,
-            pending_name_generation: was_auto_generated && prompt.is_some(),
+            // Mark for name generation when the session name was auto-generated,
+            // regardless of whether a prompt was provided. The generator uses a default prompt.
+            pending_name_generation: was_auto_generated,
             was_auto_generated,
         };
         

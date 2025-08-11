@@ -72,7 +72,9 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             fontFamily: 'Menlo, Monaco, "Courier New", monospace',
             fontSize: 13,
             cursorBlink: true,
-            convertEol: true,
+            // Important: Keep TUI control sequences intact (e.g., from cursor-agent)
+            // Converting EOLs breaks carriage-return based updates and causes visual jumping
+            convertEol: false,
         });
 
         // Add fit addon for proper sizing

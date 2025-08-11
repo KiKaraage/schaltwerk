@@ -323,8 +323,9 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
     drop(core_lock);
     
     // Spawn background task to generate display name if needed
-    if was_auto_generated && prompt.is_some() {
-        log::info!("Session '{name}' was auto-generated with prompt, spawning name generation task");
+    // Run even without an explicit prompt; the generator has a sensible default
+    if was_auto_generated {
+        log::info!("Session '{name}' was auto-generated, spawning name generation task");
         tokio::spawn(async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             
