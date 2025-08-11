@@ -287,13 +287,20 @@ use tauri::Emitter;
 
 #[tauri::command]
 async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: Option<String>, base_branch: Option<String>) -> Result<para_core::Session, String> {
-    let core = get_para_core().await;
-    let core = core.lock().await;
-    let manager = core.session_manager();
+    // Check if the name looks auto-generated (docker-style: adjective_noun)
+    let was_auto_generated = name.contains('_') && name.split('_').count() == 2;
     
-    let session = manager.create_session(&name, prompt.as_deref(), base_branch.as_deref())
+    let core = get_para_core().await;
+    let core_lock = core.lock().await;
+    let manager = core_lock.session_manager();
+    
+    let session = manager.create_session_with_auto_flag(&name, prompt.as_deref(), base_branch.as_deref(), was_auto_generated)
         .map_err(|e| format!("Failed to create session: {e}"))?;
 
+    // Clone what we need for the background task
+    let session_name_clone = session.name.clone();
+    let app_handle = app.clone();
+    
     // Emit session-added event for frontend to merge incrementally
     #[derive(serde::Serialize, Clone)]
     struct SessionAddedPayload {
@@ -311,6 +318,88 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
             parent_branch: session.parent_branch.clone(),
         },
     );
+
+    // Drop the lock before spawning the background task
+    drop(core_lock);
+    
+    // Spawn background task to generate display name if needed
+    if was_auto_generated && prompt.is_some() {
+        log::info!("Session '{}' was auto-generated with prompt, spawning name generation task", name);
+        tokio::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            
+            // Get session info and database reference
+            let (session_info, db_clone) = {
+                let core = get_para_core().await;
+                let core = core.lock().await;
+                let manager = core.session_manager();
+                let session = match manager.get_session(&session_name_clone) {
+                    Ok(s) => s,
+                    Err(e) => { 
+                        log::warn!("Cannot load session '{}' for naming: {}", session_name_clone, e); 
+                        return; 
+                    }
+                };
+                log::info!("Session '{}' loaded: pending_name_generation={}, original_agent_type={:?}", 
+                    session_name_clone, session.pending_name_generation, session.original_agent_type);
+                
+                if !session.pending_name_generation {
+                    log::info!("Session '{}' does not have pending_name_generation flag, skipping", session_name_clone);
+                    return;
+                }
+                let agent = session.original_agent_type.clone()
+                    .unwrap_or_else(|| core.db.get_agent_type().unwrap_or_else(|_| "claude".to_string()));
+                
+                log::info!("Using agent '{}' for name generation of session '{}'", agent, session_name_clone);
+                
+                // Clone what we need and release the lock
+                (
+                    (session.id.clone(), session.worktree_path.clone(), agent, session.initial_prompt.clone()),
+                    core.db.clone()
+                )
+            };
+            
+            let (session_id, worktree_path, agent, initial_prompt) = session_info;
+            
+            log::info!("Starting name generation for session '{}' with prompt: {:?}", 
+                session_name_clone, initial_prompt.as_ref().map(|p| &p[..p.len().min(50)]));
+            
+            // Now do the async operation without holding any locks
+            match crate::para_core::naming::generate_display_name(
+                &db_clone,
+                &session_id,
+                &worktree_path,
+                &agent,
+                initial_prompt.as_deref()
+            ).await {
+                Ok(Some(display_name)) => {
+                    log::info!("Successfully generated display name '{}' for session '{}'", display_name, session_name_clone);
+                    
+                    // Re-acquire lock only to get the updated sessions list
+                    let core = get_para_core().await;
+                    let core = core.lock().await;
+                    let manager = core.session_manager();
+                    if let Ok(sessions) = manager.list_enriched_sessions() {
+                        log::info!("Emitting sessions-refreshed event after name generation");
+                        if let Err(e) = app_handle.emit("para-ui:sessions-refreshed", &sessions) {
+                            log::warn!("Could not emit sessions refreshed: {e}");
+                        }
+                    }
+                }
+                Ok(None) => { 
+                    log::warn!("Name generation returned None for session '{}'", session_name_clone);
+                    let _ = db_clone.set_pending_name_generation(&session_id, false); 
+                }
+                Err(e) => {
+                    log::error!("Failed to generate display name for session '{}': {}", session_name_clone, e);
+                    let _ = db_clone.set_pending_name_generation(&session_id, false);
+                }
+            }
+        });
+    } else {
+        log::info!("Session '{}' was_auto_generated={}, has_prompt={}, skipping name generation", 
+            name, was_auto_generated, prompt.is_some());
+    }
 
     Ok(session)
 }

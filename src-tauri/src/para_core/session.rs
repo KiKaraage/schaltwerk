@@ -49,7 +49,12 @@ impl SessionManager {
         lock
     }
     
+    #[cfg(test)]
     pub fn create_session(&self, name: &str, prompt: Option<&str>, base_branch: Option<&str>) -> Result<Session> {
+        self.create_session_with_auto_flag(name, prompt, base_branch, false)
+    }
+    
+    pub fn create_session_with_auto_flag(&self, name: &str, prompt: Option<&str>, base_branch: Option<&str>, was_auto_generated: bool) -> Result<Session> {
         // Serialize session creation per repository to avoid git worktree races
         let repo_lock = Self::get_repo_lock(&self.repo_path);
         let _guard = repo_lock.lock().unwrap();
@@ -78,6 +83,7 @@ impl SessionManager {
         let session = Session {
             id: session_id.clone(),
             name: name.to_string(),
+            display_name: None,
             repository_path: self.repo_path.clone(),
             repository_name: repo_name,
             branch: branch.clone(),
@@ -91,6 +97,8 @@ impl SessionManager {
             ready_to_merge: false,
             original_agent_type: None,
             original_skip_permissions: None,
+            pending_name_generation: was_auto_generated && prompt.is_some(),
+            was_auto_generated,
         };
         
         // Create worktree with new branch from specified base
@@ -262,6 +270,7 @@ impl SessionManager {
             
             let info = SessionInfo {
                 session_id: session.name.clone(),
+                display_name: session.display_name.clone(),
                 branch: session.branch.clone(),
                 worktree_path: session.worktree_path.to_string_lossy().to_string(),
                 base_branch: session.parent_branch.clone(),
@@ -304,19 +313,12 @@ impl SessionManager {
         let command = match agent_type.as_str() {
             "cursor" => {
                 let session_id = crate::para_core::cursor::find_cursor_session(&session.worktree_path);
-                
-                // Only use initial prompt if we haven't prompted this session before
-                let should_use_prompt = session_id.is_none() && !has_session_been_prompted(&session.worktree_path);
-                let prompt_to_use = if should_use_prompt {
-                    if let Some(prompt) = session.initial_prompt.as_deref() {
+                let prompt_to_use = if session_id.is_none() && !has_session_been_prompted(&session.worktree_path) {
+                    session.initial_prompt.as_ref().map(|p| {
                         mark_session_prompted(&session.worktree_path);
-                        log::info!("Session {session_name}: Using initial prompt (first time)");
-                        Some(prompt)
-                    } else {
-                        None
-                    }
+                        p.as_str()
+                    })
                 } else {
-                    log::info!("Session {session_name}: Skipping initial prompt (session_id={session_id:?}, prompted={})", has_session_been_prompted(&session.worktree_path));
                     None
                 };
                 
@@ -329,19 +331,12 @@ impl SessionManager {
             }
             _ => {
                 let session_id = crate::para_core::claude::find_claude_session(&session.worktree_path);
-                
-                // Only use initial prompt if we haven't prompted this session before
-                let should_use_prompt = session_id.is_none() && !has_session_been_prompted(&session.worktree_path);
-                let prompt_to_use = if should_use_prompt {
-                    if let Some(prompt) = session.initial_prompt.as_deref() {
+                let prompt_to_use = if session_id.is_none() && !has_session_been_prompted(&session.worktree_path) {
+                    session.initial_prompt.as_ref().map(|p| {
                         mark_session_prompted(&session.worktree_path);
-                        log::info!("Session {session_name}: Using initial prompt (first time)");
-                        Some(prompt)
-                    } else {
-                        None
-                    }
+                        p.as_str()
+                    })
                 } else {
-                    log::info!("Session {session_name}: Skipping initial prompt (session_id={session_id:?}, prompted={})", has_session_been_prompted(&session.worktree_path));
                     None
                 };
                 
@@ -437,6 +432,7 @@ mod session_tests {
         let session = Session {
             id: "test-session-id".to_string(),
             name: "test-session".to_string(),
+            display_name: None,
             repository_path: temp_dir.path().to_path_buf(),
             repository_name: "test-repo".to_string(),
             branch: "para/test-session".to_string(),
@@ -450,6 +446,8 @@ mod session_tests {
             ready_to_merge: false,
             original_agent_type: None,
             original_skip_permissions: None,
+            pending_name_generation: false,
+            was_auto_generated: false,
         };
         
         manager.db.create_session(&session).unwrap();
@@ -495,6 +493,7 @@ mod session_tests {
         let session_no_prompt = Session {
             id: "no-prompt-id".to_string(),
             name: "no-prompt-session".to_string(),
+            display_name: None,
             repository_path: temp_dir.path().to_path_buf(),
             repository_name: "test-repo".to_string(),
             branch: "para/no-prompt-session".to_string(),
@@ -508,6 +507,8 @@ mod session_tests {
             ready_to_merge: false,
             original_agent_type: None,
             original_skip_permissions: None,
+            pending_name_generation: false,
+            was_auto_generated: false,
         };
         
         manager.db.create_session(&session_no_prompt).unwrap();
@@ -571,6 +572,7 @@ mod session_tests {
         let session = Session {
             id: "spaces-session-id".to_string(),
             name: "spaces-session".to_string(),
+            display_name: None,
             repository_path: temp_dir.path().to_path_buf(),
             repository_name: "test-repo".to_string(),
             branch: "para/spaces-session".to_string(),
@@ -584,6 +586,8 @@ mod session_tests {
             ready_to_merge: false,
             original_agent_type: None,
             original_skip_permissions: None,
+            pending_name_generation: false,
+            was_auto_generated: false,
         };
         
         manager.db.create_session(&session).unwrap();

@@ -41,6 +41,7 @@ impl Database {
             "CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
+                display_name TEXT,
                 repository_path TEXT NOT NULL,
                 repository_name TEXT NOT NULL,
                 branch TEXT NOT NULL,
@@ -54,6 +55,8 @@ impl Database {
                 ready_to_merge BOOLEAN DEFAULT FALSE,
                 original_agent_type TEXT,
                 original_skip_permissions BOOLEAN,
+                pending_name_generation BOOLEAN DEFAULT FALSE,
+                was_auto_generated BOOLEAN DEFAULT FALSE,
                 UNIQUE(repository_path, name)
             )",
             [],
@@ -129,6 +132,21 @@ impl Database {
             "ALTER TABLE sessions ADD COLUMN original_skip_permissions BOOLEAN",
             [],
         );
+        // Add display_name column if it doesn't exist (migration)
+        let _ = conn.execute(
+            "ALTER TABLE sessions ADD COLUMN display_name TEXT",
+            [],
+        );
+        // Add pending_name_generation column if it doesn't exist (migration)
+        let _ = conn.execute(
+            "ALTER TABLE sessions ADD COLUMN pending_name_generation BOOLEAN DEFAULT FALSE",
+            [],
+        );
+        // Add was_auto_generated column if it doesn't exist (migration)
+        let _ = conn.execute(
+            "ALTER TABLE sessions ADD COLUMN was_auto_generated BOOLEAN DEFAULT FALSE",
+            [],
+        );
         
         Ok(())
     }
@@ -138,14 +156,15 @@ impl Database {
         
         conn.execute(
             "INSERT INTO sessions (
-                id, name, repository_path, repository_name,
+                id, name, display_name, repository_path, repository_name,
                 branch, parent_branch, worktree_path,
                 status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
-                original_agent_type, original_skip_permissions
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             params![
                 session.id,
                 session.name,
+                session.display_name,
                 session.repository_path.to_string_lossy(),
                 session.repository_name,
                 session.branch,
@@ -159,6 +178,8 @@ impl Database {
                 session.ready_to_merge,
                 session.original_agent_type,
                 session.original_skip_permissions,
+                session.pending_name_generation,
+                session.was_auto_generated,
             ],
         )?;
         
@@ -169,10 +190,10 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         
         let mut stmt = conn.prepare(
-            "SELECT id, name, repository_path, repository_name,
+            "SELECT id, name, display_name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
                     status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
-                    original_agent_type, original_skip_permissions
+                    original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
              FROM sessions
              WHERE repository_path = ?1 AND name = ?2"
         )?;
@@ -183,20 +204,23 @@ impl Database {
                 Ok(Session {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    repository_path: PathBuf::from(row.get::<_, String>(2)?),
-                    repository_name: row.get(3)?,
-                    branch: row.get(4)?,
-                    parent_branch: row.get(5)?,
-                    worktree_path: PathBuf::from(row.get::<_, String>(6)?),
-                    status: row.get::<_, String>(7)?.parse().unwrap_or(SessionStatus::Active),
-                    created_at: Utc.timestamp_opt(row.get(8)?, 0).unwrap(),
-                    updated_at: Utc.timestamp_opt(row.get(9)?, 0).unwrap(),
-                    last_activity: row.get::<_, Option<i64>>(10)?
+                    display_name: row.get(2).ok(),
+                    repository_path: PathBuf::from(row.get::<_, String>(3)?),
+                    repository_name: row.get(4)?,
+                    branch: row.get(5)?,
+                    parent_branch: row.get(6)?,
+                    worktree_path: PathBuf::from(row.get::<_, String>(7)?),
+                    status: row.get::<_, String>(8)?.parse().unwrap_or(SessionStatus::Active),
+                    created_at: Utc.timestamp_opt(row.get(9)?, 0).unwrap(),
+                    updated_at: Utc.timestamp_opt(row.get(10)?, 0).unwrap(),
+                    last_activity: row.get::<_, Option<i64>>(11)?
                         .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
-                    initial_prompt: row.get(11)?,
-                    ready_to_merge: row.get(12).unwrap_or(false),
-                    original_agent_type: row.get(13).ok(),
-                    original_skip_permissions: row.get(14).ok(),
+                    initial_prompt: row.get(12)?,
+                    ready_to_merge: row.get(13).unwrap_or(false),
+                    original_agent_type: row.get(14).ok(),
+                    original_skip_permissions: row.get(15).ok(),
+                    pending_name_generation: row.get(16).unwrap_or(false),
+                    was_auto_generated: row.get(17).unwrap_or(false),
                 })
             }
         )?;
@@ -208,10 +232,10 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         
         let mut stmt = conn.prepare(
-            "SELECT id, name, repository_path, repository_name,
+            "SELECT id, name, display_name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
                     status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
-                    original_agent_type, original_skip_permissions
+                    original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
              FROM sessions
              WHERE id = ?1"
         )?;
@@ -222,20 +246,23 @@ impl Database {
                 Ok(Session {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    repository_path: PathBuf::from(row.get::<_, String>(2)?),
-                    repository_name: row.get(3)?,
-                    branch: row.get(4)?,
-                    parent_branch: row.get(5)?,
-                    worktree_path: PathBuf::from(row.get::<_, String>(6)?),
-                    status: row.get::<_, String>(7)?.parse().unwrap_or(SessionStatus::Active),
-                    created_at: Utc.timestamp_opt(row.get(8)?, 0).unwrap(),
-                    updated_at: Utc.timestamp_opt(row.get(9)?, 0).unwrap(),
-                    last_activity: row.get::<_, Option<i64>>(10)?
+                    display_name: row.get(2).ok(),
+                    repository_path: PathBuf::from(row.get::<_, String>(3)?),
+                    repository_name: row.get(4)?,
+                    branch: row.get(5)?,
+                    parent_branch: row.get(6)?,
+                    worktree_path: PathBuf::from(row.get::<_, String>(7)?),
+                    status: row.get::<_, String>(8)?.parse().unwrap_or(SessionStatus::Active),
+                    created_at: Utc.timestamp_opt(row.get(9)?, 0).unwrap(),
+                    updated_at: Utc.timestamp_opt(row.get(10)?, 0).unwrap(),
+                    last_activity: row.get::<_, Option<i64>>(11)?
                         .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
-                    initial_prompt: row.get(11)?,
-                    ready_to_merge: row.get(12).unwrap_or(false),
-                    original_agent_type: row.get(13).ok(),
-                    original_skip_permissions: row.get(14).ok(),
+                    initial_prompt: row.get(12)?,
+                    ready_to_merge: row.get(13).unwrap_or(false),
+                    original_agent_type: row.get(14).ok(),
+                    original_skip_permissions: row.get(15).ok(),
+                    pending_name_generation: row.get(16).unwrap_or(false),
+                    was_auto_generated: row.get(17).unwrap_or(false),
                 })
             }
         )?;
@@ -247,10 +274,10 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         
         let mut stmt = conn.prepare(
-            "SELECT id, name, repository_path, repository_name,
+            "SELECT id, name, display_name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
                     status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
-                    original_agent_type, original_skip_permissions
+                    original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
              FROM sessions
              WHERE repository_path = ?1
              ORDER BY ready_to_merge ASC, COALESCE(last_activity, updated_at) DESC"
@@ -262,20 +289,23 @@ impl Database {
                 Ok(Session {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    repository_path: PathBuf::from(row.get::<_, String>(2)?),
-                    repository_name: row.get(3)?,
-                    branch: row.get(4)?,
-                    parent_branch: row.get(5)?,
-                    worktree_path: PathBuf::from(row.get::<_, String>(6)?),
-                    status: row.get::<_, String>(7)?.parse().unwrap_or(SessionStatus::Active),
-                    created_at: Utc.timestamp_opt(row.get(8)?, 0).unwrap(),
-                    updated_at: Utc.timestamp_opt(row.get(9)?, 0).unwrap(),
-                    last_activity: row.get::<_, Option<i64>>(10)?
+                    display_name: row.get(2).ok(),
+                    repository_path: PathBuf::from(row.get::<_, String>(3)?),
+                    repository_name: row.get(4)?,
+                    branch: row.get(5)?,
+                    parent_branch: row.get(6)?,
+                    worktree_path: PathBuf::from(row.get::<_, String>(7)?),
+                    status: row.get::<_, String>(8)?.parse().unwrap_or(SessionStatus::Active),
+                    created_at: Utc.timestamp_opt(row.get(9)?, 0).unwrap(),
+                    updated_at: Utc.timestamp_opt(row.get(10)?, 0).unwrap(),
+                    last_activity: row.get::<_, Option<i64>>(11)?
                         .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
-                    initial_prompt: row.get(11)?,
-                    ready_to_merge: row.get(12).unwrap_or(false),
-                    original_agent_type: row.get(13).ok(),
-                    original_skip_permissions: row.get(14).ok(),
+                    initial_prompt: row.get(12)?,
+                    ready_to_merge: row.get(13).unwrap_or(false),
+                    original_agent_type: row.get(14).ok(),
+                    original_skip_permissions: row.get(15).ok(),
+                    pending_name_generation: row.get(16).unwrap_or(false),
+                    was_auto_generated: row.get(17).unwrap_or(false),
                 })
             }
         )?
@@ -288,10 +318,10 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         
         let mut stmt = conn.prepare(
-            "SELECT id, name, repository_path, repository_name,
+            "SELECT id, name, display_name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
                     status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
-                    original_agent_type, original_skip_permissions
+                    original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
              FROM sessions
              WHERE status = 'active'
              ORDER BY ready_to_merge ASC, COALESCE(last_activity, updated_at) DESC"
@@ -303,20 +333,23 @@ impl Database {
                 Ok(Session {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    repository_path: PathBuf::from(row.get::<_, String>(2)?),
-                    repository_name: row.get(3)?,
-                    branch: row.get(4)?,
-                    parent_branch: row.get(5)?,
-                    worktree_path: PathBuf::from(row.get::<_, String>(6)?),
-                    status: row.get::<_, String>(7)?.parse().unwrap_or(SessionStatus::Active),
-                    created_at: Utc.timestamp_opt(row.get(8)?, 0).unwrap(),
-                    updated_at: Utc.timestamp_opt(row.get(9)?, 0).unwrap(),
-                    last_activity: row.get::<_, Option<i64>>(10)?
+                    display_name: row.get(2).ok(),
+                    repository_path: PathBuf::from(row.get::<_, String>(3)?),
+                    repository_name: row.get(4)?,
+                    branch: row.get(5)?,
+                    parent_branch: row.get(6)?,
+                    worktree_path: PathBuf::from(row.get::<_, String>(7)?),
+                    status: row.get::<_, String>(8)?.parse().unwrap_or(SessionStatus::Active),
+                    created_at: Utc.timestamp_opt(row.get(9)?, 0).unwrap(),
+                    updated_at: Utc.timestamp_opt(row.get(10)?, 0).unwrap(),
+                    last_activity: row.get::<_, Option<i64>>(11)?
                         .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
-                    initial_prompt: row.get(11)?,
-                    ready_to_merge: row.get(12).unwrap_or(false),
-                    original_agent_type: row.get(13).ok(),
-                    original_skip_permissions: row.get(14).ok(),
+                    initial_prompt: row.get(12)?,
+                    ready_to_merge: row.get(13).unwrap_or(false),
+                    original_agent_type: row.get(14).ok(),
+                    original_skip_permissions: row.get(15).ok(),
+                    pending_name_generation: row.get(16).unwrap_or(false),
+                    was_auto_generated: row.get(17).unwrap_or(false),
                 })
             }
         )?
@@ -348,6 +381,24 @@ impl Database {
             params![timestamp.timestamp(), id],
         )?;
         
+        Ok(())
+    }
+    
+    pub fn update_session_display_name(&self, id: &str, display_name: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET display_name = ?1, pending_name_generation = FALSE, updated_at = ?2 WHERE id = ?3",
+            params![display_name, Utc::now().timestamp(), id],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_pending_name_generation(&self, id: &str, pending: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET pending_name_generation = ?1 WHERE id = ?2",
+            params![pending, id],
+        )?;
         Ok(())
     }
     

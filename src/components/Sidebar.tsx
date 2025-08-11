@@ -18,6 +18,7 @@ interface DiffStats {
 
 interface SessionInfo {
     session_id: string
+    display_name?: string  // Human-friendly name generated from prompt
     branch: string
     worktree_path: string
     base_branch: string
@@ -187,6 +188,25 @@ export function Sidebar() {
         }
 
         loadSessions()
+    }, [])
+    
+    // Listen for sessions-refreshed events (e.g., after name generation)
+    useEffect(() => {
+        const setupRefreshListener = async () => {
+            const unlisten = await listen<EnrichedSession[]>('para-ui:sessions-refreshed', (event) => {
+                console.log('Sessions refreshed event received, updating session list')
+                setSessions(event.payload)
+            })
+            
+            return () => {
+                unlisten()
+            }
+        }
+        
+        const cleanup = setupRefreshListener()
+        return () => {
+            cleanup.then(fn => fn())
+        }
     }, [])
     
     // Global shortcut from terminal for Mark Ready (⌘R)

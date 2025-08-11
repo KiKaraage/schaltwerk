@@ -12,6 +12,7 @@ interface DiffStats {
 
 interface SessionInfo {
     session_id: string
+    display_name?: string  // Human-friendly name generated from prompt
     branch: string
     worktree_path: string
     base_branch: string
@@ -68,7 +69,8 @@ export const SessionButton = memo<SessionButtonProps>(({
 }) => {
     const s = session.info
     const color = getSessionStateColor(s.session_state)
-    const task = s.current_task || `Working on ${s.session_id}`
+    const sessionName = s.display_name || s.session_id
+    const task = s.current_task || `Working on ${sessionName}`
     const progressPercent = s.todo_percentage || 0
     const additions = s.diff_stats?.insertions || s.diff_stats?.additions || 0
     const deletions = s.diff_stats?.deletions || 0
@@ -99,7 +101,7 @@ export const SessionButton = memo<SessionButtonProps>(({
             <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                     <div className="font-medium text-slate-100 truncate">
-                        {s.session_id}
+                        {sessionName}
                         {isReadyToMerge && (
                             <span className="ml-2 text-xs text-green-400">
                                 ✓ Ready

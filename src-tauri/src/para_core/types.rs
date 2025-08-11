@@ -13,6 +13,8 @@ pub struct ChangedFile {
 pub struct Session {
     pub id: String,
     pub name: String,
+    // Optional human-friendly display name (does not affect git branch/worktree)
+    pub display_name: Option<String>,
     pub repository_path: PathBuf,
     pub repository_name: String,
     pub branch: String,
@@ -28,6 +30,10 @@ pub struct Session {
     pub original_agent_type: Option<String>,
     // If present, captures whether skip-permissions/force was enabled when the session was originally opened
     pub original_skip_permissions: Option<bool>,
+    // Internal flag to decide whether we should auto-generate a display name post-start
+    pub pending_name_generation: bool,
+    // True if the session name was auto-generated (e.g., docker-style names)
+    pub was_auto_generated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -125,6 +131,8 @@ pub struct DiffStats {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfo {
     pub session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
     pub branch: String,
     pub worktree_path: String,
     pub base_branch: String,

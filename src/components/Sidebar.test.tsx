@@ -43,6 +43,7 @@ interface DiffStats {
 
 interface SessionInfo {
   session_id: string
+  display_name?: string  // Human-friendly name generated from prompt
   branch: string
   worktree_path: string
   base_branch: string
