@@ -6,6 +6,7 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { useFocus } from '../contexts/FocusContext'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { useSelection } from '../contexts/SelectionContext'
+import { computeNextSelectedSessionId } from '../utils/selectionNext'
 import { MarkReadyConfirmation } from './MarkReadyConfirmation'
 import { SessionButton } from './SessionButton'
 
@@ -328,10 +329,17 @@ export function Sidebar() {
             // Session removed
             const u4 = await listen<{ session_name: string }>('para-ui:session-removed', async (event) => {
                 const { session_name } = event.payload
+                const currentSelectedId = selection.kind === 'session' ? (selection.payload || null) : null
+                const nextSelectionId = computeNextSelectedSessionId(sortedSessions, session_name, currentSelectedId)
+
                 setSessions(prev => prev.filter(s => s.info.session_id !== session_name))
-                // If the removed session was selected, fallback to orchestrator
-                if (selection.kind === 'session' && selection.payload === session_name) {
-                    await setSelection({ kind: 'orchestrator' })
+
+                if (currentSelectedId === session_name) {
+                    if (nextSelectionId) {
+                        await setSelection({ kind: 'session', payload: nextSelectionId })
+                    } else {
+                        await setSelection({ kind: 'orchestrator' })
+                    }
                 }
             })
             unlisteners.push(u4)
@@ -363,7 +371,7 @@ export function Sidebar() {
         return () => {
             unlisteners.forEach(u => u())
         }
-    }, [selection, setSelection])
+    }, [selection, setSelection, sortedSessions])
 
     return (
         <div className="h-full flex flex-col">

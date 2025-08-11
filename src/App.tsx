@@ -98,8 +98,6 @@ export default function App() {
       })
       setCancelModalOpen(false)
       
-      // Switch back to orchestrator after canceling session
-      await setSelection({ kind: 'orchestrator' })
     } catch (error) {
       console.error('Failed to cancel session:', error)
       alert(`Failed to cancel session: ${error}`)
