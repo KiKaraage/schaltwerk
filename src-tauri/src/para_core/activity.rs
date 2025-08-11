@@ -67,19 +67,38 @@ impl<E: EventEmitter> ActivityTracker<E> {
             }
             
             if self.db.should_update_stats(&session.id)? {
-                let mut stats = git::calculate_git_stats_fast(&session.worktree_path, &session.parent_branch)?;
-                stats.session_id = session.id.clone();
-                self.db.save_git_stats(&stats)?;
-                // Emit git stats update event
-                let payload = SessionGitStatsUpdated {
-                    session_id: session.id.clone(),
-                    session_name: session.name.clone(),
-                    files_changed: stats.files_changed as u32,
-                    lines_added: stats.lines_added as u32,
-                    lines_removed: stats.lines_removed as u32,
-                    has_uncommitted: stats.has_uncommitted,
-                };
-                let _ = self.emitter.emit_session_git_stats(payload);
+                // Skip stats for missing worktrees; they may have been deleted externally
+                if !session.worktree_path.exists() {
+                    log::warn!(
+                        "Skipping git stats for missing worktree: {}",
+                        session.worktree_path.display()
+                    );
+                } else {
+                    match git::calculate_git_stats_fast(&session.worktree_path, &session.parent_branch) {
+                        Ok(mut stats) => {
+                            stats.session_id = session.id.clone();
+                            if let Err(e) = self.db.save_git_stats(&stats) {
+                                log::warn!("Failed to save git stats for {}: {}", session.name, e);
+                            }
+                            // Emit git stats update event
+                            let payload = SessionGitStatsUpdated {
+                                session_id: session.id.clone(),
+                                session_name: session.name.clone(),
+                                files_changed: stats.files_changed,
+                                lines_added: stats.lines_added,
+                                lines_removed: stats.lines_removed,
+                                has_uncommitted: stats.has_uncommitted,
+                            };
+                            let _ = self.emitter.emit_session_git_stats(payload);
+                        }
+                        Err(e) => {
+                            log::warn!(
+                                "Failed to compute git stats for {}: {}",
+                                session.name, e
+                            );
+                        }
+                    }
+                }
             }
         }
         
