@@ -12,9 +12,10 @@ interface KeyboardShortcutsProps {
     onFocusClaude?: () => void
     onOpenDiffViewer?: () => void
     onFocusTerminal?: () => void
+    isDiffViewerOpen?: boolean
 }
 
-export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onMarkSelectedSessionReady, sessionCount, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude, onOpenDiffViewer, onFocusTerminal }: KeyboardShortcutsProps) {
+export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onMarkSelectedSessionReady, sessionCount, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude, onOpenDiffViewer, onFocusTerminal, isDiffViewerOpen }: KeyboardShortcutsProps) {
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
@@ -34,12 +35,12 @@ export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, on
                     onSelectSession(sessionIndex)
                 }
             } else if (key === 'ArrowUp') {
-                if (onSelectPrevSession) {
+                if (onSelectPrevSession && !isDiffViewerOpen) {
                     event.preventDefault()
                     onSelectPrevSession()
                 }
             } else if (key === 'ArrowDown') {
-                if (onSelectNextSession) {
+                if (onSelectNextSession && !isDiffViewerOpen) {
                     event.preventDefault()
                     onSelectNextSession()
                 }
@@ -87,5 +88,5 @@ export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, on
         return () => {
             window.removeEventListener('keydown', handleKeyDown)
         }
-    }, [sessionCount, onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onMarkSelectedSessionReady, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude, onOpenDiffViewer, onFocusTerminal])
+    }, [sessionCount, onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onMarkSelectedSessionReady, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude, onOpenDiffViewer, onFocusTerminal, isDiffViewerOpen])
 }

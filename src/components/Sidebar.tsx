@@ -57,7 +57,11 @@ interface TerminalUnstuckNotification {
     session_id?: string
 }
 
-export function Sidebar() {
+interface SidebarProps {
+    isDiffViewerOpen?: boolean
+}
+
+export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     const { selection, setSelection } = useSelection()
     const { setFocusForSession, setCurrentFocus } = useFocus()
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
@@ -219,7 +223,8 @@ export function Sidebar() {
             const sessionKey = selection.kind === 'orchestrator' ? 'orchestrator' : (selection.payload || 'unknown')
             setFocusForSession(sessionKey, 'terminal')
             setCurrentFocus('terminal')
-        }
+        },
+        isDiffViewerOpen
     })
 
     // Persist user preferences

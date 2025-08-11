@@ -60,4 +60,50 @@ describe('useKeyboardShortcuts', () => {
     expect(onOpenDiffViewer).toHaveBeenCalled()
     expect(onCancelSelectedSession).toHaveBeenCalledWith(false)
   })
+
+  it('does not navigate sessions with arrow keys when diff viewer is open', () => {
+    const onSelectPrevSession = vi.fn()
+    const onSelectNextSession = vi.fn()
+    const onSelectOrchestrator = vi.fn()
+    const onSelectSession = vi.fn()
+
+    renderHook(() => useKeyboardShortcuts({ 
+      onSelectOrchestrator, 
+      onSelectSession, 
+      onSelectPrevSession, 
+      onSelectNextSession,
+      sessionCount: 3,
+      isDiffViewerOpen: true
+    }))
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true })
+
+    pressKey('ArrowUp', { metaKey: true })
+    pressKey('ArrowDown', { metaKey: true })
+
+    expect(onSelectPrevSession).not.toHaveBeenCalled()
+    expect(onSelectNextSession).not.toHaveBeenCalled()
+  })
+
+  it('navigates sessions with arrow keys when diff viewer is closed', () => {
+    const onSelectPrevSession = vi.fn()
+    const onSelectNextSession = vi.fn()
+    const onSelectOrchestrator = vi.fn()
+    const onSelectSession = vi.fn()
+
+    renderHook(() => useKeyboardShortcuts({ 
+      onSelectOrchestrator, 
+      onSelectSession, 
+      onSelectPrevSession, 
+      onSelectNextSession,
+      sessionCount: 3,
+      isDiffViewerOpen: false
+    }))
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true })
+
+    pressKey('ArrowUp', { metaKey: true })
+    pressKey('ArrowDown', { metaKey: true })
+
+    expect(onSelectPrevSession).toHaveBeenCalled()
+    expect(onSelectNextSession).toHaveBeenCalled()
+  })
 })

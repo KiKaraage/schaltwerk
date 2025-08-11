@@ -162,9 +162,13 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       const changedFiles = await invoke<ChangedFile[]>('get_changed_files_from_main', { sessionName })
       setFiles(changedFiles)
       // Auto-select first file when opening if none selected
-      if (changedFiles.length > 0 && (!selectedFile || !isOpen)) {
-        setSelectedFile(changedFiles[0].path)
-      }
+      // Use callback to get current selectedFile value to avoid stale closure
+      setSelectedFile(currentSelected => {
+        if (!currentSelected && changedFiles.length > 0) {
+          return changedFiles[0].path
+        }
+        return currentSelected
+      })
       
       const currentBranch = await invoke<string>('get_current_branch_name', { sessionName })
       const baseBranch = await invoke<string>('get_base_branch_name', { sessionName })
@@ -179,7 +183,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     } catch (error) {
       console.error('Failed to load changed files:', error)
     }
-  }, [sessionName, selectedFile, isOpen])
+  }, [sessionName])
   
   const loadFileDiff = useCallback(async (path: string) => {
     if (!path) return
@@ -231,22 +235,78 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       loadFileDiff(selectedFile)
     }
   }, [selectedFile, isOpen, loadFileDiff])
+
+  const formatReviewForPrompt = (comments: ReviewComment[]) => {
+    let output = '\n# Code Review Comments\n\n'
+    
+    const commentsByFile = comments.reduce((acc, comment) => {
+      if (!acc[comment.filePath]) {
+        acc[comment.filePath] = []
+      }
+      acc[comment.filePath].push(comment)
+      return acc
+    }, {} as Record<string, ReviewComment[]>)
+
+    for (const [file, fileComments] of Object.entries(commentsByFile)) {
+      output += `## ${file}\n\n`
+      
+      for (const comment of fileComments) {
+        output += `### Line ${comment.lineRange.start} (${comment.side === 'old' ? 'base' : 'current'}):\n`
+        output += `\`\`\`\n${comment.selectedText}\n\`\`\`\n`
+        output += `**Comment:** ${comment.comment}\n\n`
+      }
+    }
+
+    return output
+  }
+
+  const handleFinishReview = useCallback(async () => {
+    if (!currentReview || currentReview.comments.length === 0) return
+    if (!sessionName) return
+
+    const reviewText = formatReviewForPrompt(currentReview.comments)
+    
+    try {
+      const terminalId = `session-${sessionName}-top`
+      await invoke('write_terminal', { 
+        id: terminalId, 
+        data: reviewText 
+      })
+      
+      clearReview()
+      onClose()
+    } catch (error) {
+      console.error('Failed to send review to terminal:', error)
+    }
+  }, [currentReview, sessionName, clearReview, onClose])
   
   useEffect(() => {
+    // Only register keyboard handler when the diff viewer is open
+    if (!isOpen) return
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toUpperCase().includes('MAC')
       const modifierKey = isMac ? e.metaKey : e.ctrlKey
 
       if (e.key === 'Escape') {
-        // Always close the diff viewer on ESC, and clear any transient UI
-        setShowCommentForm(false)
-        setLineSelection(null)
-        if (isOpen) onClose()
+        e.preventDefault()
+        e.stopPropagation()
+        // Clear any transient UI first
+        if (showCommentForm) {
+          setShowCommentForm(false)
+          return
+        }
+        if (lineSelection) {
+          setLineSelection(null)
+          return
+        }
+        // Then close the diff viewer
+        onClose()
         return
       }
 
       // Cmd/Ctrl+ArrowUp/Down: navigate files
-      if (isOpen && modifierKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      if (modifierKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
         if (!files.length) return
         e.preventDefault()
         e.stopImmediatePropagation?.()
@@ -268,7 +328,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       }
 
       // Cmd/Ctrl+Enter: open comment form (if selection)
-      if (isOpen && modifierKey && !e.shiftKey && e.key === 'Enter') {
+      if (modifierKey && !e.shiftKey && e.key === 'Enter') {
         if (lineSelection && !showCommentForm) {
           e.preventDefault()
           e.stopImmediatePropagation?.()
@@ -278,7 +338,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       }
 
       // Cmd/Ctrl+Shift+Enter: finish review
-      if (isOpen && modifierKey && e.shiftKey && e.key === 'Enter') {
+      if (modifierKey && e.shiftKey && e.key === 'Enter') {
         if (!showCommentForm && currentReview && currentReview.comments.length > 0) {
           e.preventDefault()
           e.stopImmediatePropagation?.()
@@ -288,9 +348,10 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       }
     }
     
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, showCommentForm, onClose, files, selectedFile, loadFileDiff, lineSelection, currentReview])
+    // Use capture phase to handle Escape before other handlers
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [isOpen, showCommentForm, onClose, files, selectedFile, loadFileDiff, lineSelection, currentReview, handleFinishReview])
 
   const handleViewModeChange = useCallback((mode: 'split' | 'unified') => {
     setViewMode(mode)
@@ -448,49 +509,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     setLineSelection(null)
   }, [lineSelection, selectedFile, addComment])
 
-  const handleFinishReview = async () => {
-    if (!currentReview || currentReview.comments.length === 0) return
-    if (!sessionName) return
-
-    const reviewText = formatReviewForPrompt(currentReview.comments)
-    
-    try {
-      const terminalId = `session-${sessionName}-top`
-      await invoke('write_terminal', { 
-        id: terminalId, 
-        data: reviewText 
-      })
-      
-      clearReview()
-      onClose()
-    } catch (error) {
-      console.error('Failed to send review to terminal:', error)
-    }
-  }
-
-  const formatReviewForPrompt = (comments: ReviewComment[]) => {
-    let output = '\n# Code Review Comments\n\n'
-    
-    const commentsByFile = comments.reduce((acc, comment) => {
-      if (!acc[comment.filePath]) {
-        acc[comment.filePath] = []
-      }
-      acc[comment.filePath].push(comment)
-      return acc
-    }, {} as Record<string, ReviewComment[]>)
-
-    for (const [file, fileComments] of Object.entries(commentsByFile)) {
-      output += `## ${file}\n\n`
-      
-      for (const comment of fileComments) {
-        output += `### Line ${comment.lineRange.start} (${comment.side === 'old' ? 'base' : 'current'}):\n`
-        output += `\`\`\`\n${comment.selectedText}\n\`\`\`\n`
-        output += `**Comment:** ${comment.comment}\n\n`
-      }
-    }
-
-    return output
-  }
   
   const getFileIcon = (changeType: string) => {
     switch (changeType) {

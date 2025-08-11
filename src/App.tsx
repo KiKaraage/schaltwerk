@@ -182,7 +182,7 @@ export default function App() {
       <div className="h-full bg-panel border-r border-slate-800 overflow-y-auto">
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-y-auto">
-            <Sidebar />
+            <Sidebar isDiffViewerOpen={isDiffViewerOpen} />
           </div>
           <div className="p-2 border-t border-slate-800">
             <button 
