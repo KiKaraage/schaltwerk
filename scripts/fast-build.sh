@@ -20,16 +20,9 @@ export CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_OPT_LEVEL=0
 echo "📦 Building frontend (optimized)..."
 npx vite build
 
-echo "🦀 Building Rust backend (optimized release)..."
-cd src-tauri
-
-if [ -d "target/release/deps" ]; then
-    echo "♻️  Using cached dependencies..."
-fi
-
-cargo build --release --jobs 8
-
-cd ..
+echo "🦀 Building Tauri app (packs frontend assets into binary)…"
+# Build the Tauri app so the frontend dist is embedded and not blank
+npm run tauri build
 
 echo "✅ Build complete! Starting application..."
 VITE_PORT=$PORT PORT=$PORT PARA_REPO_PATH="$(pwd)" ./src-tauri/target/release/ui

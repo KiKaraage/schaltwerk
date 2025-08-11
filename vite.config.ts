@@ -4,14 +4,14 @@ import { defineConfig } from "vite";
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
-export default defineConfig(async () => ({
+export default defineConfig(({ command }) => ({
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
   clearScreen: false,
   // Ensure built asset paths work when loaded from filesystem in the Tauri bundle
-  base: "./",
+  base: command === 'build' ? './' : '/',
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: parseInt(process.env.VITE_PORT || "1420"),
