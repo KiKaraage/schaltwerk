@@ -72,6 +72,7 @@ export function Sidebar() {
         sessionName: '',
         hasUncommitted: false
     })
+    const sidebarRef = useRef<HTMLDivElement>(null)
     
     // Memoize displayed sessions (filter + sort) to prevent re-computation on every render
     const sortedSessions = useMemo(() => {
@@ -195,16 +196,29 @@ export function Sidebar() {
         onSelectNextSession: selectNext,
         onFocusSidebar: () => {
             setCurrentFocus('sidebar')
+            // Focus the first button in the sidebar
+            setTimeout(() => {
+                const button = sidebarRef.current?.querySelector('button')
+                if (button instanceof HTMLElement) {
+                    button.focus()
+                }
+            }, 50)
         },
         onFocusClaude: () => {
             const sessionKey = selection.kind === 'orchestrator' ? 'orchestrator' : (selection.payload || 'unknown')
             setFocusForSession(sessionKey, 'claude')
-            // Focus will be applied by TerminalGrid effect
+            setCurrentFocus('claude')
+            // This will trigger TerminalGrid's currentFocus effect immediately
         },
         onOpenDiffViewer: () => {
             // Only open if a session is selected
             if (selection.kind !== 'session') return
             window.dispatchEvent(new CustomEvent('para-ui:open-diff-view'))
+        },
+        onFocusTerminal: () => {
+            const sessionKey = selection.kind === 'orchestrator' ? 'orchestrator' : (selection.payload || 'unknown')
+            setFocusForSession(sessionKey, 'terminal')
+            setCurrentFocus('terminal')
         }
     })
 
@@ -437,7 +451,7 @@ export function Sidebar() {
     }, [setSelection])
 
     return (
-        <div className="h-full flex flex-col">
+        <div ref={sidebarRef} className="h-full flex flex-col">
             <div className="px-3 py-2 border-b border-slate-800 text-sm text-slate-300">Repository (Orchestrator)</div>
             <div className="px-2 pt-2">
                 <button
