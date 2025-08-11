@@ -29,7 +29,7 @@ describe('MarkReadyConfirmation', () => {
 
     render(<MarkReadyConfirmation {...baseProps} onClose={onClose} onSuccess={onSuccess} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /Mark as Ready/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Mark as Reviewed/ }))
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('para_core_mark_session_ready', { name: 's1', autoCommit: false })
@@ -43,7 +43,7 @@ describe('MarkReadyConfirmation', () => {
 
     render(<MarkReadyConfirmation {...baseProps} hasUncommittedChanges={true} />)
 
-    const confirmBtn = screen.getByRole('button', { name: /Mark as Ready/ }) as HTMLButtonElement
+    const confirmBtn = screen.getByRole('button', { name: /Mark as Reviewed/ }) as HTMLButtonElement
     // Initially autoCommit = true => enabled
     expect(confirmBtn.disabled).toBe(false)
 

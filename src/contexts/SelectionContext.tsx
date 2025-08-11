@@ -140,7 +140,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
                 sessionName: newSelection.payload
             }))
             
-            // Mark as ready
+            // Mark as reviewed
             setIsReady(true)
 
             console.log('[SelectionContext] Selection change complete')

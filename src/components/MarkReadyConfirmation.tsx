@@ -38,8 +38,8 @@ export function MarkReadyConfirmation({
         alert('Session has uncommitted changes. Please commit them first or enable auto-commit.')
       }
     } catch (error) {
-      console.error('Failed to mark session as ready:', error)
-      alert(`Failed to mark session as ready: ${error}`)
+      console.error('Failed to mark session as reviewed:', error)
+      alert(`Failed to mark session as reviewed: ${error}`)
     } finally {
       setLoading(false)
     }
@@ -50,7 +50,7 @@ export function MarkReadyConfirmation({
   const body = (
     <div>
       <p className="text-slate-300 mb-4">
-        Marking <span className="font-mono text-blue-400">{sessionName}</span> as ready for merge.
+        Marking <span className="font-mono text-blue-400">{sessionName}</span> as reviewed.
       </p>
       {hasUncommittedChanges && (
         <div className="bg-amber-950/50 border border-amber-800 rounded p-3 mb-4">
@@ -63,13 +63,13 @@ export function MarkReadyConfirmation({
               className="rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500"
             />
             <span className="text-sm text-slate-300">
-              Automatically commit all changes with message "Mark session {sessionName} as ready for merge"
+              Automatically commit all changes with message "Mark session {sessionName} as reviewed"
             </span>
           </label>
         </div>
       )}
       <p className="text-slate-400 text-sm">
-        Ready sessions will be moved to the bottom of the list and visually marked as complete. They can be merged later.
+        Reviewed sessions will be moved to the bottom of the list and visually marked as complete. They can be merged later.
       </p>
     </div>
   )
@@ -77,10 +77,10 @@ export function MarkReadyConfirmation({
   return (
     <ConfirmModal
       open={open}
-      title={"Mark Session as Ready"}
+      title={"Mark Session as Reviewed"}
       body={body}
-      confirmText={loading ? 'Marking…' : 'Mark as Ready'}
-      confirmTitle="Mark as ready (Enter)"
+      confirmText={loading ? 'Marking…' : 'Mark as Reviewed'}
+      confirmTitle="Mark as reviewed (Enter)"
       cancelText="Cancel"
       cancelTitle="Cancel (Esc)"
       onConfirm={handleConfirm}

@@ -222,7 +222,7 @@ describe('Terminal component', () => {
 
   // Removed flaky resize debounce test per guidance
 
-  it('intercepts global shortcuts for new session and mark ready', async () => {
+  it('intercepts global shortcuts for new session and mark reviewed', async () => {
     // Force mac platform
     Object.defineProperty(window.navigator, 'platform', { value: 'MacIntel', configurable: true })
 
@@ -247,7 +247,7 @@ describe('Terminal component', () => {
     expect(markReadySpy).toHaveBeenCalledTimes(1)
   })
 
-  it('intercepts Ctrl-based shortcuts on non-Mac', async () => {
+  it('intercepts Ctrl-based shortcuts on non-Mac for mark reviewed', async () => {
     Object.defineProperty(window.navigator, 'platform', { value: 'Win32', configurable: true })
     render(<Terminal terminalId="session-keys2-top" sessionName="keys2" />)
     await flushAll()

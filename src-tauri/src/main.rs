@@ -630,26 +630,26 @@ async fn open_in_vscode(worktree_path: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn para_core_mark_session_ready(name: String, auto_commit: bool) -> Result<bool, String> {
-    log::info!("Marking session {name} as ready for merge (auto_commit: {auto_commit})");
+    log::info!("Marking session {name} as reviewed (auto_commit: {auto_commit})");
     
     let core = get_para_core().await;
     let core = core.lock().await;
     let manager = core.session_manager();
     
     manager.mark_session_ready(&name, auto_commit)
-        .map_err(|e| format!("Failed to mark session as ready: {e}"))
+        .map_err(|e| format!("Failed to mark session as reviewed: {e}"))
 }
 
 #[tauri::command]
 async fn para_core_unmark_session_ready(name: String) -> Result<(), String> {
-    log::info!("Unmarking session {name} as ready for merge");
+    log::info!("Unmarking session {name} as reviewed");
     
     let core = get_para_core().await;
     let core = core.lock().await;
     let manager = core.session_manager();
     
     manager.unmark_session_ready(&name)
-        .map_err(|e| format!("Failed to unmark session as ready: {e}"))
+        .map_err(|e| format!("Failed to unmark session as reviewed: {e}"))
 }
 
 fn main() {

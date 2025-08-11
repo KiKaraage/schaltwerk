@@ -392,7 +392,7 @@ impl SessionManager {
             // Auto-commit changes
             git::commit_all_changes(
                 &session.worktree_path,
-                &format!("Mark session {session_name} as ready for merge")
+                &format!("Mark session {session_name} as reviewed")
             )?;
         }
         

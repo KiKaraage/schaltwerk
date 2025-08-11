@@ -112,7 +112,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
                 return false // Prevent xterm.js from processing this event
             }
             if (modifierKey && (event.key === 'r' || event.key === 'R')) {
-                // Dispatch a custom event to trigger the global mark ready handler
+                // Dispatch a custom event to trigger the global mark reviewed handler
                 window.dispatchEvent(new CustomEvent('global-mark-ready-shortcut'))
                 return false
             }

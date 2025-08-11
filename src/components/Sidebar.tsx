@@ -217,7 +217,7 @@ export function Sidebar() {
         }
     }, [])
     
-    // Global shortcut from terminal for Mark Ready (⌘R)
+    // Global shortcut from terminal for Mark Reviewed (⌘R)
     useEffect(() => {
         const handler = () => handleMarkSelectedSessionReady()
         window.addEventListener('global-mark-ready-shortcut', handler as any)
@@ -419,7 +419,7 @@ export function Sidebar() {
                                         const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
                                         setSessions(result)
                                     } catch (err) {
-                                        console.error('Failed to unmark session:', err)
+                                        console.error('Failed to unmark reviewed session:', err)
                                     }
                                 }}
                                 onCancel={(sessionId, hasUncommitted) => {

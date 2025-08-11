@@ -93,7 +93,7 @@ export const SessionButton = memo<SessionButtonProps>(({
                     'ring-2 ring-amber-400/50 shadow-lg shadow-amber-400/20 bg-amber-950/20'
             )}
             title={isSelected 
-                ? `Selected session • Diff: ⌘G • Cancel: ⌘D (⇧⌘D force) • Mark Ready: ⌘R` 
+                ? `Selected session • Diff: ⌘G • Cancel: ⌘D (⇧⌘D force) • Mark Reviewed: ⌘R` 
                 : index < 8 
                     ? `Select session (⌘${index + 2})` 
                     : `Select session`}
@@ -104,7 +104,7 @@ export const SessionButton = memo<SessionButtonProps>(({
                         {sessionName}
                         {isReadyToMerge && (
                             <span className="ml-2 text-xs text-green-400">
-                                ✓ Ready
+                                ✓ Reviewed
                             </span>
                         )}
                         {isBlocked && <span className="ml-2 text-xs text-red-400">⚠ blocked</span>}
@@ -135,9 +135,9 @@ export const SessionButton = memo<SessionButtonProps>(({
                             onMarkReady(s.session_id, s.has_uncommitted_changes || false)
                         }}
                         className="text-[11px] px-2 py-0.5 rounded bg-green-800/60 hover:bg-green-700/60"
-                        title="Mark as ready for merge (⌘R)"
+                        title="Mark as reviewed (⌘R)"
                     >
-                        Mark Ready
+                        Mark Reviewed
                     </button>
                 ) : (
                     <button 
@@ -146,7 +146,7 @@ export const SessionButton = memo<SessionButtonProps>(({
                             onUnmarkReady(s.session_id)
                         }}
                         className="text-[11px] px-2 py-0.5 rounded bg-slate-700/60 hover:bg-slate-600/60"
-                        title="Unmark as ready"
+                        title="Unmark as reviewed"
                     >
                         Unmark
                     </button>
@@ -171,7 +171,7 @@ export const SessionButton = memo<SessionButtonProps>(({
                         onCancel(s.session_id, s.has_uncommitted_changes || false)
                     }}
                     className="text-[11px] px-2 py-0.5 rounded bg-red-800/60 hover:bg-red-700/60"
-                    title="Cancel session (⌘D, ⇧⌘D to force)"
+                        title="Cancel session (⌘D, ⇧⌘D to force)"
                 >
                     Cancel
                 </button>

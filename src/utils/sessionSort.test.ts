@@ -14,7 +14,7 @@ describe('sessionSort', () => {
     expect(sorted[1]).toBe(a)
   })
 
-  it('places not-ready sessions before ready sessions regardless of time', () => {
+  it('places not-reviewed sessions before reviewed sessions regardless of time', () => {
     const readyRecent = make(true, '2024-01-02T00:00:00Z')
     const notReadyOld = make(false, '2023-12-31T00:00:00Z')
     const sorted = sortSessions([readyRecent, notReadyOld])
