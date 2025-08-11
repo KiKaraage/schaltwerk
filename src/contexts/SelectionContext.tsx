@@ -15,7 +15,8 @@ interface TerminalSet {
 interface SelectionContextType {
     selection: Selection
     terminals: TerminalSet
-    setSelection: (selection: Selection) => Promise<void>
+    setSelection: (selection: Selection, forceRecreate?: boolean) => Promise<void>
+    clearTerminalTracking: (terminalIds: string[]) => void
     isReady: boolean
 }
 
@@ -112,12 +113,21 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
         return ids
     }, [getTerminalIds, createTerminal])
     
+    // Clear terminal tracking for specific terminals
+    const clearTerminalTracking = useCallback((terminalIds: string[]) => {
+        console.log('[SelectionContext] Clearing terminal tracking for:', terminalIds)
+        terminalIds.forEach(id => {
+            terminalsCreated.current.delete(id)
+            creationLock.current.delete(id)
+        })
+    }, [])
+    
     // Set selection atomically
-    const setSelection = useCallback(async (newSelection: Selection) => {
-        console.log('[SelectionContext] Changing selection to:', newSelection)
+    const setSelection = useCallback(async (newSelection: Selection, forceRecreate = false) => {
+        console.log('[SelectionContext] Changing selection to:', newSelection, 'forceRecreate:', forceRecreate)
         
-        // Check if we're actually changing selection (but allow initial setup)
-        if (isReady && selection.kind === newSelection.kind && selection.payload === newSelection.payload) {
+        // Check if we're actually changing selection (but allow initial setup or force recreate)
+        if (!forceRecreate && isReady && selection.kind === newSelection.kind && selection.payload === newSelection.payload) {
             console.log('[SelectionContext] Selection unchanged, skipping')
             return
         }
@@ -126,6 +136,12 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
         setIsReady(false)
         
         try {
+            // If forcing recreate, clear terminal tracking first
+            if (forceRecreate) {
+                const ids = getTerminalIds(newSelection)
+                clearTerminalTracking([ids.top, ids.bottom])
+            }
+            
             // Ensure terminals exist BEFORE changing selection
             const terminalIds = await ensureTerminals(newSelection)
             
@@ -148,7 +164,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             // Stay on current selection if we fail
             setIsReady(true)
         }
-    }, [ensureTerminals])
+    }, [ensureTerminals, getTerminalIds, clearTerminalTracking])
     
     // Initialize on mount
     useEffect(() => {
@@ -195,6 +211,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             selection, 
             terminals,
             setSelection,
+            clearTerminalTracking,
             isReady
         }}>
             {children}

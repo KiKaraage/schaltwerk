@@ -8,6 +8,11 @@ import 'xterm/css/xterm.css';
 // Global guard to avoid starting Claude multiple times for the same terminal id across remounts
 const startedGlobal = new Set<string>();
 
+// Export function to clear started tracking for specific terminals
+export function clearTerminalStartedTracking(terminalIds: string[]) {
+    terminalIds.forEach(id => startedGlobal.delete(id));
+}
+
 interface TerminalProps {
     terminalId: string;
     className?: string;

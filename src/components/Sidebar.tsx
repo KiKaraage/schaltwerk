@@ -9,6 +9,8 @@ import { useSelection } from '../contexts/SelectionContext'
 import { computeNextSelectedSessionId } from '../utils/selectionNext'
 import { MarkReadyConfirmation } from './MarkReadyConfirmation'
 import { SessionButton } from './SessionButton'
+import { SwitchOrchestratorModal } from './SwitchOrchestratorModal'
+import { clearTerminalStartedTracking } from './Terminal'
 
 interface DiffStats {
     files_changed: number
@@ -62,7 +64,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
-    const { selection, setSelection } = useSelection()
+    const { selection, setSelection, clearTerminalTracking } = useSelection()
     const { setFocusForSession, setCurrentFocus } = useFocus()
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
     const [filterMode, setFilterMode] = useState<'all' | 'unreviewed' | 'reviewed'>(() => {
@@ -76,6 +78,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
         sessionName: '',
         hasUncommitted: false
     })
+    const [switchOrchestratorModal, setSwitchOrchestratorModal] = useState(false)
     const sidebarRef = useRef<HTMLDivElement>(null)
     
     // Memoize displayed sessions (filter + sort) to prevent re-computation on every render
@@ -461,7 +464,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             <div className="px-2 pt-2">
                 <button
                     onClick={handleSelectOrchestrator}
-                    className={clsx('w-full text-left px-3 py-2 rounded-md mb-2 group', selection.kind === 'orchestrator' ? 'bg-slate-800/60 session-ring session-ring-blue' : 'hover:bg-slate-800/30')}
+                    className={clsx('w-full text-left px-3 py-2 rounded-md mb-1 group', selection.kind === 'orchestrator' ? 'bg-slate-800/60 session-ring session-ring-blue' : 'hover:bg-slate-800/30')}
                     title="Select orchestrator (⌘1)"
                 >
                     <div className="flex items-center justify-between">
@@ -472,6 +475,18 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                     </div>
                     </div>
                     <div className="text-xs text-slate-500">Original repository from which sessions are created</div>
+                </button>
+                <button
+                    onClick={() => setSwitchOrchestratorModal(true)}
+                    className="w-full text-left px-3 py-1.5 rounded-md mb-2 hover:bg-slate-800/30 group"
+                    title="Switch orchestrator model"
+                >
+                    <div className="flex items-center gap-2 text-xs">
+                        <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        </svg>
+                        <span className="text-slate-400">Switch Model</span>
+                    </div>
                 </button>
             </div>
 
@@ -555,6 +570,45 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                     // Reload sessions
                     const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
                     setSessions(result)
+                }}
+            />
+            <SwitchOrchestratorModal
+                open={switchOrchestratorModal}
+                onClose={() => setSwitchOrchestratorModal(false)}
+                onSwitch={async (agentType) => {
+                    // First close existing orchestrator terminals
+                    const orchestratorTerminals = ['orchestrator-top', 'orchestrator-bottom', 'orchestrator-right']
+                    for (const terminalId of orchestratorTerminals) {
+                        try {
+                            const exists = await invoke<boolean>('terminal_exists', { id: terminalId })
+                            if (exists) {
+                                await invoke('close_terminal', { id: terminalId })
+                            }
+                        } catch (e) {
+                            console.error(`Failed to close terminal ${terminalId}:`, e)
+                        }
+                    }
+                    
+                    // Clear terminal tracking so they can be recreated
+                    clearTerminalTracking(orchestratorTerminals)
+                    
+                    // Also clear the Terminal component's global started tracking
+                    clearTerminalStartedTracking(orchestratorTerminals)
+                    
+                    // Update the agent type preference
+                    await invoke('para_core_set_agent_type', { agentType })
+                    
+                    // Close the modal
+                    setSwitchOrchestratorModal(false)
+                    
+                    // Dispatch event to reset terminals UI
+                    window.dispatchEvent(new Event('para-ui:reset-terminals'))
+                    
+                    // Small delay to ensure terminals are closed before recreating
+                    setTimeout(async () => {
+                        // Force recreate terminals with new model
+                        await setSelection({ kind: 'orchestrator' }, true)
+                    }, 200)
                 }}
             />
         </div>

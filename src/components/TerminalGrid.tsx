@@ -2,11 +2,12 @@ import { Terminal, TerminalHandle } from './Terminal'
 import Split from 'react-split'
 import { useSelection } from '../contexts/SelectionContext'
 import { useFocus } from '../contexts/FocusContext'
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 
 export function TerminalGrid() {
     const { selection, terminals } = useSelection()
     const { getFocusForSession, setFocusForSession, currentFocus } = useFocus()
+    const [terminalKey, setTerminalKey] = useState(0)
     
     const claudeTerminalRef = useRef<TerminalHandle>(null)
     const regularTerminalRef = useRef<TerminalHandle>(null)
@@ -20,6 +21,17 @@ export function TerminalGrid() {
     const getSessionKey = () => {
         return selection.kind === 'orchestrator' ? 'orchestrator' : selection.payload || 'unknown'
     }
+    
+    // Listen for terminal reset events
+    useEffect(() => {
+        const handleTerminalReset = () => {
+            console.log('[TerminalGrid] Terminal reset event received')
+            setTerminalKey(prev => prev + 1)
+        }
+        
+        window.addEventListener('para-ui:reset-terminals', handleTerminalReset)
+        return () => window.removeEventListener('para-ui:reset-terminals', handleTerminalReset)
+    }, [])
 
     // Focus appropriate terminal when selection changes
     useEffect(() => {
@@ -91,6 +103,7 @@ export function TerminalGrid() {
                     <div className="session-header-ruler flex-shrink-0" />
                     <div className="flex-1 min-h-0" onClick={handleClaudeSessionClick}>
                         <Terminal 
+                            key={`${terminals.top}-${terminalKey}`}
                             ref={claudeTerminalRef}
                             terminalId={terminals.top} 
                             className="h-full w-full" 
@@ -111,6 +124,7 @@ export function TerminalGrid() {
                     </div>
                     <div className="flex-1 min-h-0" onClick={handleTerminalClick}>
                         <Terminal 
+                            key={`${terminals.bottom}-${terminalKey}`}
                             ref={regularTerminalRef}
                             terminalId={terminals.bottom} 
                             className="h-full w-full" 
