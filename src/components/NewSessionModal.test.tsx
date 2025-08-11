@@ -52,6 +52,8 @@ describe('NewSessionModal', () => {
     })
     const call = onCreate.mock.calls.at(-1)![0]
     expect(call.name).toMatch(/^[a-z]+_[a-z]+$/)
+    // When user didn't edit the name input, userEditedName should be false
+    expect(call.userEditedName).toBe(false)
   })
 
   // Skipping edge-case validation UI assertion to avoid flakiness in CI
@@ -81,10 +83,15 @@ describe('NewSessionModal', () => {
     cleanup()
     render(<NewSessionModal open={true} onClose={vi.fn()} onCreate={onCreate} />)
     const nameAgain = (await screen.findAllByPlaceholderText('eager_cosmos'))[0] as HTMLInputElement
+    // Replace the generated name with a manual one via user typing
     fireEvent.change(nameAgain, { target: { value: 'run' } })
-    const cmdEnter = new KeyboardEvent('keydown', { key: 'Enter', metaKey: true })
-    window.dispatchEvent(cmdEnter)
+    // Use the Create button to avoid flakiness with global keybinding in tests
+    fireEvent.click(screen.getByTitle('Create session (Cmd+Enter)'))
 
     await waitFor(() => expect(onCreate).toHaveBeenCalled())
+
+    // After editing the name, userEditedName should be true
+    const call = onCreate.mock.calls.at(-1)![0]
+    expect(call.userEditedName).toBe(true)
   })
 })

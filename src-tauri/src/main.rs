@@ -286,9 +286,12 @@ fn get_current_directory() -> Result<String, String> {
 use tauri::Emitter;
 
 #[tauri::command]
-async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: Option<String>, base_branch: Option<String>) -> Result<para_core::Session, String> {
-    // Check if the name looks auto-generated (docker-style: adjective_noun)
-    let was_auto_generated = name.contains('_') && name.split('_').count() == 2;
+async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: Option<String>, base_branch: Option<String>, user_edited_name: Option<bool>) -> Result<para_core::Session, String> {
+    // Consider it auto-generated only if it matches docker-style pattern
+    // AND the user did not edit the field explicitly.
+    let looks_docker_style = name.contains('_') && name.split('_').count() == 2;
+    let was_user_edited = user_edited_name.unwrap_or(false);
+    let was_auto_generated = looks_docker_style && !was_user_edited;
     
     let core = get_para_core().await;
     let core_lock = core.lock().await;

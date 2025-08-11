@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react'
 import { useClaudeSession } from '../hooks/useClaudeSession'
 import { generateDockerStyleName } from '../utils/dockerNames'
 
@@ -9,11 +9,13 @@ interface Props {
         name: string
         prompt?: string
         baseBranch: string
+        userEditedName?: boolean
     }) => void
 }
 
 export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [name, setName] = useState(() => generateDockerStyleName())
+    const [, setWasEdited] = useState(false)
     const [prompt, setPrompt] = useState('')
     const [baseBranch, setBaseBranch] = useState('main')
     const [skipPermissions, setSkipPermissions] = useState(false)
@@ -22,6 +24,9 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const { getSkipPermissions, setSkipPermissions: saveSkipPermissions, getAgentType, setAgentType: saveAgentType } = useClaudeSession()
     const nameInputRef = useRef<HTMLInputElement>(null)
     const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
+    const wasEditedRef = useRef(false)
+    const createRef = useRef<() => void>(() => {})
+    const initialGeneratedNameRef = useRef<string>('')
 
     const handleSkipPermissionsChange = async (checked: boolean) => {
         setSkipPermissions(checked)
@@ -49,6 +54,8 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newName = e.target.value
         setName(newName)
+        setWasEdited(true)
+        wasEditedRef.current = true
         
         // Clear validation error when user starts typing again
         if (validationError) {
@@ -57,8 +64,10 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     }
 
     const handleCreate = useCallback(() => {
-        // Generate new name if current name is empty or if we're creating with a prompt
-        let finalName = name.trim() || generateDockerStyleName()
+        // Read directly from input when available to avoid any stale state in tests
+        const currentValue = nameInputRef.current?.value ?? name
+        // Generate new name if current value is empty
+        let finalName = currentValue.trim() || generateDockerStyleName()
         
         const error = validateSessionName(finalName)
         if (error) {
@@ -69,17 +78,30 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
         // Replace spaces with underscores for the actual session name
         finalName = finalName.replace(/ /g, '_')
         
-        onCreate({ 
-            name: finalName, 
-            prompt: prompt || undefined, 
-            baseBranch
+        const userEdited = wasEditedRef.current || (
+            initialGeneratedNameRef.current && currentValue.trim() !== initialGeneratedNameRef.current
+        )
+
+        onCreate({
+            name: finalName,
+            prompt: prompt || undefined,
+            baseBranch,
+            // If user touched the input, treat name as manually edited
+            userEditedName: !!userEdited,
         })
     }, [name, prompt, baseBranch, onCreate, validateSessionName])
 
-    useEffect(() => {
+    // Keep ref in sync immediately on render to avoid stale closures in tests
+    createRef.current = handleCreate
+
+    useLayoutEffect(() => {
         if (open) {
             // Generate a fresh Docker-style name each time the modal opens
-            setName(generateDockerStyleName())
+            const gen = generateDockerStyleName()
+            initialGeneratedNameRef.current = gen
+            setName(gen)
+            setWasEdited(false)
+            wasEditedRef.current = false
             setPrompt('')
             setValidationError('')
             
@@ -102,13 +124,14 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                 onClose()
             } else if (e.key === 'Enter' && e.metaKey) {
                 e.preventDefault()
-                handleCreate()
+                // Use ref to ensure latest state is used when creating
+                createRef.current()
             }
         }
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [open, onClose, handleCreate])
+    }, [open, onClose])
 
     if (!open) return null
 
@@ -123,6 +146,9 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                             ref={nameInputRef}
                             value={name} 
                             onChange={handleNameChange} 
+                            onFocus={() => { setWasEdited(true); wasEditedRef.current = true }}
+                            onKeyDown={() => { setWasEdited(true); wasEditedRef.current = true }}
+                            onInput={() => { setWasEdited(true); wasEditedRef.current = true }}
                             className={`w-full bg-slate-800 text-slate-100 rounded px-3 py-2 border ${
                                 validationError ? 'border-red-500' : 'border-slate-700'
                             }`} 

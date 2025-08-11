@@ -280,6 +280,21 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, showCommentForm, onClose, files, selectedFile, loadFileDiff, lineSelection, currentReview])
 
+  // Add missing state for mouse selection
+  const [isSelecting, setIsSelecting] = useState(false)
+  
+  // Helper function to get line info from target element
+  const getLineInfo = useCallback((target: HTMLElement): { side: 'old' | 'new', line: number } | null => {
+    const lineElement = target.closest('[data-line-number]')
+    if (!lineElement) return null
+    
+    const lineNumber = parseInt(lineElement.getAttribute('data-line-number') || '0')
+    const side = lineElement.closest('[data-side]')?.getAttribute('data-side') as 'old' | 'new'
+    
+    if (!side || !lineNumber) return null
+    return { side, line: lineNumber }
+  }, [])
+  
   const handleLineSelect = useCallback((side: 'old' | 'new', startLine: number, endLine: number, content: string[]) => {
     setLineSelection({
       side,
@@ -288,6 +303,23 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       content
     })
     setShowCommentForm(false)
+  }, [])
+  
+  const handleLineMouseDown = useCallback((e: MouseEvent) => {
+    const target = e.target as HTMLElement
+    const lineInfo = getLineInfo(target)
+    
+    if (lineInfo) {
+      e.preventDefault()
+      setIsSelecting(true)
+      setLineSelection({
+        side: lineInfo.side,
+        startLine: lineInfo.line,
+        endLine: lineInfo.line,
+        content: []
+      })
+      setShowCommentForm(false)
+    }
   }, [getLineInfo])
 
   const handleLineMouseMove = useCallback((e: MouseEvent) => {

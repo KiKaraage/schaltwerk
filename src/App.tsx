@@ -119,12 +119,14 @@ export default function App() {
     name: string
     prompt?: string
     baseBranch: string
+    userEditedName?: boolean
   }) => {
     try {
       await invoke('para_core_create_session', { 
-        name: data.name, 
+        name: data.name,
         prompt: data.prompt || null,
-        baseBranch: data.baseBranch || null
+        baseBranch: data.baseBranch || null,
+        userEditedName: data.userEditedName ?? false,
       })
       setNewSessionOpen(false)
       
