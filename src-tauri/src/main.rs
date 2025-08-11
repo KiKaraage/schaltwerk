@@ -12,6 +12,7 @@ mod diff_commands;
 mod logging;
 mod terminal;
 mod para_core;
+mod open_apps;
 
 use std::sync::Arc;
 use terminal::TerminalManager;
@@ -690,6 +691,10 @@ fn main() {
             para_core_set_agent_type,
             para_core_get_agent_type,
             open_in_vscode,
+            open_apps::get_default_open_app,
+            open_apps::set_default_open_app,
+            open_apps::list_available_open_apps,
+            open_apps::open_in_app,
             diff_commands::get_changed_files_from_main,
             diff_commands::get_file_diff_from_main,
             diff_commands::get_current_branch_name,

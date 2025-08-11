@@ -1,0 +1,137 @@
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { VscFolder, VscChevronDown, VscCheck, VscChevronRight, VscCode, VscTerminal } from 'react-icons/vsc'
+
+export type OpenApp = {
+  id: 'finder' | 'cursor' | 'vscode' | 'ghostty' | 'warp' | 'terminal'
+  name: string
+  kind: 'editor' | 'terminal' | 'system'
+}
+
+interface OpenInSplitButtonProps {
+  resolvePath: () => Promise<string | undefined>
+}
+
+export function OpenInSplitButton({ resolvePath }: OpenInSplitButtonProps) {
+  const [apps, setApps] = useState<OpenApp[]>([])
+  const [defaultApp, setDefaultApp] = useState<OpenApp['id']>('finder')
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    const load = async () => {
+      try {
+        const [available, def] = await Promise.all([
+          invoke<OpenApp[]>('list_available_open_apps'),
+          invoke<string>('get_default_open_app'),
+        ])
+        if (!mounted) return
+        setApps(available)
+        if (def && ['finder','cursor','vscode','ghostty','warp','terminal'].includes(def)) {
+          setDefaultApp(def as OpenApp['id'])
+        }
+      } catch (e) {
+        if (!mounted) return
+        setApps([{ id: 'finder', name: 'Finder', kind: 'system' }])
+        setDefaultApp('finder')
+      }
+    }
+    void load()
+    return () => { mounted = false }
+  }, [])
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!menuRef.current) return
+      if (!menuRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [open])
+
+  const defaultAppLabel = useMemo(() => {
+    const a = apps.find(a => a.id === defaultApp)
+    return a?.name ?? 'Open'
+  }, [apps, defaultApp])
+
+  const openWithApp = useCallback(async (appId: OpenApp['id']) => {
+    const path = await resolvePath()
+    if (!path) return
+    try {
+      await invoke('open_in_app', { appId, worktreePath: path })
+    } catch (e) {
+      console.error('Failed to open in app', appId, e)
+    }
+  }, [resolvePath])
+
+  const handleMainClick = async () => {
+    await openWithApp(defaultApp)
+  }
+
+  const handleSelectApp = async (app: OpenApp) => {
+    try {
+      await invoke('set_default_open_app', { appId: app.id })
+      setDefaultApp(app.id)
+    } catch (e) {
+      console.warn('Failed to persist default app, continuing', e)
+    }
+    setOpen(false)
+    await openWithApp(app.id)
+  }
+
+  const iconFor = (id: OpenApp['id']) => {
+    if (id === 'vscode') return <VscCode className="text-[14px]" />
+    if (id === 'cursor') return <VscCode className="text-[14px]" />
+    if (id === 'finder') return <VscFolder className="text-[14px]" />
+    return <VscTerminal className="text-[14px]" />
+  }
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <div className="flex rounded-lg overflow-hidden border border-slate-700/60 bg-slate-800/50">
+        <button
+          onClick={handleMainClick}
+          className="flex items-center gap-2 px-2.5 h-7 text-sm text-slate-200 hover:bg-slate-700/50"
+          title={`Open in ${defaultAppLabel}`}
+        >
+          <VscFolder className="text-[14px] opacity-90" />
+          <span className="hidden sm:inline">Open</span>
+        </button>
+        <div className="w-px bg-slate-700/60" />
+        <button
+          onClick={() => setOpen(v => !v)}
+          className="px-2 h-7 text-slate-300 hover:bg-slate-700/50"
+          aria-haspopup="menu"
+          aria-expanded={open}
+        >
+          <VscChevronDown />
+        </button>
+      </div>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 mt-2 min-w-[200px] z-20 rounded-xl border border-slate-700/60 bg-slate-900 shadow-xl p-1"
+        >
+          {apps.map(app => (
+            <button
+              key={app.id}
+              onClick={() => void handleSelectApp(app)}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-slate-200 hover:bg-slate-700/40"
+              role="menuitem"
+            >
+              <span className="w-4 inline-flex items-center justify-center">{iconFor(app.id)}</span>
+              <span className="flex-1">{app.name}</span>
+              {app.id === defaultApp ? (
+                <VscCheck className="text-[14px] text-slate-400" />
+              ) : (
+                <VscChevronRight className="text-[14px] text-slate-500 opacity-60" />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}

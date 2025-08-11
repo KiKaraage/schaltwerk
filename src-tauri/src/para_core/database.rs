@@ -94,7 +94,8 @@ impl Database {
             "CREATE TABLE IF NOT EXISTS app_config (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 skip_permissions BOOLEAN DEFAULT FALSE,
-                agent_type TEXT DEFAULT 'claude'
+                agent_type TEXT DEFAULT 'claude',
+                default_open_app TEXT DEFAULT 'finder'
             )",
             [],
         )?;
@@ -112,8 +113,20 @@ impl Database {
             conn.execute("ALTER TABLE app_config ADD COLUMN agent_type TEXT DEFAULT 'claude'", [])?;
         }
         
+        // Migration: Add default_open_app column if it doesn't exist
+        let default_open_app_exists = {
+            let result = conn.prepare("SELECT default_open_app FROM app_config LIMIT 1");
+            match result {
+                Ok(mut stmt) => stmt.query([]).is_ok(),
+                Err(_) => false,
+            }
+        };
+        if !default_open_app_exists {
+            let _ = conn.execute("ALTER TABLE app_config ADD COLUMN default_open_app TEXT DEFAULT 'finder'", []);
+        }
+        
         conn.execute(
-            "INSERT OR IGNORE INTO app_config (id, skip_permissions, agent_type) VALUES (1, FALSE, 'claude')",
+            "INSERT OR IGNORE INTO app_config (id, skip_permissions, agent_type, default_open_app) VALUES (1, FALSE, 'claude', 'finder')",
             [],
         )?;
         
@@ -525,6 +538,28 @@ impl Database {
             params![agent_type],
         )?;
         
+        Ok(())
+    }
+
+    pub fn get_default_open_app(&self) -> Result<String> {
+        let conn = self.conn.lock().unwrap();
+        let result: SqlResult<String> = conn.query_row(
+            "SELECT default_open_app FROM app_config WHERE id = 1",
+            [],
+            |row| row.get(0),
+        );
+        match result {
+            Ok(value) => Ok(value),
+            Err(_) => Ok("finder".to_string()),
+        }
+    }
+
+    pub fn set_default_open_app(&self, app_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE app_config SET default_open_app = ?1 WHERE id = 1",
+            params![app_id],
+        )?;
         Ok(())
     }
 

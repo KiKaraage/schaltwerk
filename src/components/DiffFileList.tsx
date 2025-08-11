@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from '../contexts/SelectionContext'
-import { VscFile, VscDiffAdded, VscDiffModified, VscDiffRemoved, VscCode } from 'react-icons/vsc'
+import { VscFile, VscDiffAdded, VscDiffModified, VscDiffRemoved } from 'react-icons/vsc'
+// Open button moved to global top bar
 import clsx from 'clsx'
 
 interface ChangedFile {
@@ -46,25 +47,7 @@ export function DiffFileList({ onFileSelect }: DiffFileListProps) {
     }
   }, [sessionName])
 
-  const handleOpenInVSCode = useCallback(async () => {
-    try {
-      let worktreePath: string | undefined = undefined
-      if (selection.kind === 'session') {
-        worktreePath = selection.worktreePath
-        if (!worktreePath && sessionName) {
-          const sessionData = await invoke<any>('para_core_get_session', { name: sessionName })
-          worktreePath = sessionData?.worktree_path
-        }
-      } else {
-        worktreePath = await invoke<string>('get_current_directory')
-      }
-      if (worktreePath) {
-        await invoke('open_in_vscode', { worktreePath })
-      }
-    } catch (error) {
-      console.error('Failed to open VSCode:', error)
-    }
-  }, [selection, sessionName])
+  // Path resolver used by top bar now; no local button anymore
   
   useEffect(() => {
     loadChangedFiles()
@@ -89,14 +72,6 @@ export function DiffFileList({ onFileSelect }: DiffFileListProps) {
   return (
     <div className="h-full flex flex-col bg-slate-950">
       <div className="px-3 py-2 border-b border-slate-800 relative">
-        <button
-          onClick={handleOpenInVSCode}
-          className="absolute right-3 top-1/2 -translate-y-1/2 h-7 w-7 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-blue-300 bg-transparent hover:bg-slate-700/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 transition-colors"
-          title="Open in VSCode"
-          aria-label="Open in VSCode"
-        >
-          <VscCode className="text-[16px]" />
-        </button>
         <div className="flex items-center justify-between pr-12">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Changes from {branchInfo?.baseBranch || 'base'}</span>

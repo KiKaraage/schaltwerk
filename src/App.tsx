@@ -9,6 +9,8 @@ import { NewSessionModal } from './components/NewSessionModal'
 import { CancelConfirmation } from './components/CancelConfirmation'
 import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from './contexts/SelectionContext'
+import { OpenInSplitButton } from './components/OpenInSplitButton'
+import { VscGear } from 'react-icons/vsc'
 // FocusProvider moved to root in main.tsx
 
 export interface SessionActionEvent {
@@ -20,7 +22,7 @@ export interface SessionActionEvent {
 
 
 export default function App() {
-  const { setSelection } = useSelection()
+  const { selection, setSelection } = useSelection()
   const [newSessionOpen, setNewSessionOpen] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
@@ -150,7 +152,33 @@ export default function App() {
   
   return (
     <>
-      <Split className="h-full w-full flex" sizes={[18, 82]} minSize={[220, 400]} gutterSize={6}>
+      {/* Global top bar */}
+      <div className="absolute top-0 right-0 left-0 h-9 flex items-center justify-end px-3 gap-2 z-20 pointer-events-none">
+        <div className="flex items-center gap-2 pointer-events-auto">
+          <OpenInSplitButton resolvePath={async () => {
+            if (selection.kind === 'session') {
+              let worktreePath = selection.worktreePath
+              if (!worktreePath && selection.payload) {
+                try {
+                  const sessionData = await invoke<any>('para_core_get_session', { name: selection.payload })
+                  worktreePath = sessionData?.worktree_path
+                } catch {}
+              }
+              return worktreePath
+            }
+            return await invoke<string>('get_current_directory')
+          }} />
+          <button
+            className="h-7 w-7 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 border border-slate-700/60"
+            title="Settings"
+            aria-label="Settings"
+          >
+            <VscGear className="text-[15px]" />
+          </button>
+        </div>
+      </div>
+
+      <Split className="h-full w-full flex pt-9" sizes={[18, 82]} minSize={[220, 400]} gutterSize={6}>
       <div className="h-full bg-panel border-r border-slate-800 overflow-y-auto">
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-y-auto">
