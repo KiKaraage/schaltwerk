@@ -94,6 +94,81 @@ function computeUnifiedDiff(oldLines: string[], newLines: string[]): DiffLine[] 
   return result
 }
 
+interface SplitAlignedRow {
+  oldLine?: string
+  newLine?: string
+  oldLineNumber?: number
+  newLineNumber?: number
+  type: 'unchanged' | 'added' | 'removed'
+}
+
+function computeSplitAlignment(oldLines: string[], newLines: string[]): SplitAlignedRow[] {
+  const n = oldLines.length
+  const m = newLines.length
+  const dp: number[][] = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0))
+
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      if (oldLines[i] === newLines[j]) {
+        dp[i][j] = dp[i + 1][j + 1] + 1
+      } else {
+        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1])
+      }
+    }
+  }
+
+  const rows: SplitAlignedRow[] = []
+  let i = 0
+  let j = 0
+  let oldNum = 0
+  let newNum = 0
+
+  while (i < n && j < m) {
+    if (oldLines[i] === newLines[j]) {
+      oldNum += 1
+      newNum += 1
+      rows.push({
+        oldLine: oldLines[i],
+        newLine: newLines[j],
+        oldLineNumber: oldNum,
+        newLineNumber: newNum,
+        type: 'unchanged'
+      })
+      i += 1
+      j += 1
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      oldNum += 1
+      rows.push({
+        oldLine: oldLines[i],
+        oldLineNumber: oldNum,
+        type: 'removed'
+      })
+      i += 1
+    } else {
+      newNum += 1
+      rows.push({
+        newLine: newLines[j],
+        newLineNumber: newNum,
+        type: 'added'
+      })
+      j += 1
+    }
+  }
+
+  while (i < n) {
+    oldNum += 1
+    rows.push({ oldLine: oldLines[i], oldLineNumber: oldNum, type: 'removed' })
+    i += 1
+  }
+  while (j < m) {
+    newNum += 1
+    rows.push({ newLine: newLines[j], newLineNumber: newNum, type: 'added' })
+    j += 1
+  }
+
+  return rows
+}
+
 const HighlightedLine = memo(({ 
   content, 
   highlightedHtml,
@@ -171,10 +246,17 @@ export function OptimizedDiffViewer({
     }
     return []
   }, [oldLines, newLines, actualViewMode])
+
+  const splitRows = useMemo(() => {
+    if (actualViewMode === 'split') {
+      return computeSplitAlignment(oldLines, newLines)
+    }
+    return []
+  }, [oldLines, newLines, actualViewMode])
   
   const maxLines = actualViewMode === 'unified' 
     ? diffLines.length 
-    : Math.max(oldLines.length, newLines.length)
+    : splitRows.length
   
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return
@@ -317,8 +399,7 @@ export function OptimizedDiffViewer({
   }
   
   const renderSplitView = () => {
-    const visibleOldLines = oldLines.slice(visibleRange.start, visibleRange.end)
-    const visibleNewLines = newLines.slice(visibleRange.start, visibleRange.end)
+    const visibleRows = splitRows.slice(visibleRange.start, visibleRange.end)
     
     return (
       <div 
@@ -335,27 +416,28 @@ export function OptimizedDiffViewer({
               transform: `translateY(${visibleRange.start * 20}px)`,
               position: 'relative'
             }}>
-              {visibleOldLines.map((line, idx) => {
-                const lineNum = visibleRange.start + idx + 1
+              {visibleRows.map((row, idx) => {
+                const lineNum = row.oldLineNumber ?? 0
                 const isVisible = true
                 
                 return (
                   <div
-                    key={lineNum}
+                    key={`${visibleRange.start + idx}-old`}
                     className={clsx(
                       "flex h-[20px] border-b border-slate-900",
+                      row.type === 'removed' && "bg-red-950/30",
                       isLineSelected('old', lineNum) && "bg-blue-900/30"
                     )}
-                    onMouseDown={(e) => handleMouseDown(e, 'old', lineNum)}
-                    onMouseMove={(e) => handleMouseMove(e, 'old', lineNum)}
+                    onMouseDown={(e) => lineNum && handleMouseDown(e, 'old', lineNum)}
+                    onMouseMove={(e) => lineNum && handleMouseMove(e, 'old', lineNum)}
                   >
                     <div className="w-12 px-2 text-xs text-slate-500 font-mono">
-                      {lineNum}
+                      {lineNum || ''}
                     </div>
                     <div className="flex-1 px-2 overflow-hidden">
                       <HighlightedLine
-                        content={line}
-                        highlightedHtml={highlightedOldLines ? highlightedOldLines[lineNum - 1] : null}
+                        content={row.oldLine ?? ''}
+                        highlightedHtml={row.oldLineNumber && highlightedOldLines ? highlightedOldLines[row.oldLineNumber - 1] : null}
                         isVisible={isVisible}
                       />
                     </div>
@@ -373,27 +455,28 @@ export function OptimizedDiffViewer({
               transform: `translateY(${visibleRange.start * 20}px)`,
               position: 'relative'
             }}>
-              {visibleNewLines.map((line, idx) => {
-                const lineNum = visibleRange.start + idx + 1
+              {visibleRows.map((row, idx) => {
+                const lineNum = row.newLineNumber ?? 0
                 const isVisible = true
                 
                 return (
                   <div
-                    key={lineNum}
+                    key={`${visibleRange.start + idx}-new`}
                     className={clsx(
                       "flex h-[20px] border-b border-slate-900",
+                      row.type === 'added' && "bg-green-950/30",
                       isLineSelected('new', lineNum) && "bg-blue-900/30"
                     )}
-                    onMouseDown={(e) => handleMouseDown(e, 'new', lineNum)}
-                    onMouseMove={(e) => handleMouseMove(e, 'new', lineNum)}
+                    onMouseDown={(e) => lineNum && handleMouseDown(e, 'new', lineNum)}
+                    onMouseMove={(e) => lineNum && handleMouseMove(e, 'new', lineNum)}
                   >
                     <div className="w-12 px-2 text-xs text-slate-500 font-mono">
-                      {lineNum}
+                      {lineNum || ''}
                     </div>
                     <div className="flex-1 px-2 overflow-hidden">
                       <HighlightedLine
-                        content={line}
-                        highlightedHtml={highlightedNewLines ? highlightedNewLines[lineNum - 1] : null}
+                        content={row.newLine ?? ''}
+                        highlightedHtml={row.newLineNumber && highlightedNewLines ? highlightedNewLines[row.newLineNumber - 1] : null}
                         isVisible={isVisible}
                       />
                     </div>

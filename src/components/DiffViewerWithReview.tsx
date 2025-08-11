@@ -189,9 +189,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     setLineSelection(null)
     setShowCommentForm(false)
     
-    // Default to unified view for better performance
-    // User can toggle to split view if needed
-    setViewMode(window.innerWidth > 1600 ? 'split' : 'unified')
+    // Keep current view mode; do not override user preference here
     
     try {
       const [mainText, worktreeText] = await invoke<[string, string]>('get_file_diff_from_main', {
@@ -213,6 +211,20 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       loadChangedFiles()
     }
   }, [isOpen, loadChangedFiles])
+
+  // Initialize view mode from persisted preference (default unified)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('para.diffViewMode')
+      if (saved === 'split' || saved === 'unified') {
+        setViewMode(saved)
+      } else {
+        setViewMode('unified')
+      }
+    } catch {
+      setViewMode('unified')
+    }
+  }, [])
   
   useEffect(() => {
     if (selectedFile && isOpen) {
@@ -279,6 +291,15 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, showCommentForm, onClose, files, selectedFile, loadFileDiff, lineSelection, currentReview])
+
+  const handleViewModeChange = useCallback((mode: 'split' | 'unified') => {
+    setViewMode(mode)
+    try {
+      localStorage.setItem('para.diffViewMode', mode)
+    } catch {
+      // ignore storage errors
+    }
+  }, [])
 
   // Add missing state for mouse selection
   const [isSelecting, setIsSelecting] = useState(false)
@@ -658,7 +679,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                       newContent={worktreeContent}
                       language={language}
                       viewMode={viewMode}
-                      onViewModeChange={setViewMode}
+                      onViewModeChange={handleViewModeChange}
                       onLineSelect={handleLineSelect}
                       leftTitle={`${branchInfo?.baseBranch || 'base'} (${branchInfo?.baseCommit || 'base'})`}
                       rightTitle={`${branchInfo?.currentBranch || 'current'} (${branchInfo?.headCommit || 'HEAD'})`}
