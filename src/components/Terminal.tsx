@@ -101,12 +101,28 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             return true // Allow xterm.js to process other events
         })
         
-        // Do an immediate fit to get initial size
-        fitAddon.current.fit();
+        // Helper to ensure element is laid out before fitting
+        const isReadyForFit = () => {
+            const el = termRef.current;
+            return !!el && el.isConnected && el.clientWidth > 0 && el.clientHeight > 0;
+        };
+
+        // Do an immediate fit to get initial size, only if container is measurable
+        if (isReadyForFit()) {
+            try {
+                fitAddon.current.fit();
+            } catch (e) {
+                console.warn(`[Terminal ${terminalId}] Initial fit failed; will retry on next resize`, e);
+            }
+        } else {
+            // Skip now; upcoming ResizeObserver ticks will attempt a fit
+            console.debug(`[Terminal ${terminalId}] Skipping initial fit; container not ready`);
+        }
+
         const initialCols = terminal.current.cols;
         const initialRows = terminal.current.rows;
         lastSize.current = { cols: initialCols, rows: initialRows };
-        
+
         // Send initial size to backend immediately
         invoke('resize_terminal', { id: terminalId, cols: initialCols, rows: initialRows }).catch(console.error);
 
@@ -158,8 +174,18 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
         // Handle terminal resize - only send if size actually changed
         const handleResize = () => {
             if (!fitAddon.current || !terminal.current) return;
-            
-            fitAddon.current.fit();
+
+            const el = termRef.current;
+            if (!el || !el.isConnected || el.clientWidth === 0 || el.clientHeight === 0) {
+                return;
+            }
+
+            try {
+                fitAddon.current.fit();
+            } catch (e) {
+                console.warn(`[Terminal ${terminalId}] fit() failed during resize; skipping this tick`, e);
+                return;
+            }
             const { cols, rows } = terminal.current;
             
             // Only send resize if dimensions actually changed
