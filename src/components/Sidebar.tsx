@@ -61,6 +61,10 @@ export function Sidebar() {
     const { selection, setSelection } = useSelection()
     const { setFocusForSession, setCurrentFocus } = useFocus()
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
+    const [filterMode, setFilterMode] = useState<'all' | 'unreviewed' | 'reviewed'>(() => {
+        const saved = typeof window !== 'undefined' ? window.localStorage.getItem('para-ui:sessions:filterMode') : null
+        return (saved === 'unreviewed' || saved === 'reviewed') ? saved : 'all'
+    })
     const [loading, setLoading] = useState(true)
     const [stuckTerminals, setStuckTerminals] = useState<Set<string>>(new Set())
     const [markReadyModal, setMarkReadyModal] = useState<{ open: boolean; sessionName: string; hasUncommitted: boolean }>({
@@ -69,8 +73,17 @@ export function Sidebar() {
         hasUncommitted: false
     })
     
-    // Memoize sorted sessions to prevent re-sorting on every render
-    const sortedSessions = useMemo(() => sortSessions(sessions), [sessions])
+    // Memoize displayed sessions (filter + sort) to prevent re-computation on every render
+    const sortedSessions = useMemo(() => {
+        let filtered = sessions
+        if (filterMode === 'unreviewed') {
+            filtered = sessions.filter(s => !s.info.ready_to_merge)
+        } else if (filterMode === 'reviewed') {
+            filtered = sessions.filter(s => !!s.info.ready_to_merge)
+        }
+        // Original sorting behavior
+        return sortSessions(filtered)
+    }, [sessions, filterMode])
 
     const handleSelectOrchestrator = async () => {
         await setSelection({ kind: 'orchestrator' })
@@ -183,12 +196,27 @@ export function Sidebar() {
         }
     })
 
+    // Persist user preferences
+    useEffect(() => {
+        try { window.localStorage.setItem('para-ui:sessions:filterMode', filterMode) } catch {}
+    }, [filterMode])
+
     // Initial load only; push updates keep it fresh thereafter
     useEffect(() => {
+        const addTimestamps = (arr: EnrichedSession[]): EnrichedSession[] => {
+            return arr.map(s => ({
+                ...s,
+                info: {
+                    ...s.info,
+                    last_modified_ts: s.info.last_modified ? Date.parse(s.info.last_modified) : undefined,
+                }
+            }))
+        }
+
         const loadSessions = async () => {
             try {
                 const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                setSessions(result)
+                setSessions(addTimestamps(result))
             } catch (err) {
                 console.error('Failed to load sessions:', err)
             } finally {
@@ -204,7 +232,13 @@ export function Sidebar() {
         const setupRefreshListener = async () => {
             const unlisten = await listen<EnrichedSession[]>('para-ui:sessions-refreshed', (event) => {
                 console.log('Sessions refreshed event received, updating session list')
-                setSessions(event.payload)
+                setSessions(event.payload.map(s => ({
+                    ...s,
+                    info: {
+                        ...s.info,
+                        last_modified_ts: s.info.last_modified ? Date.parse(s.info.last_modified) : undefined,
+                    }
+                })))
             })
             
             return () => {
@@ -248,6 +282,7 @@ export function Sidebar() {
                         info: {
                             ...s.info,
                             last_modified: new Date(last_activity_ts * 1000).toISOString(),
+                            last_modified_ts: last_activity_ts * 1000,
                         }
                     }
                 }))
@@ -393,8 +428,27 @@ export function Sidebar() {
                 </button>
             </div>
 
-            <div className="px-3 py-2 border-t border-b border-slate-800 text-sm text-slate-300">
-                Sessions {sessions.length > 0 && <span className="text-slate-500">({sessions.length})</span>}
+            <div className="px-3 py-2 border-t border-b border-slate-800 text-sm text-slate-300 flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                    <span>Sessions {sortedSessions.length > 0 && <span className="text-slate-500">({sortedSessions.length})</span>}</span>
+                </div>
+                <div className="flex items-center gap-1 ml-auto sm:ml-4">
+                    <button
+                        className={clsx('text-[11px] px-2 py-1 rounded', filterMode === 'all' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
+                        onClick={() => setFilterMode('all')}
+                        title="Show all sessions"
+                    >All</button>
+                    <button
+                        className={clsx('text-[11px] px-2 py-1 rounded', filterMode === 'unreviewed' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
+                        onClick={() => setFilterMode('unreviewed')}
+                        title="Show only unreviewed sessions"
+                    >Unreviewed</button>
+                    <button
+                        className={clsx('text-[11px] px-2 py-1 rounded', filterMode === 'reviewed' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
+                        onClick={() => setFilterMode('reviewed')}
+                        title="Show only reviewed sessions"
+                    >Reviewed</button>
+                </div>
             </div>
             <div className="flex-1 overflow-y-auto px-2 pt-2">
                 {loading ? (
