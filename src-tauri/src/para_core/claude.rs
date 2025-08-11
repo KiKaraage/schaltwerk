@@ -1,103 +1,43 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs;
-use log::debug;
 
 pub fn find_claude_session(path: &Path) -> Option<String> {
-    // Resolve to a stable filesystem path to avoid mismatches from symlinks
-    // (e.g., /var vs /private/var on macOS) across app restarts.
-    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-
-    // Resolve the user's home directory in a cross-platform way
-    let home = dirs::home_dir()?;
-    let claude_dir = home.join(".claude");
+    let home = std::env::var("HOME").ok()?;
+    let claude_dir = PathBuf::from(home).join(".claude");
     let projects_dir = claude_dir.join("projects");
-
-    // Use Claude's project mapping: ~/.claude/projects/{sanitized(canonical_path)}
-    let sanitized = sanitize_path_for_claude(&canonical);
+    
+    let sanitized = sanitize_path_for_claude(path);
     let project_dir = projects_dir.join(&sanitized);
-
+    
     if !project_dir.exists() {
-        debug!(
-            "Claude project directory not found for path: canonical={} sanitized={} projects_root={}",
-            canonical.display(),
-            sanitized,
-            projects_dir.display()
-        );
         return None;
     }
-
-    // Collect candidate log files in project dir and one level below
-    fn collect_logs(dir: &Path) -> Vec<std::path::PathBuf> {
-        let mut files: Vec<std::path::PathBuf> = Vec::new();
-        if let Ok(iter) = fs::read_dir(dir) {
-            for entry in iter.flatten() {
-                let p = entry.path();
-                if p.is_dir() {
-                    if let Ok(inner) = fs::read_dir(&p) {
-                        for e in inner.flatten() {
-                            let ip = e.path();
-                            if is_supported_log(&ip) { files.push(ip); }
-                        }
-                    }
-                } else if is_supported_log(&p) {
-                    files.push(p);
-                }
-            }
-        }
-        files.sort_by_key(|p| fs::metadata(p).and_then(|m| m.modified()).ok().unwrap_or(std::time::SystemTime::UNIX_EPOCH));
-        files
-    }
-
-    fn is_supported_log(p: &Path) -> bool {
-        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        name.ends_with(".jsonl") || name.ends_with(".jsonl.gz")
-    }
-
-    fn extract_id(p: &Path) -> Option<String> {
-        let name = p.file_name()?.to_str()?;
-        name
-            .strip_suffix(".jsonl.gz")
-            .map(|s| s.to_string())
-            .or_else(|| name.strip_suffix(".jsonl").map(|s| s.to_string()))
-    }
-
-    let logs = collect_logs(&project_dir);
-    let latest = logs.last()?;
-    debug!("Found Claude sessions for {} -> using {:?}", canonical.display(), latest);
-    extract_id(latest)
+    
+    let mut sessions: Vec<_> = fs::read_dir(&project_dir).ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path().extension().map(|ext| ext == "jsonl").unwrap_or(false)
+                && e.metadata().map(|m| m.len() > 1000).unwrap_or(false)
+        })
+        .collect();
+    
+    sessions.sort_by_key(|e| {
+        e.metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+    });
+    
+    sessions.last()?
+        .path()
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string())
 }
 
 fn sanitize_path_for_claude(path: &Path) -> String {
     path.to_string_lossy()
-        .replace(['/', '.', ' '], "-")
-}
-
-pub fn has_claude_logs(path: &Path) -> bool {
-    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let home = match dirs::home_dir() { Some(h) => h, None => return false };
-    let projects_dir = home.join(".claude").join("projects");
-    let project_dir = projects_dir.join(sanitize_path_for_claude(&canonical));
-    if !project_dir.exists() { return false; }
-    // Reuse the same collection logic as above (shallow + one level)
-    fn is_supported_log(p: &Path) -> bool {
-        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        name.ends_with(".jsonl") || name.ends_with(".jsonl.gz")
-    }
-    let mut any = false;
-    if let Ok(iter) = fs::read_dir(&project_dir) {
-        for entry in iter.flatten() {
-            let p = entry.path();
-            if p.is_dir() {
-                if let Ok(inner) = fs::read_dir(&p) {
-                    for e in inner.flatten() {
-                        if is_supported_log(&e.path()) { any = true; break; }
-                    }
-                }
-            } else if is_supported_log(&p) { any = true; }
-            if any { break; }
-        }
-    }
-    any
+        .replace(['/', '.'], "-")
 }
 
 pub fn build_claude_command(

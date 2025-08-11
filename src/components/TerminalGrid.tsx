@@ -1,13 +1,13 @@
 import { Terminal, TerminalHandle } from './Terminal'
 import Split from 'react-split'
 import { useSelection } from '../contexts/SelectionContext'
+import { useClaudeSession } from '../hooks/useClaudeSession'
 import { useFocus } from '../contexts/FocusContext'
 import { useRef, useEffect } from 'react'
 
 export function TerminalGrid() {
     const { selection, terminals } = useSelection()
-    // Note: starting Claude is handled by Terminal component hydration, not clicks
-    // const { startClaude } = useClaudeSession()
+    const { startClaude } = useClaudeSession()
     const { getFocusForSession, setFocusForSession, currentFocus } = useFocus()
     
     const claudeTerminalRef = useRef<TerminalHandle>(null)
@@ -59,8 +59,18 @@ export function TerminalGrid() {
         console.log('[TerminalGrid] Claude session tab clicked', selection)
         const sessionKey = getSessionKey()
         setFocusForSession(sessionKey, 'claude')
-
-        // Only focus; do not (re)start Claude on click.
+        
+        if (selection.kind === 'orchestrator') {
+            console.log('[TerminalGrid] Starting Claude for orchestrator')
+            const result = await startClaude({ isOrchestrator: true })
+            console.log('[TerminalGrid] Claude start result:', result)
+        } else if (selection.payload) {
+            console.log('[TerminalGrid] Starting Claude for session:', selection.payload)
+            const result = await startClaude({ sessionName: selection.payload })
+            console.log('[TerminalGrid] Claude start result:', result)
+        }
+        
+        // Focus the Claude terminal
         setTimeout(() => {
             claudeTerminalRef.current?.focus()
         }, 100)

@@ -288,24 +288,15 @@ impl SessionManager {
         let command = match agent_type.as_str() {
             "cursor" => {
                 let session_id = crate::para_core::cursor::find_cursor_session(&session.worktree_path);
-                // On app restarts with no known session id, avoid injecting the original prompt again.
-                // Start plain cursor-agent in the worktree so it can reconnect or await input.
-                let initial_prompt_for_restart = None;
-                let force_flag = false;
                 crate::para_core::cursor::build_cursor_command(
                     &session.worktree_path,
                     session_id.as_deref(),
-                    if session_id.is_none() { initial_prompt_for_restart } else { None },
-                    force_flag,
+                    if session_id.is_none() { session.initial_prompt.as_deref() } else { None },
+                    skip_permissions,
                 )
             }
             _ => {
-                // Only attempt resume if we actually see Claude logs for this worktree.
-                let session_id = if crate::para_core::claude::has_claude_logs(&session.worktree_path) {
-                    crate::para_core::claude::find_claude_session(&session.worktree_path)
-                } else {
-                    None
-                };
+                let session_id = crate::para_core::claude::find_claude_session(&session.worktree_path);
                 crate::para_core::claude::build_claude_command(
                     &session.worktree_path,
                     session_id.as_deref(),
