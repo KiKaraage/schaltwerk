@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, startTransition } from 'react'
+import { useState, useEffect, useMemo, startTransition, useRef } from 'react'
 import { clsx } from 'clsx'
 import { invoke } from '@tauri-apps/api/core'
 import { sortSessions } from '../utils/sessionSort'
@@ -275,10 +275,17 @@ export function Sidebar() {
 
     // No longer need to listen for events - context handles everything
 
+    // Keep latest values in refs for use in event handlers without re-attaching listeners
+    const latestSelectionRef = useRef(selection)
+    const latestSortedSessionsRef = useRef(sortedSessions)
+
+    useEffect(() => { latestSelectionRef.current = selection }, [selection])
+    useEffect(() => { latestSortedSessionsRef.current = sortedSessions }, [sortedSessions])
+
     // Subscribe to backend push updates and merge into sessions list incrementally
     useEffect(() => {
         let unlisteners: UnlistenFn[] = []
-        
+
         const attach = async () => {
             // Activity updates (last_modified)
             const u1 = await listen<{
@@ -376,8 +383,10 @@ export function Sidebar() {
             // Session removed
             const u4 = await listen<{ session_name: string }>('para-ui:session-removed', async (event) => {
                 const { session_name } = event.payload
-                const currentSelectedId = selection.kind === 'session' ? (selection.payload || null) : null
-                const nextSelectionId = computeNextSelectedSessionId(sortedSessions, session_name, currentSelectedId)
+                const currentSelection = latestSelectionRef.current
+                const currentSorted = latestSortedSessionsRef.current
+                const currentSelectedId = currentSelection.kind === 'session' ? (currentSelection.payload || null) : null
+                const nextSelectionId = computeNextSelectedSessionId(currentSorted, session_name, currentSelectedId)
 
                 setSessions(prev => prev.filter(s => s.info.session_id !== session_name))
 
@@ -424,7 +433,8 @@ export function Sidebar() {
                 }
             })
         }
-    }, [selection, setSelection, sortedSessions])
+    // Attach once on mount; use refs above for latest values inside handlers
+    }, [setSelection])
 
     return (
         <div className="h-full flex flex-col">
