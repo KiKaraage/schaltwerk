@@ -104,10 +104,11 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             }
         }
         
-        // Create top terminal first (most important for Claude), then bottom
-        // This gives better perceived performance
-        await createTerminal(ids.top, cwd)
-        await createTerminal(ids.bottom, cwd)
+        // Create terminals in parallel for better performance
+        await Promise.all([
+            createTerminal(ids.top, cwd),
+            createTerminal(ids.bottom, cwd)
+        ])
         
         return ids
     }, [getTerminalIds, createTerminal])
@@ -115,6 +116,12 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     // Set selection atomically
     const setSelection = useCallback(async (newSelection: Selection) => {
         console.log('[SelectionContext] Changing selection to:', newSelection)
+        
+        // Check if we're actually changing selection (but allow initial setup)
+        if (isReady && selection.kind === newSelection.kind && selection.payload === newSelection.payload) {
+            console.log('[SelectionContext] Selection unchanged, skipping')
+            return
+        }
         
         // Mark as not ready during transition
         setIsReady(false)
