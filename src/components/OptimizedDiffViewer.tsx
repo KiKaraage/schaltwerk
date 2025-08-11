@@ -359,7 +359,7 @@ export function OptimizedDiffViewer({
                 <div
                   key={actualIdx}
                   className={clsx(
-                    "flex h-[20px] border-b border-slate-900",
+                    "flex h-[20px]",
                     line.type === 'added' && "bg-green-950/30",
                     line.type === 'removed' && "bg-red-950/30",
                     isLineSelected(line.oldLineNumber ? 'old' : 'new', line.oldLineNumber || line.newLineNumber || 0) && "bg-blue-900/30"
@@ -424,7 +424,7 @@ export function OptimizedDiffViewer({
                   <div
                     key={`${visibleRange.start + idx}-old`}
                     className={clsx(
-                      "flex h-[20px] border-b border-slate-900",
+                      "flex h-[20px]",
                       row.type === 'removed' && "bg-red-950/30",
                       isLineSelected('old', lineNum) && "bg-blue-900/30"
                     )}
@@ -463,7 +463,7 @@ export function OptimizedDiffViewer({
                   <div
                     key={`${visibleRange.start + idx}-new`}
                     className={clsx(
-                      "flex h-[20px] border-b border-slate-900",
+                      "flex h-[20px]",
                       row.type === 'added' && "bg-green-950/30",
                       isLineSelected('new', lineNum) && "bg-blue-900/30"
                     )}
