@@ -93,7 +93,7 @@ export const SessionButton = memo<SessionButtonProps>(({
                     'ring-2 ring-amber-400/50 shadow-lg shadow-amber-400/20 bg-amber-950/20'
             )}
             title={isSelected 
-                ? `Selected session • Cancel: ⌘D (⇧⌘D force) • Mark Ready: ⌘R` 
+                ? `Selected session • Diff: ⌘G • Cancel: ⌘D (⇧⌘D force) • Mark Ready: ⌘R` 
                 : index < 8 
                     ? `Select session (⌘${index + 2})` 
                     : `Select session`}

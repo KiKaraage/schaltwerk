@@ -76,9 +76,11 @@ const CommentInput = memo(({
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && e.metaKey) {
       e.preventDefault()
+      e.stopPropagation()
       handleSubmit()
     } else if (e.key === 'Escape') {
       e.preventDefault()
+      e.stopPropagation()
       onCancel()
     }
   }, [handleSubmit, onCancel])
@@ -138,6 +140,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentText, setEditingCommentText] = useState('')
   const diffViewerRef = useRef<HTMLDivElement>(null)
+  const fileListRef = useRef<HTMLDivElement>(null)
   
   const sessionName = selection.kind === 'session' ? selection.payload : null
   
@@ -158,6 +161,10 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     try {
       const changedFiles = await invoke<ChangedFile[]>('get_changed_files_from_main', { sessionName })
       setFiles(changedFiles)
+      // Auto-select first file when opening if none selected
+      if (changedFiles.length > 0 && (!selectedFile || !isOpen)) {
+        setSelectedFile(changedFiles[0].path)
+      }
       
       const currentBranch = await invoke<string>('get_current_branch_name', { sessionName })
       const baseBranch = await invoke<string>('get_base_branch_name', { sessionName })
@@ -172,7 +179,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     } catch (error) {
       console.error('Failed to load changed files:', error)
     }
-  }, [sessionName])
+  }, [sessionName, selectedFile, isOpen])
   
   const loadFileDiff = useCallback(async (path: string) => {
     if (!path) return
@@ -211,19 +218,63 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().includes('MAC')
+      const modifierKey = isMac ? e.metaKey : e.ctrlKey
+
       if (e.key === 'Escape') {
-        if (showCommentForm) {
-          setShowCommentForm(false)
-          setLineSelection(null)
-        } else if (isOpen) {
-          onClose()
+        // Always close the diff viewer on ESC, and clear any transient UI
+        setShowCommentForm(false)
+        setLineSelection(null)
+        if (isOpen) onClose()
+        return
+      }
+
+      // Cmd/Ctrl+ArrowUp/Down: navigate files
+      if (isOpen && modifierKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        if (!files.length) return
+        e.preventDefault()
+        e.stopImmediatePropagation?.()
+        const currentIndex = files.findIndex(f => f.path === selectedFile)
+        if (e.key === 'ArrowDown') {
+          const nextIndex = currentIndex < 0 ? 0 : Math.min(currentIndex + 1, files.length - 1)
+          const next = files[nextIndex]
+          if (next && next.path !== selectedFile) {
+            loadFileDiff(next.path)
+          }
+        } else if (e.key === 'ArrowUp') {
+          const prevIndex = currentIndex < 0 ? 0 : Math.max(currentIndex - 1, 0)
+          const prev = files[prevIndex]
+          if (prev && prev.path !== selectedFile) {
+            loadFileDiff(prev.path)
+          }
+        }
+        return
+      }
+
+      // Cmd/Ctrl+Enter: open comment form (if selection)
+      if (isOpen && modifierKey && !e.shiftKey && e.key === 'Enter') {
+        if (lineSelection && !showCommentForm) {
+          e.preventDefault()
+          e.stopImmediatePropagation?.()
+          setShowCommentForm(true)
+          return
+        }
+      }
+
+      // Cmd/Ctrl+Shift+Enter: finish review
+      if (isOpen && modifierKey && e.shiftKey && e.key === 'Enter') {
+        if (!showCommentForm && currentReview && currentReview.comments.length > 0) {
+          e.preventDefault()
+          e.stopImmediatePropagation?.()
+          void handleFinishReview()
+          return
         }
       }
     }
     
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, showCommentForm, onClose])
+  }, [isOpen, showCommentForm, onClose, files, selectedFile, loadFileDiff, lineSelection, currentReview])
 
   // Line-based selection handlers with proper offset for react-diff-viewer structure
   const getLineInfo = useCallback((element: HTMLElement): { line: number, side: 'old' | 'new' } | null => {
@@ -370,6 +421,15 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       }
     }
   }, [lineSelection?.startLine, lineSelection?.endLine])
+
+  // Ensure selected file is kept in view within the file list
+  useEffect(() => {
+    if (!fileListRef.current || !selectedFile) return
+    const el = fileListRef.current.querySelector(`[data-path="${CSS.escape(selectedFile)}"]`)
+    if (el && 'scrollIntoView' in el) {
+      ;(el as HTMLElement).scrollIntoView({ block: 'nearest' })
+    }
+  }, [selectedFile])
   
   const handleAddComment = useCallback((commentText: string) => {
     if (!lineSelection || !selectedFile || !commentText) return
@@ -518,9 +578,12 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                 {files.length} files
               </span>
             </div>
+            {files.length > 0 && (
+              <div className="mt-1 text-[10px] text-slate-500">Navigate: ⌘↑ / ⌘↓</div>
+            )}
           </div>
           
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto" ref={fileListRef}>
             <div className="p-2">
               {files.map(file => {
                 const commentsCount = getCommentsForFile(file.path).length
@@ -533,6 +596,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                       selectedFile === file.path && "bg-slate-800"
                     )}
                     onClick={() => loadFileDiff(file.path)}
+                    data-path={file.path}
                   >
                     {getFileIcon(file.change_type)}
                     <div className="flex-1 min-w-0">
@@ -571,9 +635,11 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
               <button
                 onClick={handleFinishReview}
                 className="w-full px-3 py-1.5 bg-blue-600/90 hover:bg-blue-600 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
+                title="Finish Review (⇧⌘↵)"
               >
                 <VscCheck className="text-sm" />
                 <span>Finish Review</span>
+                <span className="text-xs opacity-70">⇧⌘↵</span>
               </button>
             </div>
           )}
@@ -596,9 +662,11 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                     <button
                       onClick={handleFinishReview}
                       className="px-3 py-1.5 bg-blue-600/90 hover:bg-blue-600 rounded text-sm font-medium transition-colors flex items-center gap-1.5"
+                      title="Finish Review (⇧⌘↵)"
                     >
                       <VscCheck className="text-sm" />
                       <span>Finish Review ({currentReview.comments.length})</span>
+                      <span className="text-xs opacity-70">⇧⌘↵</span>
                     </button>
                   )}
                   <button
@@ -730,9 +798,11 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                             setShowCommentForm(true)
                           }}
                           className="px-4 py-2 bg-blue-600/90 hover:bg-blue-600 rounded-lg text-sm transition-colors flex items-center gap-2 shadow-xl text-white"
+                          title="Add Comment (⌘↵)"
                         >
                           <VscComment />
                           <span>Add Comment</span>
+                          <span className="text-xs opacity-70">⌘↵</span>
                         </button>
                       </div>
                     )}

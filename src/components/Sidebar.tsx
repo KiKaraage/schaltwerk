@@ -174,6 +174,11 @@ export function Sidebar() {
             const sessionKey = selection.kind === 'orchestrator' ? 'orchestrator' : (selection.payload || 'unknown')
             setFocusForSession(sessionKey, 'claude')
             // Focus will be applied by TerminalGrid effect
+        },
+        onOpenDiffViewer: () => {
+            // Only open if a session is selected
+            if (selection.kind !== 'session') return
+            window.dispatchEvent(new CustomEvent('para-ui:open-diff-view'))
         }
     })
 

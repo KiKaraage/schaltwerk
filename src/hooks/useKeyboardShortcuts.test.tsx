@@ -45,18 +45,19 @@ describe('useKeyboardShortcuts', () => {
     expect(onSelectSession).not.toHaveBeenCalled()
   })
 
-  it('invokes cancel callback with and without shift on mod+d / mod+D', () => {
+  it('opens diff on mod+g and cancels on mod+d', () => {
     const onSelectOrchestrator = vi.fn()
     const onSelectSession = vi.fn()
     const onCancelSelectedSession = vi.fn()
+    const onOpenDiffViewer = vi.fn()
 
-    renderHook(() => useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onCancelSelectedSession, sessionCount: 5 }))
+    renderHook(() => useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onOpenDiffViewer, sessionCount: 5 }))
     Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true })
 
+    pressKey('g', { metaKey: true })
     pressKey('d', { metaKey: true })
-    pressKey('D', { metaKey: true, shiftKey: true })
 
+    expect(onOpenDiffViewer).toHaveBeenCalled()
     expect(onCancelSelectedSession).toHaveBeenCalledWith(false)
-    expect(onCancelSelectedSession).toHaveBeenCalledWith(true)
   })
 })

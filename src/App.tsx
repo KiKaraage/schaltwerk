@@ -71,12 +71,20 @@ export default function App() {
       }
     }
 
+    const handleOpenDiffView = () => {
+      // open diff view for current session; file selection stays null to show list
+      setSelectedDiffFile(null)
+      setIsDiffViewerOpen(true)
+    }
+
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('global-new-session-shortcut', handleGlobalNewSession)
+    window.addEventListener('para-ui:open-diff-view' as any, handleOpenDiffView)
     
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('global-new-session-shortcut', handleGlobalNewSession)
+      window.removeEventListener('para-ui:open-diff-view' as any, handleOpenDiffView)
     }
   }, [newSessionOpen, cancelModalOpen])
   

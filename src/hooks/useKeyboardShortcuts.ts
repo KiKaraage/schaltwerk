@@ -10,9 +10,10 @@ interface KeyboardShortcutsProps {
     onSelectNextSession?: () => void
     onFocusSidebar?: () => void
     onFocusClaude?: () => void
+    onOpenDiffViewer?: () => void
 }
 
-export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onMarkSelectedSessionReady, sessionCount, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude }: KeyboardShortcutsProps) {
+export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onMarkSelectedSessionReady, sessionCount, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude, onOpenDiffViewer }: KeyboardShortcutsProps) {
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
@@ -57,6 +58,11 @@ export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, on
                     const immediate = event.shiftKey === true
                     onCancelSelectedSession(immediate)
                 }
+            } else if (key === 'g' || key === 'G') {
+                if (onOpenDiffViewer) {
+                    event.preventDefault()
+                    onOpenDiffViewer()
+                }
             } else if (key === 'r' || key === 'R') {
                 if (onMarkSelectedSessionReady) {
                     event.preventDefault()
@@ -70,5 +76,5 @@ export function useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, on
         return () => {
             window.removeEventListener('keydown', handleKeyDown)
         }
-    }, [sessionCount, onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onMarkSelectedSessionReady, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude])
+    }, [sessionCount, onSelectOrchestrator, onSelectSession, onCancelSelectedSession, onMarkSelectedSessionReady, onSelectPrevSession, onSelectNextSession, onFocusSidebar, onFocusClaude, onOpenDiffViewer])
 }
