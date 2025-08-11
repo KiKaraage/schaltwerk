@@ -470,7 +470,7 @@ impl Database {
         match result {
             Ok(last_calculated) => {
                 let now = Utc::now().timestamp();
-                Ok(now - last_calculated > 30)
+                Ok(now - last_calculated > 60)
             }
             Err(_) => Ok(true),
         }

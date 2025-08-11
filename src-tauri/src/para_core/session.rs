@@ -123,7 +123,7 @@ impl SessionManager {
         let global_skip = self.db.get_skip_permissions().unwrap_or(false);
         let _ = self.db.set_session_original_settings(&session.id, &global_agent, global_skip);
         
-        let mut git_stats = git::calculate_git_stats(&worktree_path, &parent_branch)?;
+        let mut git_stats = git::calculate_git_stats_fast(&worktree_path, &parent_branch)?;
         git_stats.session_id = session_id;
         self.db.save_git_stats(&git_stats)?;
         
@@ -193,7 +193,7 @@ impl SessionManager {
     
     pub fn update_git_stats(&self, session_id: &str) -> Result<()> {
         let session = self.db.get_session_by_id(session_id)?;
-        let mut stats = git::calculate_git_stats(&session.worktree_path, &session.parent_branch)?;
+        let mut stats = git::calculate_git_stats_fast(&session.worktree_path, &session.parent_branch)?;
         stats.session_id = session_id.to_string();
         self.db.save_git_stats(&stats)?;
         Ok(())
@@ -239,9 +239,9 @@ impl SessionManager {
             // Use cached git stats where fresh; compute only when stale
             let git_stats = match self.db.get_git_stats(&session.id)? {
                 Some(existing) => {
-                    let is_stale = (Utc::now() - existing.calculated_at).num_seconds() > 30;
+                    let is_stale = (Utc::now() - existing.calculated_at).num_seconds() > 60;
                     if is_stale {
-                        let mut updated = git::calculate_git_stats(&session.worktree_path, &session.parent_branch).ok();
+                        let mut updated = git::calculate_git_stats_fast(&session.worktree_path, &session.parent_branch).ok();
                         if let Some(ref mut s) = updated { s.session_id = session.id.clone(); let _ = self.db.save_git_stats(s); }
                         updated.or(Some(existing))
                     } else {
@@ -249,7 +249,7 @@ impl SessionManager {
                     }
                 }
                 None => {
-                    let mut computed = git::calculate_git_stats(&session.worktree_path, &session.parent_branch).ok();
+                    let mut computed = git::calculate_git_stats_fast(&session.worktree_path, &session.parent_branch).ok();
                     if let Some(ref mut s) = computed { s.session_id = session.id.clone(); let _ = self.db.save_git_stats(s); }
                     computed
                 }

@@ -40,7 +40,7 @@ impl<E: EventEmitter> ActivityTracker<E> {
     }
     
     pub async fn start_polling(self) {
-        let mut interval = interval(Duration::from_secs(30));
+        let mut interval = interval(Duration::from_secs(60));
         
         loop {
             interval.tick().await;
@@ -67,7 +67,7 @@ impl<E: EventEmitter> ActivityTracker<E> {
             }
             
             if self.db.should_update_stats(&session.id)? {
-                let mut stats = git::calculate_git_stats(&session.worktree_path, &session.parent_branch)?;
+                let mut stats = git::calculate_git_stats_fast(&session.worktree_path, &session.parent_branch)?;
                 stats.session_id = session.id.clone();
                 self.db.save_git_stats(&stats)?;
                 // Emit git stats update event

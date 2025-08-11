@@ -70,7 +70,7 @@ pub async fn generate_display_name(
     
     let base_prompt = initial_prompt.unwrap_or("Name this coding session succinctly");
     let truncated = truncate_prompt(base_prompt);
-    log::debug!("Truncated prompt for name generation: {}", truncated);
+    log::debug!("Truncated prompt for name generation: {truncated}");
 
     // Prompt for plain text result for JSON wrappers
     // Explicitly tell the AI to not use tools for faster response
@@ -130,7 +130,7 @@ Respond with just the short kebab-case name:"#
         if let Some(output) = output {
             if output.status.success() {
                 let stdout = ansi_strip(&String::from_utf8_lossy(&output.stdout));
-                log::debug!("cursor-agent stdout: {}", stdout);
+                log::debug!("cursor-agent stdout: {stdout}");
                 
                 // Try to parse as JSON
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(&stdout) {
@@ -140,13 +140,13 @@ Respond with just the short kebab-case name:"#
                         .or_else(|| v.get("response").and_then(|x| x.as_str()));
                     
                     if let Some(result) = result_str {
-                        log::info!("cursor-agent returned name: {}", result);
+                        log::info!("cursor-agent returned name: {result}");
                         let name = sanitize_name(result);
-                        log::info!("Sanitized name: {}", name);
+                        log::info!("Sanitized name: {name}");
                         
                         if !name.is_empty() {
                             db.update_session_display_name(session_id, &name)?;
-                            log::info!("Updated database with display_name '{}' for session_id '{}'", name, session_id);
+                            log::info!("Updated database with display_name '{name}' for session_id '{session_id}'");
                             return Ok(Some(name));
                         }
                     } else {
@@ -161,13 +161,13 @@ Respond with just the short kebab-case name:"#
         }
         
         // If we get here with cursor, we couldn't generate a name
-        log::warn!("cursor-agent could not generate a name for session_id '{}'", session_id);
+        log::warn!("cursor-agent could not generate a name for session_id '{session_id}'");
         return Ok(None);
     }
 
     // Use Claude only if claude was selected (not as a fallback)
     if agent_type != "claude" {
-        log::info!("Agent type is '{}', not generating name with claude", agent_type);
+        log::info!("Agent type is '{agent_type}', not generating name with claude");
         return Ok(None);
     }
     
@@ -196,7 +196,7 @@ Respond with just the short kebab-case name:"#
     
     if output.status.success() {
         let stdout = ansi_strip(&String::from_utf8_lossy(&output.stdout));
-        log::debug!("claude stdout: {}", stdout);
+        log::debug!("claude stdout: {stdout}");
         
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&stdout) {
             // Claude might return the result directly or in a "result" field
@@ -204,13 +204,13 @@ Respond with just the short kebab-case name:"#
                 .or_else(|| v.get("result").and_then(|x| x.as_str()));
             
             if let Some(result) = result_str {
-                log::info!("claude returned name: {}", result);
+                log::info!("claude returned name: {result}");
                 let name = sanitize_name(result);
-                log::info!("Sanitized name: {}", name);
+                log::info!("Sanitized name: {name}");
                 
                 if !name.is_empty() {
                     db.update_session_display_name(session_id, &name)?;
-                    log::info!("Updated database with display_name '{}' for session_id '{}'", name, session_id);
+                    log::info!("Updated database with display_name '{name}' for session_id '{session_id}'");
                     return Ok(Some(name));
                 } else {
                     log::warn!("Sanitized name is empty");
@@ -225,6 +225,6 @@ Respond with just the short kebab-case name:"#
         log::warn!("claude returned non-zero exit status");
     }
 
-    log::warn!("No name could be generated for session_id '{}'", session_id);
+    log::warn!("No name could be generated for session_id '{session_id}'");
     Ok(None)
 }

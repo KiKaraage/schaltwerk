@@ -1,13 +1,18 @@
 #[cfg(test)]
-mod tests {
-    use crate::para_core::{Database, SessionManager, git};
-    use crate::para_core::types::SessionStatus;
-    use tempfile::TempDir;
-    use std::path::PathBuf;
-    use std::process::Command;
-    use anyhow::Result;
-    
-    struct TestEnvironment {
+use crate::para_core::{Database, SessionManager, git};
+#[cfg(test)]
+use crate::para_core::types::SessionStatus;
+#[cfg(test)]
+use tempfile::TempDir;
+#[cfg(test)]
+use std::path::PathBuf;
+#[cfg(test)]
+use std::process::Command;
+#[cfg(test)]
+use anyhow::Result;
+
+#[cfg(test)]
+struct TestEnvironment {
         _repo_dir: TempDir,  // Keep alive to prevent cleanup
         repo_path: PathBuf,
         db_path: PathBuf,
@@ -186,7 +191,7 @@ mod tests {
         
         for name in invalid_names {
             let result = manager.create_session(name, None, None);
-            assert!(result.is_err(), "Should reject invalid name: {}", name);
+            assert!(result.is_err(), "Should reject invalid name: {name}");
         }
         
         // Verify no sessions were created
@@ -213,9 +218,9 @@ mod tests {
             
             let result = manager.create_session(name, None, None);
             if let Err(ref e) = result {
-                println!("Error for {}: {}", name, e);
+                println!("Error for {name}: {e}");
             }
-            assert!(result.is_ok(), "Should accept valid name: {} - Error: {:?}", name, result);
+            assert!(result.is_ok(), "Should accept valid name: {name} - Error: {result:?}");
         }
     }
     
@@ -302,17 +307,17 @@ mod tests {
             .unwrap();
         
         // Calculate stats
-        let stats = git::calculate_git_stats(&session.worktree_path, &session.parent_branch).unwrap();
+        let stats = git::calculate_git_stats_fast(&session.worktree_path, &session.parent_branch).unwrap();
         
         assert_eq!(stats.files_changed, 2);
         assert!(stats.lines_added > 0);
-        assert_eq!(stats.has_uncommitted, false);
+        assert!(!stats.has_uncommitted);
         
         // Make uncommitted changes
         std::fs::write(session.worktree_path.join("file3.txt"), "Uncommitted").unwrap();
         
-        let stats = git::calculate_git_stats(&session.worktree_path, &session.parent_branch).unwrap();
-        assert_eq!(stats.has_uncommitted, true);
+        let stats = git::calculate_git_stats_fast(&session.worktree_path, &session.parent_branch).unwrap();
+        assert!(stats.has_uncommitted);
     }
     
     #[test]
@@ -337,7 +342,7 @@ mod tests {
         
         // Debug: Check what worktrees exist before cleanup
         let worktrees = git::list_worktrees(&env.repo_path).unwrap();
-        println!("Worktrees before cleanup: {:?}", worktrees);
+        println!("Worktrees before cleanup: {worktrees:?}");
         
         let sessions = manager.list_sessions().unwrap();
         println!("Sessions: {:?}", sessions.iter().map(|s| &s.worktree_path).collect::<Vec<_>>());
@@ -347,7 +352,7 @@ mod tests {
         
         // Debug: Check what worktrees exist after cleanup
         let worktrees = git::list_worktrees(&env.repo_path).unwrap();
-        println!("Worktrees after cleanup: {:?}", worktrees);
+        println!("Worktrees after cleanup: {worktrees:?}");
         
         // Verify orphan is removed but proper session remains
         assert!(!orphan_path.exists(), "Orphan path should be removed");
@@ -370,7 +375,7 @@ mod tests {
                 let repo_path = repo_path.clone();
                 thread::spawn(move || {
                     let manager = SessionManager::new((*db).clone(), repo_path);
-                    manager.create_session(&format!("concurrent-{}", i), None, None)
+                    manager.create_session(&format!("concurrent-{i}"), None, None)
                 })
             })
             .collect();
@@ -399,7 +404,7 @@ mod tests {
         // Create multiple sessions to amplify the effect
         let session_count = 8usize;
         for i in 0..session_count {
-            let name = format!("perf-{}", i);
+            let name = format!("perf-{i}");
             manager.create_session(&name, None, None).unwrap();
         }
 
@@ -419,8 +424,7 @@ mod tests {
         // Using 10% tolerance to avoid flakiness on fast CI machines.
         assert!(
             dur_warm <= dur_cold + dur_cold / 10,
-            "Expected warm ( {:?} ) to be <= 1.1x cold ( {:?} )",
-            dur_warm, dur_cold
+            "Expected warm ( {dur_warm:?} ) to be <= 1.1x cold ( {dur_cold:?} )"
         );
     }
 
@@ -446,7 +450,7 @@ mod tests {
 
         // Force stats to be stale by overwriting with an older timestamp
         let mut stale1 = stats1.unwrap();
-        stale1.calculated_at = Utc::now() - ChronoDuration::seconds(31);
+        stale1.calculated_at = Utc::now() - ChronoDuration::seconds(61);
         manager.db_ref().save_git_stats(&stale1).unwrap();
 
         // Call listing again to trigger refresh for stale session
@@ -456,4 +460,3 @@ mod tests {
         let refreshed1 = manager.db_ref().get_git_stats(&s1.id).unwrap().unwrap();
         assert!(refreshed1.calculated_at > stale1.calculated_at);
     }
-}

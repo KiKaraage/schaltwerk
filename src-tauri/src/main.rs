@@ -324,7 +324,7 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
     
     // Spawn background task to generate display name if needed
     if was_auto_generated && prompt.is_some() {
-        log::info!("Session '{}' was auto-generated with prompt, spawning name generation task", name);
+        log::info!("Session '{name}' was auto-generated with prompt, spawning name generation task");
         tokio::spawn(async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             
@@ -336,7 +336,7 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
                 let session = match manager.get_session(&session_name_clone) {
                     Ok(s) => s,
                     Err(e) => { 
-                        log::warn!("Cannot load session '{}' for naming: {}", session_name_clone, e); 
+                        log::warn!("Cannot load session '{session_name_clone}' for naming: {e}"); 
                         return; 
                     }
                 };
@@ -344,13 +344,13 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
                     session_name_clone, session.pending_name_generation, session.original_agent_type);
                 
                 if !session.pending_name_generation {
-                    log::info!("Session '{}' does not have pending_name_generation flag, skipping", session_name_clone);
+                    log::info!("Session '{session_name_clone}' does not have pending_name_generation flag, skipping");
                     return;
                 }
                 let agent = session.original_agent_type.clone()
                     .unwrap_or_else(|| core.db.get_agent_type().unwrap_or_else(|_| "claude".to_string()));
                 
-                log::info!("Using agent '{}' for name generation of session '{}'", agent, session_name_clone);
+                log::info!("Using agent '{agent}' for name generation of session '{session_name_clone}'");
                 
                 // Clone what we need and release the lock
                 (
@@ -373,7 +373,7 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
                 initial_prompt.as_deref()
             ).await {
                 Ok(Some(display_name)) => {
-                    log::info!("Successfully generated display name '{}' for session '{}'", display_name, session_name_clone);
+                    log::info!("Successfully generated display name '{display_name}' for session '{session_name_clone}'");
                     
                     // Re-acquire lock only to get the updated sessions list
                     let core = get_para_core().await;
@@ -387,11 +387,11 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
                     }
                 }
                 Ok(None) => { 
-                    log::warn!("Name generation returned None for session '{}'", session_name_clone);
+                    log::warn!("Name generation returned None for session '{session_name_clone}'");
                     let _ = db_clone.set_pending_name_generation(&session_id, false); 
                 }
                 Err(e) => {
-                    log::error!("Failed to generate display name for session '{}': {}", session_name_clone, e);
+                    log::error!("Failed to generate display name for session '{session_name_clone}': {e}");
                     let _ = db_clone.set_pending_name_generation(&session_id, false);
                 }
             }
