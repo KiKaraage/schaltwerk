@@ -376,10 +376,10 @@ export function Sidebar() {
                 >
                     <div className="flex items-center justify-between">
                         <div className="font-medium text-slate-100">main (orchestrator)</div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">⌘1</span>
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-blue-600/20 text-blue-400">main repo</span>
-                        </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400">⌘1</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-600/20 text-blue-400">main repo</span>
+                    </div>
                     </div>
                     <div className="text-xs text-slate-500">Original repository from which sessions are created</div>
                 </button>
