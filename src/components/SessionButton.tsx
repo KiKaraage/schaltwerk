@@ -1,6 +1,5 @@
 import { memo } from 'react'
 import { clsx } from 'clsx'
-import { invoke } from '@tauri-apps/api/core'
 import { formatLastActivity } from '../utils/time'
 
 interface DiffStats {
@@ -151,20 +150,6 @@ export const SessionButton = memo<SessionButtonProps>(({
                         Unmark
                     </button>
                 )}
-                <button 
-                    onClick={async (e) => {
-                        e.stopPropagation()
-                        try {
-                            await invoke('open_in_vscode', { worktreePath: s.worktree_path })
-                        } catch (err) {
-                            console.error('Failed to open VSCode:', err)
-                        }
-                    }}
-                    className="text-[11px] px-2 py-0.5 rounded bg-blue-800/60 hover:bg-blue-700/60"
-                    title="Open in VSCode"
-                >
-                    VSCode
-                </button>
                 <button 
                     onClick={(e) => {
                         e.stopPropagation()
