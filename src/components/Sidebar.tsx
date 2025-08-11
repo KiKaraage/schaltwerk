@@ -219,7 +219,7 @@ export function Sidebar() {
                 last_activity_ts: number
             }>('para-ui:session-activity', (event) => {
                 const { session_name, last_activity_ts } = event.payload
-                setSessions(prev => prev.map(s => {
+                setSessions(prev => sortSessions(prev.map(s => {
                     if (s.info.session_id !== session_name) return s
                     return {
                         ...s,
@@ -228,7 +228,7 @@ export function Sidebar() {
                             last_modified: new Date(last_activity_ts * 1000).toISOString(),
                         }
                     }
-                }))
+                })))
             })
             unlisteners.push(u1)
             
@@ -242,7 +242,7 @@ export function Sidebar() {
                 has_uncommitted: boolean
             }>('para-ui:session-git-stats', (event) => {
                 const { session_name, files_changed, lines_added, lines_removed, has_uncommitted } = event.payload
-                setSessions(prev => prev.map(s => {
+                setSessions(prev => sortSessions(prev.map(s => {
                     if (s.info.session_id !== session_name) return s
                     const diff = {
                         files_changed: files_changed || 0,
@@ -258,7 +258,7 @@ export function Sidebar() {
                             has_uncommitted_changes: has_uncommitted,
                         }
                     }
-                }))
+                })))
             })
             unlisteners.push(u2)
 
@@ -308,7 +308,7 @@ export function Sidebar() {
             // Session removed
             const u4 = await listen<{ session_name: string }>('para-ui:session-removed', async (event) => {
                 const { session_name } = event.payload
-                setSessions(prev => prev.filter(s => s.info.session_id !== session_name))
+                setSessions(prev => sortSessions(prev.filter(s => s.info.session_id !== session_name)))
                 // If the removed session was selected, fallback to orchestrator
                 if (selection.kind === 'session' && selection.payload === session_name) {
                     await setSelection({ kind: 'orchestrator' })
@@ -374,8 +374,7 @@ export function Sidebar() {
                 ) : sessions.length === 0 ? (
                     <div className="text-center text-slate-500 py-4">No active sessions</div>
                 ) : (
-                    sortSessions(sessions)
-                        .map((session, i) => {
+                    sessions.map((session, i) => {
                         const s = session.info
                         const color = getSessionStateColor(s.session_state)
                         const task = s.current_task || `Working on ${s.session_id}`
