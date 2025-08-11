@@ -232,9 +232,11 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
                     startedGlobal.add(terminalId);
                     try {
                         await invoke('para_core_start_claude_orchestrator');
+                        console.log(`[Terminal ${terminalId}] Claude started successfully`);
                     } catch (e) {
                         // Roll back start flags on failure to allow retry
                         startedGlobal.delete(terminalId);
+                        console.error(`[Terminal ${terminalId}] Failed to start Claude:`, e);
                         throw e;
                     }
                     startingTerminals.current.set(terminalId, false);
@@ -268,9 +270,11 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
                     startedGlobal.add(terminalId);
                     try {
                         await invoke('para_core_start_claude', { sessionName });
+                        console.log(`[Terminal ${terminalId}] Claude started successfully for session ${sessionName}`);
                     } catch (e) {
                         // Roll back start flags on failure to allow retry
                         startedGlobal.delete(terminalId);
+                        console.error(`[Terminal ${terminalId}] Failed to start Claude for session ${sessionName}:`, e);
                         throw e;
                     }
                     startingTerminals.current.set(terminalId, false);

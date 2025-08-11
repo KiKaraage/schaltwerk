@@ -1,5 +1,5 @@
-use std::path::PathBuf;
-use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::collections::{HashMap, HashSet};
 use std::sync::{OnceLock, Mutex as StdMutex, Arc};
 use anyhow::{Result, anyhow};
 use uuid::Uuid;
@@ -9,6 +9,22 @@ use crate::para_core::{
     git,
     types::{Session, SessionStatus, SessionInfo, SessionStatusType, SessionType, EnrichedSession, DiffStats},
 };
+
+// Track which sessions have already had their initial prompt sent
+// Use worktree path as key for uniqueness
+static PROMPTED_SESSIONS: OnceLock<StdMutex<HashSet<PathBuf>>> = OnceLock::new();
+
+fn has_session_been_prompted(worktree_path: &Path) -> bool {
+    let set = PROMPTED_SESSIONS.get_or_init(|| StdMutex::new(HashSet::new()));
+    let prompted = set.lock().unwrap();
+    prompted.contains(worktree_path)
+}
+
+fn mark_session_prompted(worktree_path: &Path) {
+    let set = PROMPTED_SESSIONS.get_or_init(|| StdMutex::new(HashSet::new()));
+    let mut prompted = set.lock().unwrap();
+    prompted.insert(worktree_path.to_path_buf());
+}
 
 pub struct SessionManager {
     db: Database,
@@ -288,19 +304,51 @@ impl SessionManager {
         let command = match agent_type.as_str() {
             "cursor" => {
                 let session_id = crate::para_core::cursor::find_cursor_session(&session.worktree_path);
+                
+                // Only use initial prompt if we haven't prompted this session before
+                let should_use_prompt = session_id.is_none() && !has_session_been_prompted(&session.worktree_path);
+                let prompt_to_use = if should_use_prompt {
+                    if let Some(prompt) = session.initial_prompt.as_deref() {
+                        mark_session_prompted(&session.worktree_path);
+                        log::info!("Session {session_name}: Using initial prompt (first time)");
+                        Some(prompt)
+                    } else {
+                        None
+                    }
+                } else {
+                    log::info!("Session {session_name}: Skipping initial prompt (session_id={session_id:?}, prompted={})", has_session_been_prompted(&session.worktree_path));
+                    None
+                };
+                
                 crate::para_core::cursor::build_cursor_command(
                     &session.worktree_path,
                     session_id.as_deref(),
-                    if session_id.is_none() { session.initial_prompt.as_deref() } else { None },
+                    prompt_to_use,
                     skip_permissions,
                 )
             }
             _ => {
                 let session_id = crate::para_core::claude::find_claude_session(&session.worktree_path);
+                
+                // Only use initial prompt if we haven't prompted this session before
+                let should_use_prompt = session_id.is_none() && !has_session_been_prompted(&session.worktree_path);
+                let prompt_to_use = if should_use_prompt {
+                    if let Some(prompt) = session.initial_prompt.as_deref() {
+                        mark_session_prompted(&session.worktree_path);
+                        log::info!("Session {session_name}: Using initial prompt (first time)");
+                        Some(prompt)
+                    } else {
+                        None
+                    }
+                } else {
+                    log::info!("Session {session_name}: Skipping initial prompt (session_id={session_id:?}, prompted={})", has_session_been_prompted(&session.worktree_path));
+                    None
+                };
+                
                 crate::para_core::claude::build_claude_command(
                     &session.worktree_path,
                     session_id.as_deref(),
-                    if session_id.is_none() { session.initial_prompt.as_deref() } else { None },
+                    prompt_to_use,
                     skip_permissions,
                 )
             }
