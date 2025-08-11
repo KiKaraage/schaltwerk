@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
+import { OptimizedDiffViewer } from './OptimizedDiffViewer'
 import { useSelection } from '../contexts/SelectionContext'
 import { useReview } from '../contexts/ReviewContext'
 import { VscClose, VscChevronLeft, VscFile, VscDiffAdded, VscDiffModified, VscDiffRemoved, VscComment, VscSend, VscCheck } from 'react-icons/vsc'
@@ -135,10 +135,10 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
   } | null>(null)
   
   const [lineSelection, setLineSelection] = useState<LineSelection | null>(null)
-  const [isSelecting, setIsSelecting] = useState(false)
   const [showCommentForm, setShowCommentForm] = useState(false)
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentText, setEditingCommentText] = useState('')
+  const [viewMode, setViewMode] = useState<'split' | 'unified'>('unified')
   const diffViewerRef = useRef<HTMLDivElement>(null)
   const fileListRef = useRef<HTMLDivElement>(null)
   
@@ -188,6 +188,10 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     setSelectedFile(path)
     setLineSelection(null)
     setShowCommentForm(false)
+    
+    // Default to unified view for better performance
+    // User can toggle to split view if needed
+    setViewMode(window.innerWidth > 1600 ? 'split' : 'unified')
     
     try {
       const [mainText, worktreeText] = await invoke<[string, string]>('get_file_diff_from_main', {
@@ -276,77 +280,12 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, showCommentForm, onClose, files, selectedFile, loadFileDiff, lineSelection, currentReview])
 
-  // Line-based selection handlers with proper offset for react-diff-viewer structure
-  const getLineInfo = useCallback((element: HTMLElement): { line: number, side: 'old' | 'new' } | null => {
-    if (!diffViewerRef.current || !diffViewerRef.current.contains(element)) return null
-    
-    const row = element.closest('tr')
-    if (!row) return null
-    
-    // Check if this is a header row (title row) and skip it
-    if (row.querySelector('.diff-viewer-title')) return null
-    
-    // Check if click is on left or right side
-    const rect = element.getBoundingClientRect()
-    const diffRect = diffViewerRef.current.getBoundingClientRect()
-    const isLeftSide = rect.left < (diffRect.left + diffRect.width / 2)
-    const side: 'old' | 'new' = isLeftSide ? 'old' : 'new'
-    
-    // Try to find line number from the row's cells
-    const cells = row.querySelectorAll('td')
-    let lineNum = 0
-    
-    // Look for line number in gutter cells (usually have specific classes)
-    for (const cell of cells) {
-      // Check if this cell contains a line number
-      const text = cell.textContent?.trim()
-      if (text && !isNaN(parseInt(text)) && parseInt(text) > 0) {
-        // Check if this cell is a line number cell (usually has specific styling)
-        const cellClasses = cell.className || ''
-        if (cellClasses.includes('line-number') || cellClasses.includes('gutter')) {
-          lineNum = parseInt(text)
-          break
-        }
-      }
-    }
-    
-    // Fallback: count actual content rows (skip header rows)
-    if (lineNum === 0) {
-      const allRows = Array.from(diffViewerRef.current.querySelectorAll('tr'))
-      // Filter out header/title rows
-      const contentRows = allRows.filter(r => 
-        !r.querySelector('.diff-viewer-title') && 
-        !r.classList.contains('diff-table-header')
-      )
-      
-      const contentIndex = contentRows.indexOf(row)
-      // react-diff-viewer seems to have 2 header rows, so offset by that
-      lineNum = contentIndex >= 0 ? contentIndex + 1 : 1
-    }
-    
-    console.log('Line selection debug:', { 
-      side, 
-      lineNum, 
-      rowText: row.textContent?.substring(0, 50) 
-    })
-    
-    return { line: lineNum, side }
-  }, [])
-
-  const handleLineMouseDown = useCallback((e: MouseEvent) => {
-    const target = e.target as HTMLElement
-    if (target.closest('.review-comment-button') || target.closest('.review-comment-form')) return
-    
-    const lineInfo = getLineInfo(target)
-    if (!lineInfo) return
-    
-    e.preventDefault()
-    setIsSelecting(true)
+  const handleLineSelect = useCallback((side: 'old' | 'new', startLine: number, endLine: number, content: string[]) => {
     setLineSelection({
-      side: lineInfo.side,
-      startLine: lineInfo.line,
-      endLine: lineInfo.line,
-      content: []
+      side,
+      startLine,
+      endLine,
+      content
     })
     setShowCommentForm(false)
   }, [getLineInfo])
@@ -519,28 +458,9 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       'toml': 'toml', 'md': 'markdown',
       'css': 'css', 'scss': 'scss', 'less': 'less'
     }
-    return languageMap[ext || '']
+    return languageMap[ext || ''] || undefined
   }, [selectedFile])
 
-  const renderSyntaxHighlight = (code: string) => {
-    let html: string
-    try {
-      if (language && hljs.getLanguage(language)) {
-        html = hljs.highlight(code, { language, ignoreIllegals: true }).value
-      } else {
-        const auto = hljs.highlightAuto(code)
-        html = auto.value
-      }
-    } catch {
-      html = code
-    }
-    return (
-      <code
-        className="hljs block font-mono text-[12px] leading-[1.3] whitespace-pre"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    )
-  }
 
   const fileComments = selectedFile ? getCommentsForFile(selectedFile) : []
   
@@ -680,11 +600,10 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
               </div>
               
               <div 
-                className="flex-1 overflow-auto diff-wrapper relative" 
+                className="flex-1 overflow-hidden relative" 
                 ref={diffViewerRef}
-                style={{ userSelect: 'none' }}
               >
-                {/* Line selection indicator - moved to top-left to avoid button overlap */}
+                {/* Line selection indicator */}
                 {lineSelection && (
                   <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg z-50 text-sm shadow-lg">
                     Lines {lineSelection.startLine === lineSelection.endLine 
@@ -692,36 +611,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                       : `${lineSelection.startLine}-${lineSelection.endLine}`} selected ({lineSelection.side === 'old' ? 'base' : 'current'})
                   </div>
                 )}
-                
-                {/* Add selection overlay styles - using CSS variables for better performance */}
-                <style>{`
-                  .diff-wrapper {
-                    user-select: none;
-                    --selection-start: ${Math.max(1, (lineSelection?.startLine || 0))};
-                    --selection-end: ${Math.max(1, (lineSelection?.endLine || 0))};
-                  }
-                  .diff-wrapper tr {
-                    cursor: pointer;
-                    transition: background-color 0.15s ease;
-                  }
-                  .diff-wrapper tr:hover td {
-                    background-color: rgba(59, 130, 246, 0.08) !important;
-                  }
-                  
-                  /* Use attribute selectors for highlighting - offset by 2 for header rows */
-                  .diff-wrapper[data-selection-active="true"] tr {
-                    position: relative;
-                  }
-                  
-                  /* Offset by 2 to account for title/header rows in react-diff-viewer */
-                  .diff-wrapper[data-selection-active="true"] tr:nth-child(n+${Math.max(1, (lineSelection?.startLine || 0) + 2)}):nth-child(-n+${Math.max(1, (lineSelection?.endLine || 0) + 2)}) td {
-                    background-color: rgba(59, 130, 246, 0.18) !important;
-                  }
-                  
-                  .diff-wrapper[data-selection-active="true"] tr:nth-child(n+${Math.max(1, (lineSelection?.startLine || 0) + 2)}):nth-child(-n+${Math.max(1, (lineSelection?.endLine || 0) + 2)}) td:first-child {
-                    border-left: 3px solid rgb(59, 130, 246);
-                  }
-                `}</style>
                 
                 {loading ? (
                   <div className="h-full flex items-center justify-center text-slate-500">
@@ -732,56 +621,15 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                   </div>
                 ) : (
                   <>
-                    <ReactDiffViewer
-                      oldValue={mainContent}
-                      newValue={worktreeContent}
-                      splitView={window.innerWidth > 1400}
-                      compareMethod={DiffMethod.LINES}
+                    <OptimizedDiffViewer
+                      oldContent={mainContent}
+                      newContent={worktreeContent}
+                      language={language}
+                      viewMode={viewMode}
+                      onViewModeChange={setViewMode}
+                      onLineSelect={handleLineSelect}
                       leftTitle={`${branchInfo?.baseBranch || 'base'} (${branchInfo?.baseCommit || 'base'})`}
                       rightTitle={`${branchInfo?.currentBranch || 'current'} (${branchInfo?.headCommit || 'HEAD'})`}
-                      renderContent={renderSyntaxHighlight}
-                      showDiffOnly={false}
-                      hideLineNumbers={false}
-                      useDarkTheme={true}
-                      styles={{
-                        variables: {
-                          dark: {
-                            diffViewerBackground: 'transparent',
-                            diffViewerColor: '#cbd5e1',
-                            gutterBackground: 'transparent',
-                            gutterBackgroundDark: 'transparent',
-                            codeFoldBackground: 'transparent',
-                            codeFoldGutterBackground: 'transparent',
-                            emptyLineBackground: 'transparent',
-                            highlightBackground: '#334155',
-                            highlightGutterBackground: '#475569',
-                            addedBackground: 'rgba(34, 197, 94, 0.18)',
-                            addedColor: '#cbd5e1',
-                            removedBackground: 'rgba(239, 68, 68, 0.18)',
-                            removedColor: '#cbd5e1',
-                            wordAddedBackground: 'rgba(34, 197, 94, 0.32)',
-                            wordRemovedBackground: 'rgba(239, 68, 68, 0.32)',
-                            addedGutterBackground: 'rgba(34, 197, 94, 0.24)',
-                            removedGutterBackground: 'rgba(239, 68, 68, 0.24)',
-                            gutterColor: '#64748b',
-                            addedGutterColor: '#cbd5e1',
-                            removedGutterColor: '#cbd5e1',
-                            codeFoldContentColor: '#64748b',
-                            diffViewerTitleBackground: 'transparent',
-                            diffViewerTitleColor: '#cbd5e1',
-                            diffViewerTitleBorderColor: '#334155',
-                          }
-                        },
-                        diffAdded: { background: 'rgba(34, 197, 94, 0.18)' },
-                        diffRemoved: { background: 'rgba(239, 68, 68, 0.18)' },
-                        diffContainer: { background: 'transparent' },
-                        line: {
-                          fontFamily: 'SF Mono, Monaco, Consolas, monospace',
-                          fontSize: '12px',
-                          lineHeight: '1.3',
-                          whiteSpace: 'pre'
-                        }
-                      }}
                     />
 
                     {lineSelection && !showCommentForm && (
