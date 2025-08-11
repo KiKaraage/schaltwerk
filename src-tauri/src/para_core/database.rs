@@ -405,6 +405,15 @@ impl Database {
         )?;
         Ok(())
     }
+    
+    pub fn update_session_branch(&self, id: &str, new_branch: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET branch = ?1, updated_at = ?2 WHERE id = ?3",
+            params![new_branch, Utc::now().timestamp(), id],
+        )?;
+        Ok(())
+    }
 
     pub fn set_pending_name_generation(&self, id: &str, pending: bool) -> Result<()> {
         let conn = self.conn.lock().unwrap();

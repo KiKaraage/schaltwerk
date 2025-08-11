@@ -1,8 +1,18 @@
 use anyhow::{anyhow, Result};
-use crate::para_core::Database;
+use crate::para_core::{Database, git};
 use std::path::Path;
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
+
+pub struct SessionRenameContext<'a> {
+    pub db: &'a Database,
+    pub session_id: &'a str,
+    pub worktree_path: &'a Path,
+    pub repo_path: &'a Path,
+    pub current_branch: &'a str,
+    pub agent_type: &'a str,
+    pub initial_prompt: Option<&'a str>,
+}
 
 pub fn truncate_prompt(prompt: &str) -> String {
     let first_lines: String = prompt.lines().take(4).collect::<Vec<_>>().join("\n");
@@ -56,6 +66,51 @@ fn ansi_strip(input: &str) -> String {
         }
     }
     out
+}
+
+pub async fn generate_display_name_and_rename_branch(ctx: SessionRenameContext<'_>) -> Result<Option<String>> {
+    let result = generate_display_name(ctx.db, ctx.session_id, ctx.worktree_path, ctx.agent_type, ctx.initial_prompt).await?;
+    
+    if let Some(ref new_name) = result {
+        // Generate new branch name based on the display name
+        let new_branch = format!("para/{new_name}");
+        
+        // Only rename if the branch name would actually change
+        if ctx.current_branch != new_branch {
+            log::info!("Renaming branch from '{}' to '{new_branch}'", ctx.current_branch);
+            
+            // Rename the branch
+            match git::rename_branch(ctx.repo_path, ctx.current_branch, &new_branch) {
+                Ok(()) => {
+                    log::info!("Successfully renamed branch to '{new_branch}'");
+                    
+                    // Update the worktree to use the new branch
+                    match git::update_worktree_branch(ctx.worktree_path, &new_branch) {
+                        Ok(()) => {
+                            log::info!("Successfully updated worktree to use branch '{new_branch}'");
+                            
+                            // Update the branch name in the database
+                            if let Err(e) = ctx.db.update_session_branch(ctx.session_id, &new_branch) {
+                                log::error!("Failed to update branch name in database: {e}");
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Failed to update worktree to new branch '{new_branch}': {e}");
+                            // Try to revert the branch rename
+                            if let Err(revert_err) = git::rename_branch(ctx.repo_path, &new_branch, ctx.current_branch) {
+                                log::error!("Failed to revert branch rename: {revert_err}");
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Could not rename branch from '{}' to '{new_branch}': {e}", ctx.current_branch);
+                }
+            }
+        }
+    }
+    
+    Ok(result)
 }
 
 pub async fn generate_display_name(

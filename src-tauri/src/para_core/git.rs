@@ -642,6 +642,86 @@ pub fn branch_exists(repo_path: &Path, branch_name: &str) -> Result<bool> {
     }
 }
 
+pub fn rename_branch(repo_path: &Path, old_branch: &str, new_branch: &str) -> Result<()> {
+    // First check if the old branch exists
+    if !branch_exists(repo_path, old_branch)? {
+        return Err(anyhow!("Branch '{old_branch}' does not exist"));
+    }
+    
+    // Check if the new branch name already exists
+    if branch_exists(repo_path, new_branch)? {
+        return Err(anyhow!("Branch '{new_branch}' already exists"));
+    }
+    
+    // Rename the branch
+    let output = Command::new("git")
+        .args([
+            "-C", repo_path.to_str().unwrap(),
+            "branch", "-m", old_branch, new_branch
+        ])
+        .output()?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow!("Failed to rename branch: {stderr}"));
+    }
+    
+    Ok(())
+}
+
+pub fn update_worktree_branch(worktree_path: &Path, new_branch: &str) -> Result<()> {
+    // First, check if there are uncommitted changes
+    if has_uncommitted_changes(worktree_path)? {
+        // Stash changes temporarily
+        let stash_output = Command::new("git")
+            .args([
+                "-C", worktree_path.to_str().unwrap(),
+                "stash", "push", "-m", "Auto-stash before branch rename"
+            ])
+            .output()?;
+        
+        if !stash_output.status.success() {
+            log::warn!("Failed to stash changes, proceeding anyway");
+        }
+    }
+    
+    // Update the worktree to track the new branch
+    let output = Command::new("git")
+        .args([
+            "-C", worktree_path.to_str().unwrap(),
+            "switch", new_branch
+        ])
+        .output()?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow!("Failed to update worktree to new branch: {stderr}"));
+    }
+    
+    // Try to pop the stash if we stashed anything
+    let stash_list = Command::new("git")
+        .args([
+            "-C", worktree_path.to_str().unwrap(),
+            "stash", "list"
+        ])
+        .output()?;
+    
+    if stash_list.status.success() && !stash_list.stdout.is_empty() {
+        let pop_output = Command::new("git")
+            .args([
+                "-C", worktree_path.to_str().unwrap(),
+                "stash", "pop"
+            ])
+            .output()?;
+        
+        if !pop_output.status.success() {
+            log::warn!("Failed to restore stashed changes, they remain in stash");
+        }
+    }
+    
+    Ok(())
+}
+
 #[cfg(test)]
 mod performance_tests {
     use super::*;

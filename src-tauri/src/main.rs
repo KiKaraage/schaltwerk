@@ -362,24 +362,27 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
                 
                 // Clone what we need and release the lock
                 (
-                    (session.id.clone(), session.worktree_path.clone(), agent, session.initial_prompt.clone()),
+                    (session.id.clone(), session.worktree_path.clone(), session.repository_path.clone(), session.branch.clone(), agent, session.initial_prompt.clone()),
                     core.db.clone()
                 )
             };
             
-            let (session_id, worktree_path, agent, initial_prompt) = session_info;
+            let (session_id, worktree_path, repo_path, current_branch, agent, initial_prompt) = session_info;
             
             log::info!("Starting name generation for session '{}' with prompt: {:?}", 
                 session_name_clone, initial_prompt.as_ref().map(|p| &p[..p.len().min(50)]));
             
             // Now do the async operation without holding any locks
-            match crate::para_core::naming::generate_display_name(
-                &db_clone,
-                &session_id,
-                &worktree_path,
-                &agent,
-                initial_prompt.as_deref()
-            ).await {
+            let ctx = crate::para_core::naming::SessionRenameContext {
+                db: &db_clone,
+                session_id: &session_id,
+                worktree_path: &worktree_path,
+                repo_path: &repo_path,
+                current_branch: &current_branch,
+                agent_type: &agent,
+                initial_prompt: initial_prompt.as_deref(),
+            };
+            match crate::para_core::naming::generate_display_name_and_rename_branch(ctx).await {
                 Ok(Some(display_name)) => {
                     log::info!("Successfully generated display name '{display_name}' for session '{session_name_clone}'");
                     
