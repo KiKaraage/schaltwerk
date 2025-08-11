@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "tsc --noEmit",
@@ -53,6 +53,7 @@
     "@vitest/coverage-v8": "^3.2.4",
     "@vitest/ui": "^3.2.4",
     "happy-dom": "^18.0.1",
+    "terser": "^5.43.1",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
     "vitest": "^3.2.4"

@@ -29,4 +29,28 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**", "**/.para/worktrees/**"],
     },
   },
+  build: {
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'xterm-vendor': ['xterm', 'xterm-addon-fit'],
+          'ui-vendor': ['clsx', 'react-icons', 'react-split'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000,
+    sourcemap: false,
+    reportCompressedSize: false,
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'xterm', 'xterm-addon-fit'],
+  },
 }));

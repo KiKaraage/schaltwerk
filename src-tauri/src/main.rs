@@ -4,6 +4,9 @@
 #![warn(unused_imports)]
 #![warn(unused_variables)]
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 mod cleanup;
 mod diff_commands;
 mod logging;

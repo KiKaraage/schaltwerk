@@ -146,12 +146,4 @@ run-release:
 # Same as run-release but allows specifying a port environment
 # Useful if parts of the app read PORT/VITE_PORT at runtime
 run-port-release port:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "🚀 Building Para UI (release bundle, no auto-reload) on port {{port}}…"
-    export VITE_PORT={{port}}
-    export PORT={{port}}
-    npm run build
-    npm run tauri build
-    echo "✅ Build complete. Launching binary on port {{port}} from CWD: $(pwd)…"
-    VITE_PORT={{port}} PORT={{port}} PARA_REPO_PATH="$(pwd)" ./src-tauri/target/release/ui
+    ./scripts/fast-build.sh {{port}}

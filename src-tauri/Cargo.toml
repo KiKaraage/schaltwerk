@@ -20,6 +20,7 @@ path = "src/lib.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+mimalloc = { version = "0.1", default-features = false }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
@@ -60,4 +61,20 @@ semicolon_if_nothing_returned = "warn"
 missing_panics_doc = "allow"
 missing_errors_doc = "allow"
 must_use_candidate = "allow"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = 'abort'
+strip = true
+
+[profile.dev]
+opt-level = 1
+debug = 0
+split-debuginfo = "unpacked"
+incremental = true
+
+[profile.dev.package."*"]
+opt-level = 2
 
