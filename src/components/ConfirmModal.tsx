@@ -63,7 +63,7 @@ export function ConfirmModal({
 
   if (!open) return null
 
-  const confirmBaseClasses = 'px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 group disabled:opacity-50 disabled:cursor-not-allowed'
+  const confirmBaseClasses = 'px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 group disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2'
   const confirmVariantClasses =
     variant === 'danger'
       ? 'bg-red-700 hover:bg-red-600 focus:ring-red-500'
@@ -94,7 +94,13 @@ export function ConfirmModal({
             className={`${confirmBaseClasses} ${confirmVariantClasses}`}
             title={confirmTitle || 'Confirm (Enter)'}
           >
-            {confirmText}
+            {loading && (
+              <span
+                className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-transparent"
+                aria-hidden="true"
+              />
+            )}
+            <span>{confirmText}</span>
             {!loading && <span className="ml-1.5 text-xs opacity-60 group-hover:opacity-100">↵</span>}
           </button>
         </div>

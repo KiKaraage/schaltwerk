@@ -7,6 +7,7 @@ interface CancelConfirmationProps {
   hasUncommittedChanges: boolean
   onConfirm: (force: boolean) => void
   onCancel: () => void
+  loading?: boolean
 }
 
 export function CancelConfirmation({ 
@@ -14,7 +15,8 @@ export function CancelConfirmation({
   sessionName, 
   hasUncommittedChanges, 
   onConfirm, 
-  onCancel 
+  onCancel,
+  loading = false,
 }: CancelConfirmationProps) {
   const handleConfirm = useCallback(() => {
     onConfirm(hasUncommittedChanges)
@@ -48,6 +50,7 @@ export function CancelConfirmation({
       cancelTitle="Keep session (Esc)"
       onConfirm={handleConfirm}
       onCancel={onCancel}
+      loading={loading}
       variant={hasUncommittedChanges ? 'danger' : 'warning'}
     />
   )

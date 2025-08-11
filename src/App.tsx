@@ -23,6 +23,7 @@ export default function App() {
   const { setSelection } = useSelection()
   const [newSessionOpen, setNewSessionOpen] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
   const [currentSession, setCurrentSession] = useState<{ id: string; name: string; hasUncommittedChanges: boolean } | null>(null)
   const [selectedDiffFile, setSelectedDiffFile] = useState<string | null>(null)
   const [isDiffViewerOpen, setIsDiffViewerOpen] = useState(false)
@@ -93,6 +94,7 @@ export default function App() {
     if (!currentSession) return
     
     try {
+      setIsCancelling(true)
       await invoke('para_core_cancel_session', { 
         name: currentSession.name
       })
@@ -101,6 +103,8 @@ export default function App() {
     } catch (error) {
       console.error('Failed to cancel session:', error)
       alert(`Failed to cancel session: ${error}`)
+    } finally {
+      setIsCancelling(false)
     }
   }
   
@@ -186,6 +190,7 @@ export default function App() {
           hasUncommittedChanges={currentSession.hasUncommittedChanges}
           onConfirm={handleCancelSession}
           onCancel={() => setCancelModalOpen(false)}
+          loading={isCancelling}
         />
       )}
       </Split>

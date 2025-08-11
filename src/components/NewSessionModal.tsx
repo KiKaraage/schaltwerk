@@ -10,7 +10,7 @@ interface Props {
         prompt?: string
         baseBranch: string
         userEditedName?: boolean
-    }) => void
+    }) => void | Promise<void>
 }
 
 export function NewSessionModal({ open, onClose, onCreate }: Props) {
@@ -21,6 +21,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [skipPermissions, setSkipPermissions] = useState(false)
     const [agentType, setAgentType] = useState<'claude' | 'cursor'>('claude')
     const [validationError, setValidationError] = useState('')
+    const [creating, setCreating] = useState(false)
     const { getSkipPermissions, setSkipPermissions: saveSkipPermissions, getAgentType, setAgentType: saveAgentType } = useClaudeSession()
     const nameInputRef = useRef<HTMLInputElement>(null)
     const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -63,7 +64,8 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
         }
     }
 
-    const handleCreate = useCallback(() => {
+    const handleCreate = useCallback(async () => {
+        if (creating) return
         // Read directly from input when available to avoid any stale state in tests
         const currentValue = nameInputRef.current?.value ?? name
         // Generate new name if current value is empty
@@ -82,20 +84,28 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             initialGeneratedNameRef.current && currentValue.trim() !== initialGeneratedNameRef.current
         )
 
-        onCreate({
-            name: finalName,
-            prompt: prompt || undefined,
-            baseBranch,
-            // If user touched the input, treat name as manually edited
-            userEditedName: !!userEdited,
-        })
-    }, [name, prompt, baseBranch, onCreate, validateSessionName])
+        try {
+            setCreating(true)
+            await Promise.resolve(onCreate({
+                name: finalName,
+                prompt: prompt || undefined,
+                baseBranch,
+                // If user touched the input, treat name as manually edited
+                userEditedName: !!userEdited,
+            }))
+            // On success the parent will close the modal; no need to reset creating here
+        } catch (_e) {
+            // Parent handles showing the error; re-enable to allow retry
+            setCreating(false)
+        }
+    }, [creating, name, prompt, baseBranch, onCreate, validateSessionName])
 
     // Keep ref in sync immediately on render to avoid stale closures in tests
     createRef.current = handleCreate
 
     useLayoutEffect(() => {
         if (open) {
+            setCreating(false)
             // Generate a fresh Docker-style name each time the modal opens
             const gen = generateDockerStyleName()
             initialGeneratedNameRef.current = gen
@@ -214,12 +224,18 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                     </button>
                     <button 
                         onClick={handleCreate} 
-                        disabled={!name.trim()}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-white group relative"
+                        disabled={!name.trim() || creating}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-white group relative inline-flex items-center gap-2"
                         title="Create session (Cmd+Enter)"
                     >
-                        Create
-                        <span className="ml-1.5 text-xs opacity-60 group-hover:opacity-100">⌘↵</span>
+                        {creating && (
+                            <span
+                                className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-transparent"
+                                aria-hidden="true"
+                            />
+                        )}
+                        <span>Create</span>
+                        {!creating && <span className="ml-1.5 text-xs opacity-60 group-hover:opacity-100">⌘↵</span>}
                     </button>
                 </div>
             </div>
