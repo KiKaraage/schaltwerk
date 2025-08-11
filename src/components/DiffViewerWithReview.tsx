@@ -331,6 +331,13 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     const lineInfo = getLineInfo(target)
     
     if (lineInfo) {
+      const isTextSelection = window.getSelection()?.toString()
+      if (isTextSelection) return
+      
+      if (target.closest('code') || target.closest('span') || target.classList.contains('select-text')) {
+        return
+      }
+      
       e.preventDefault()
       setIsSelecting(true)
       setLineSelection({

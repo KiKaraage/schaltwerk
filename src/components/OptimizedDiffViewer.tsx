@@ -292,6 +292,14 @@ export function OptimizedDiffViewer({
   }, [actualViewMode, onViewModeChange])
   
   const handleMouseDown = useCallback((e: React.MouseEvent, side: 'old' | 'new', lineNum: number) => {
+    const isTextSelection = window.getSelection()?.toString()
+    if (isTextSelection) return
+    
+    const target = e.target as HTMLElement
+    if (target.closest('code') || target.closest('span')) {
+      return
+    }
+    
     e.preventDefault()
     setIsSelecting(true)
     setSelection({ side, startLine: lineNum, endLine: lineNum })
@@ -359,24 +367,31 @@ export function OptimizedDiffViewer({
                 <div
                   key={actualIdx}
                   className={clsx(
-                    "flex h-[20px]",
-                    line.type === 'added' && "bg-green-950/30",
-                    line.type === 'removed' && "bg-red-950/30",
+                    "flex h-[20px] relative",
                     isLineSelected(line.oldLineNumber ? 'old' : 'new', line.oldLineNumber || line.newLineNumber || 0) && "bg-blue-900/30"
                   )}
                   onMouseDown={(e) => handleMouseDown(e, line.oldLineNumber ? 'old' : 'new', line.oldLineNumber || line.newLineNumber || 0)}
                   onMouseMove={(e) => handleMouseMove(e, line.oldLineNumber ? 'old' : 'new', line.oldLineNumber || line.newLineNumber || 0)}
                 >
-                  <div className="w-16 px-2 text-xs text-slate-500 font-mono">
+                  {(line.type === 'added' || line.type === 'removed') && (
+                    <div 
+                      className={clsx(
+                        "absolute inset-0 pointer-events-none",
+                        line.type === 'added' && "bg-green-950/30",
+                        line.type === 'removed' && "bg-red-950/30"
+                      )}
+                    />
+                  )}
+                  <div className="w-16 px-2 text-xs text-slate-500 font-mono relative z-10">
                     {line.oldLineNumber || ''}
                   </div>
-                  <div className="w-16 px-2 text-xs text-slate-500 font-mono">
+                  <div className="w-16 px-2 text-xs text-slate-500 font-mono relative z-10">
                     {line.newLineNumber || ''}
                   </div>
-                  <div className="w-8 text-center text-xs text-slate-500">
+                  <div className="w-8 text-center text-xs text-slate-500 relative z-10">
                     {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ''}
                   </div>
-                  <div className="flex-1 px-2 overflow-hidden">
+                  <div className="flex-1 px-2 overflow-hidden relative z-10 select-text">
                     <HighlightedLine
                       content={line.content}
                       highlightedHtml={
@@ -424,17 +439,19 @@ export function OptimizedDiffViewer({
                   <div
                     key={`${visibleRange.start + idx}-old`}
                     className={clsx(
-                      "flex h-[20px]",
-                      row.type === 'removed' && "bg-red-950/30",
+                      "flex h-[20px] relative",
                       isLineSelected('old', lineNum) && "bg-blue-900/30"
                     )}
                     onMouseDown={(e) => lineNum && handleMouseDown(e, 'old', lineNum)}
                     onMouseMove={(e) => lineNum && handleMouseMove(e, 'old', lineNum)}
                   >
-                    <div className="w-12 px-2 text-xs text-slate-500 font-mono">
+                    {row.type === 'removed' && (
+                      <div className="absolute inset-0 bg-red-950/30 pointer-events-none" />
+                    )}
+                    <div className="w-12 px-2 text-xs text-slate-500 font-mono relative z-10">
                       {lineNum || ''}
                     </div>
-                    <div className="flex-1 px-2 overflow-hidden">
+                    <div className="flex-1 px-2 overflow-hidden relative z-10 select-text">
                       <HighlightedLine
                         content={row.oldLine ?? ''}
                         highlightedHtml={row.oldLineNumber && highlightedOldLines ? highlightedOldLines[row.oldLineNumber - 1] : null}
@@ -463,17 +480,19 @@ export function OptimizedDiffViewer({
                   <div
                     key={`${visibleRange.start + idx}-new`}
                     className={clsx(
-                      "flex h-[20px]",
-                      row.type === 'added' && "bg-green-950/30",
+                      "flex h-[20px] relative",
                       isLineSelected('new', lineNum) && "bg-blue-900/30"
                     )}
                     onMouseDown={(e) => lineNum && handleMouseDown(e, 'new', lineNum)}
                     onMouseMove={(e) => lineNum && handleMouseMove(e, 'new', lineNum)}
                   >
-                    <div className="w-12 px-2 text-xs text-slate-500 font-mono">
+                    {row.type === 'added' && (
+                      <div className="absolute inset-0 bg-green-950/30 pointer-events-none" />
+                    )}
+                    <div className="w-12 px-2 text-xs text-slate-500 font-mono relative z-10">
                       {lineNum || ''}
                     </div>
-                    <div className="flex-1 px-2 overflow-hidden">
+                    <div className="flex-1 px-2 overflow-hidden relative z-10 select-text">
                       <HighlightedLine
                         content={row.newLine ?? ''}
                         highlightedHtml={row.newLineNumber && highlightedNewLines ? highlightedNewLines[row.newLineNumber - 1] : null}
