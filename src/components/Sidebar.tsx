@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, startTransition } from 'react'
 import { clsx } from 'clsx'
 import { invoke } from '@tauri-apps/api/core'
 import { sortSessions } from '../utils/sessionSort'
@@ -68,8 +68,8 @@ export function Sidebar() {
         hasUncommitted: false
     })
     
-    // Sort sessions directly - no memoization to avoid stale state issues
-    const sortedSessions = sortSessions(sessions)
+    // Memoize sorted sessions to prevent re-sorting on every render
+    const sortedSessions = useMemo(() => sortSessions(sessions), [sessions])
 
     const handleSelectOrchestrator = async () => {
         await setSelection({ kind: 'orchestrator' })
@@ -87,10 +87,13 @@ export function Sidebar() {
                 return updated
             })
             
-            await setSelection({
-                kind: 'session',
-                payload: s.session_id,
-                worktreePath: s.worktree_path
+            // Use startTransition to keep UI responsive during heavy selection changes
+            startTransition(() => {
+                setSelection({
+                    kind: 'session',
+                    payload: s.session_id,
+                    worktreePath: s.worktree_path
+                })
             })
         }
     }
@@ -232,7 +235,7 @@ export function Sidebar() {
                 last_activity_ts: number
             }>('para-ui:session-activity', (event) => {
                 const { session_name, last_activity_ts } = event.payload
-                setSessions(prev => sortSessions(prev.map(s => {
+                setSessions(prev => prev.map(s => {
                     if (s.info.session_id !== session_name) return s
                     return {
                         ...s,
@@ -241,7 +244,7 @@ export function Sidebar() {
                             last_modified: new Date(last_activity_ts * 1000).toISOString(),
                         }
                     }
-                })))
+                }))
             })
             unlisteners.push(u1)
             
@@ -255,7 +258,7 @@ export function Sidebar() {
                 has_uncommitted: boolean
             }>('para-ui:session-git-stats', (event) => {
                 const { session_name, files_changed, lines_added, lines_removed, has_uncommitted } = event.payload
-                setSessions(prev => sortSessions(prev.map(s => {
+                setSessions(prev => prev.map(s => {
                     if (s.info.session_id !== session_name) return s
                     const diff = {
                         files_changed: files_changed || 0,
@@ -271,7 +274,7 @@ export function Sidebar() {
                             has_uncommitted_changes: has_uncommitted,
                         }
                     }
-                })))
+                }))
             })
             unlisteners.push(u2)
 
@@ -320,7 +323,7 @@ export function Sidebar() {
             // Session removed
             const u4 = await listen<{ session_name: string }>('para-ui:session-removed', async (event) => {
                 const { session_name } = event.payload
-                setSessions(prev => sortSessions(prev.filter(s => s.info.session_id !== session_name)))
+                setSessions(prev => prev.filter(s => s.info.session_id !== session_name))
                 // If the removed session was selected, fallback to orchestrator
                 if (selection.kind === 'session' && selection.payload === session_name) {
                     await setSelection({ kind: 'orchestrator' })
