@@ -392,38 +392,6 @@ pub fn calculate_git_stats_fast(worktree_path: &Path, parent_branch: &str) -> Re
     Ok(stats)
 }
 
-#[cfg(test)]
-fn parse_shortstat(line: &str) -> Option<(u32, u32, u32)> {
-    // Parse format: "X files changed, Y insertions(+), Z deletions(-)"
-    let parts: Vec<&str> = line.split(',').collect();
-    let mut files_changed = 0;
-    let mut insertions = 0;
-    let mut deletions = 0;
-    
-    for part in parts {
-        let trimmed = part.trim();
-        if trimmed.contains("file") {
-            if let Some(num) = trimmed.split_whitespace().next() {
-                files_changed = num.parse().unwrap_or(0);
-            }
-        } else if trimmed.contains("insertion") {
-            if let Some(num) = trimmed.split_whitespace().next() {
-                insertions = num.parse().unwrap_or(0);
-            }
-        } else if trimmed.contains("deletion") {
-            if let Some(num) = trimmed.split_whitespace().next() {
-                deletions = num.parse().unwrap_or(0);
-            }
-        }
-    }
-    
-    if files_changed > 0 || insertions > 0 || deletions > 0 {
-        Some((files_changed, insertions, deletions))
-    } else {
-        None
-    }
-}
-
 pub fn get_changed_files(worktree_path: &Path, parent_branch: &str) -> Result<Vec<ChangedFile>> {
     let mut file_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
 

@@ -5,7 +5,6 @@ export interface Selection {
     kind: 'session' | 'orchestrator'
     payload?: string
     worktreePath?: string
-    isNewSession?: boolean  // Flag to indicate this is a newly created session
 }
 
 interface TerminalSet {

@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import './App.css'
 import { Sidebar } from './components/Sidebar'
 import { TerminalGrid } from './components/TerminalGrid'
 import { SimpleDiffPanel } from './components/SimpleDiffPanel'
@@ -141,8 +140,7 @@ export default function App() {
       await setSelection({
         kind: 'session',
         payload: data.name,
-        worktreePath: sessionData.worktree_path,
-        isNewSession: true  // This triggers Claude to start
+        worktreePath: sessionData.worktree_path
       })
     } catch (error) {
       console.error('Failed to create session:', error)

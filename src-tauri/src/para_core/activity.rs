@@ -124,9 +124,7 @@ impl<E: EventEmitter> ActivityTracker<E> {
     }
 }
 
-// Legacy API retained for compatibility; not used.
-#[allow(dead_code)]
-pub fn start_activity_tracking(_db: Arc<Database>) {}
+// Removed unused legacy API `start_activity_tracking` to simplify code.
 
 #[derive(Serialize, Clone, Debug)]
 pub struct SessionActivityUpdated {
