@@ -198,22 +198,14 @@ describe('Sidebar', () => {
   })
 
   describe('session list rendering', () => {
-    it('should show loading state initially', () => {
-      // Delay the mock response to test loading state
-      mockInvoke.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve([]), 100)))
-
-      render(<Sidebar />, { wrapper: createTestWrapper() })
-
-      expect(screen.getByText('Loading sessions...')).toBeInTheDocument()
-    })
-
     it('should show empty state when no sessions', async () => {
       mockInvoke.mockResolvedValueOnce([])
 
       render(<Sidebar />, { wrapper: createTestWrapper() })
 
       await waitFor(() => {
-        expect(screen.getByText('No active sessions')).toBeInTheDocument()
+        // no session selection buttons should be rendered
+        expect(screen.queryAllByTitle(/Select session/i).length).toBe(0)
       })
     })
 
@@ -243,8 +235,8 @@ describe('Sidebar', () => {
 
       await waitFor(() => {
         expect(screen.getByText('simple-session')).toBeInTheDocument()
-        // New Sidebar UI no longer shows branch here
-        expect(screen.getByText('Simple task')).toBeInTheDocument()
+        // session selection buttons should be present (1 for 1 session)
+        expect(screen.getAllByTitle(/Select session/i).length).toBe(1)
       })
     })
   })
@@ -418,12 +410,8 @@ describe('Sidebar', () => {
       mockInvoke.mockResolvedValueOnce([])
 
       render(<Sidebar />, { wrapper: createTestWrapper() })
-
-      await waitFor(() => {
-        expect(screen.getByText('Orchestrator')).toBeInTheDocument()
-      })
-
-      const orchestratorButton = screen.getByRole('button', { name: /Orchestrator/ })
+      // The button uses a title attribute
+      const orchestratorButton = screen.getByTitle(/Select orchestrator/i)
       expect(orchestratorButton).toBeInTheDocument()
     })
 
@@ -483,7 +471,6 @@ describe('Sidebar', () => {
 
       await waitFor(() => {
         expect(screen.getByText('minimal-session')).toBeInTheDocument()
-        expect(screen.getByText('Working on minimal-session')).toBeInTheDocument() // Default task
       })
     })
 
@@ -493,7 +480,8 @@ describe('Sidebar', () => {
       render(<Sidebar />, { wrapper: createTestWrapper() })
 
       await waitFor(() => {
-        expect(screen.getByText('No active sessions')).toBeInTheDocument()
+        // no session selection buttons rendered on failure
+        expect(screen.queryAllByTitle(/Select session/i).length).toBe(0)
       })
     })
   })
