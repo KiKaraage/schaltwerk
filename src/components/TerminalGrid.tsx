@@ -73,8 +73,10 @@ export function TerminalGrid() {
         }, 100)
     }
 
+    // No prompt UI here anymore; moved to right panel dock
+
     return (
-        <div className="h-full p-2">
+        <div className="h-full p-2 relative">
             <Split className="h-full flex flex-col" direction="vertical" sizes={[65, 35]} minSize={120} gutterSize={8}>
                 <div className="bg-panel rounded border border-slate-800 overflow-hidden min-h-0 flex flex-col">
                     <div 
@@ -110,6 +112,8 @@ export function TerminalGrid() {
                     </div>
                 </div>
             </Split>
+
+            {/* Prompt dock moved to right diff panel */}
         </div>
     )
 }
