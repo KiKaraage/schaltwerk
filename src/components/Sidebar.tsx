@@ -142,22 +142,34 @@ export function Sidebar() {
 
     const selectPrev = async () => {
         if (sortedSessions.length === 0) return
-        let index = 0
         if (selection.kind === 'session') {
             const currentIndex = sortedSessions.findIndex(s => s.info.session_id === selection.payload)
-            index = currentIndex > 0 ? currentIndex - 1 : 0
+            // If at the first session, go to orchestrator
+            if (currentIndex <= 0) {
+                await handleSelectOrchestrator()
+                return
+            }
+            await handleSelectSession(currentIndex - 1)
+            return
         }
-        await handleSelectSession(index)
+        // If orchestrator is selected, do nothing on ArrowUp
     }
 
     const selectNext = async () => {
         if (sortedSessions.length === 0) return
-        let index = 0
+        if (selection.kind === 'orchestrator') {
+            // From orchestrator, go to the first session
+            await handleSelectSession(0)
+            return
+        }
         if (selection.kind === 'session') {
             const currentIndex = sortedSessions.findIndex(s => s.info.session_id === selection.payload)
-            index = Math.min(currentIndex + 1, sortedSessions.length - 1)
+            const nextIndex = Math.min(currentIndex + 1, sortedSessions.length - 1)
+            if (nextIndex !== currentIndex) {
+                await handleSelectSession(nextIndex)
+            }
+            return
         }
-        await handleSelectSession(index)
     }
 
     const handleMarkSelectedSessionReady = () => {
@@ -404,7 +416,13 @@ export function Sidebar() {
         attach()
         
         return () => {
-            unlisteners.forEach(u => u())
+            unlisteners.forEach(unlisten => {
+                try {
+                    if (typeof unlisten === 'function') unlisten()
+                } catch (e) {
+                    console.warn('Failed to unlisten sidebar event', e)
+                }
+            })
         }
     }, [selection, setSelection, sortedSessions])
 
