@@ -3,7 +3,7 @@ import './App.css'
 import { Sidebar } from './components/Sidebar'
 import { TerminalGrid } from './components/TerminalGrid'
 import { SimpleDiffPanel } from './components/SimpleDiffPanel'
-import { DiffViewerOverlay } from './components/DiffViewerOverlay'
+import { DiffViewerWithReview } from './components/DiffViewerWithReview'
 import Split from 'react-split'
 import { NewSessionModal } from './components/NewSessionModal'
 import { CancelConfirmation } from './components/CancelConfirmation'
@@ -182,8 +182,8 @@ export default function App() {
       )}
       </Split>
       
-      {/* Diff Viewer Overlay - renders outside of main layout */}
-      <DiffViewerOverlay 
+      {/* Diff Viewer Overlay with Review - renders outside of main layout */}
+      <DiffViewerWithReview 
         filePath={selectedDiffFile}
         isOpen={isDiffViewerOpen}
         onClose={handleCloseDiffViewer}

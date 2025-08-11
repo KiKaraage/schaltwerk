@@ -5,14 +5,17 @@ import 'highlight.js/styles/github-dark.css'
 import App from './App'
 import { SelectionProvider } from './contexts/SelectionContext'
 import { FocusProvider } from './contexts/FocusContext'
+import { ReviewProvider } from './contexts/ReviewContext'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <SelectionProvider>
       <FocusProvider>
-        <div className="h-screen w-screen">
-          <App />
-        </div>
+        <ReviewProvider>
+          <div className="h-screen w-screen">
+            <App />
+          </div>
+        </ReviewProvider>
       </FocusProvider>
     </SelectionProvider>
   </React.StrictMode>,
