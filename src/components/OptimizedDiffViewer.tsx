@@ -179,19 +179,19 @@ const HighlightedLine = memo(({
   isVisible: boolean
 }) => {
   if (!isVisible) {
-    return <span className="font-mono text-[12px]">{content}</span>
+    return <span className="font-mono text-[12px] whitespace-pre">{content}</span>
   }
   
   if (highlightedHtml) {
     return (
       <code
-        className="hljs font-mono text-[12px] leading-[1.3]"
+        className="hljs font-mono text-[12px] leading-[1.3] whitespace-pre"
         dangerouslySetInnerHTML={{ __html: highlightedHtml }}
       />
     )
   }
   
-  return <span className="font-mono text-[12px]">{content}</span>
+  return <span className="font-mono text-[12px] whitespace-pre">{content}</span>
 })
 
 HighlightedLine.displayName = 'HighlightedLine'
@@ -391,7 +391,7 @@ export function OptimizedDiffViewer({
                   <div className="w-8 text-center text-xs text-slate-500 relative z-10">
                     {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ''}
                   </div>
-                  <div className="flex-1 px-2 overflow-hidden relative z-10 select-text">
+                  <div className="flex-1 px-2 overflow-x-auto relative z-10 select-text">
                     <HighlightedLine
                       content={line.content}
                       highlightedHtml={
@@ -451,7 +451,7 @@ export function OptimizedDiffViewer({
                     <div className="w-12 px-2 text-xs text-slate-500 font-mono relative z-10">
                       {lineNum || ''}
                     </div>
-                    <div className="flex-1 px-2 overflow-hidden relative z-10 select-text">
+                    <div className="flex-1 px-2 overflow-x-auto relative z-10 select-text">
                       <HighlightedLine
                         content={row.oldLine ?? ''}
                         highlightedHtml={row.oldLineNumber && highlightedOldLines ? highlightedOldLines[row.oldLineNumber - 1] : null}
@@ -492,7 +492,7 @@ export function OptimizedDiffViewer({
                     <div className="w-12 px-2 text-xs text-slate-500 font-mono relative z-10">
                       {lineNum || ''}
                     </div>
-                    <div className="flex-1 px-2 overflow-hidden relative z-10 select-text">
+                    <div className="flex-1 px-2 overflow-x-auto relative z-10 select-text">
                       <HighlightedLine
                         content={row.newLine ?? ''}
                         highlightedHtml={row.newLineNumber && highlightedNewLines ? highlightedNewLines[row.newLineNumber - 1] : null}
