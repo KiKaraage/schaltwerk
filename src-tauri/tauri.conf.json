@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ui",
+  "productName": "schaltwerk",
   "version": "0.1.0",
-  "identifier": "com.mariuswichtner.ui",
+  "identifier": "com.mariuswichtner.schaltwerk",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Para UI",
+        "title": "Schaltwerk",
         "maximized": true,
         "width": 1920,
         "height": 1080

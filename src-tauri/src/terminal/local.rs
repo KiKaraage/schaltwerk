@@ -115,7 +115,7 @@ impl LocalPtyAdapter {
                             // Emit terminal closed event
                             if let Some(handle) = app_handle_clone2.lock().await.as_ref() {
                                 let _ = handle.emit(
-                                    "para-ui:terminal-closed",
+                                    "schaltwerk:terminal-closed",
                                     &serde_json::json!({"terminal_id": id_clone_for_cleanup}),
                                 );
                             }
@@ -211,7 +211,7 @@ impl LocalPtyAdapter {
                                 PTY_WRITERS.lock().await.remove(&id_clone_for_cleanup);
                                 if let Some(handle) = app_handle_clone2.lock().await.as_ref() {
                                     let _ = handle.emit(
-                                        "para-ui:terminal-closed",
+                                        "schaltwerk:terminal-closed",
                                         &serde_json::json!({"terminal_id": id_clone_for_cleanup}),
                                     );
                                 }

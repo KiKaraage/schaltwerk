@@ -134,7 +134,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             setTerminals(terminalIds)
             
             // Persist to localStorage
-            localStorage.setItem('para-ui-selection', JSON.stringify({
+            localStorage.setItem('schaltwerk-selection', JSON.stringify({
                 kind: newSelection.kind,
                 sessionName: newSelection.payload
             }))
@@ -156,7 +156,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             console.log('[SelectionContext] Initializing...')
             
             // Try to restore from localStorage
-            const stored = localStorage.getItem('para-ui-selection')
+            const stored = localStorage.getItem('schaltwerk-selection')
             let initialSelection: Selection = { kind: 'orchestrator' }
             
             if (stored) {

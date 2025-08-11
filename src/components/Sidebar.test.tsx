@@ -285,7 +285,7 @@ describe('Sidebar', () => {
       ]
     })
 
-    it('should handle para-ui:session-activity events', async () => {
+    it('should handle schaltwerk:session-activity events', async () => {
       const activityPayload = {
         session_id: 'session1',
         session_name: 'session1',
@@ -298,7 +298,7 @@ describe('Sidebar', () => {
       expect(updatedSessions[1].info.last_modified).toBeUndefined() // Other session unchanged
     })
 
-    it('should handle para-ui:session-git-stats events', async () => {
+    it('should handle schaltwerk:session-git-stats events', async () => {
       const gitStatsPayload = {
         session_id: 'session1',
         session_name: 'session1',
@@ -320,7 +320,7 @@ describe('Sidebar', () => {
       expect(updatedSessions[1].info.diff_stats).toBeUndefined() // Other session unchanged
     })
 
-    it('should handle para-ui:session-added events without duplicates', async () => {
+    it('should handle schaltwerk:session-added events without duplicates', async () => {
       const addPayload = {
         session_name: 'new-session',
         branch: 'feature/new',
@@ -355,7 +355,7 @@ describe('Sidebar', () => {
       expect(updatedSessions[0].info.branch).toBe('feature/one') // Original unchanged
     })
 
-    it('should handle para-ui:session-removed events', async () => {
+    it('should handle schaltwerk:session-removed events', async () => {
       const removePayload = { session_name: 'session1' }
 
       const updatedSessions = sessionReducers.removeSession(initialSessions, removePayload)
@@ -420,10 +420,10 @@ describe('Sidebar', () => {
       // Test the event emission logic directly - just test that events can be dispatched
       const mockEventListener = vi.fn()
       
-      window.addEventListener('para-ui:session-action', mockEventListener)
+      window.addEventListener('schaltwerk:session-action', mockEventListener)
 
       // Simulate the event dispatch that happens in the component
-      const testEvent = new CustomEvent('para-ui:session-action', {
+      const testEvent = new CustomEvent('schaltwerk:session-action', {
         detail: {
           action: 'cancel',
           sessionId: 'test-session',
@@ -442,7 +442,7 @@ describe('Sidebar', () => {
         hasUncommittedChanges: true
       })
 
-      window.removeEventListener('para-ui:session-action', mockEventListener)
+      window.removeEventListener('schaltwerk:session-action', mockEventListener)
     })
   })
 

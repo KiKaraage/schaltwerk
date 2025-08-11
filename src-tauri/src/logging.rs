@@ -12,7 +12,7 @@ static LOG_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
 pub fn get_log_dir() -> PathBuf {
     dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("para-ui")
+        .join("schaltwerk")
         .join("logs")
 }
 
@@ -31,7 +31,7 @@ pub fn get_log_path() -> PathBuf {
         eprintln!("Failed to create log directory: {e}");
     }
     
-    let log_file = log_dir.join(format!("para-ui-{}.log", Local::now().format("%Y%m%d-%H%M%S")));
+    let log_file = log_dir.join(format!("schaltwerk-{}.log", Local::now().format("%Y%m%d-%H%M%S")));
     
     if let Ok(mut guard) = LOG_PATH.lock() {
         *guard = Some(log_file.clone());
@@ -65,7 +65,7 @@ pub fn init_logging() {
         builder.parse_filters(&rust_log);
     } else {
         // Our crates
-        builder.filter_module("ui", LevelFilter::Debug);
+        builder.filter_module("schaltwerk", LevelFilter::Debug);
         builder.filter_module("para_ui", LevelFilter::Debug);
         
         // Third-party crates we care about
@@ -117,7 +117,7 @@ pub fn init_logging() {
     builder.init();
     
     log::info!("========================================");
-    log::info!("Para UI v{} starting", env!("CARGO_PKG_VERSION"));
+    log::info!("Schaltwerk v{} starting", env!("CARGO_PKG_VERSION"));
     log::info!("Log file: {}", log_path.display());
     log::info!("Process ID: {}", std::process::id());
     log::info!("========================================");
@@ -142,7 +142,7 @@ mod tests {
         env::set_var("HOME", tmp.path());
 
         let dir = get_log_dir();
-        assert!(dir.exists() || dir.to_string_lossy().contains("para-ui/logs"));
+        assert!(dir.exists() || dir.to_string_lossy().contains("schaltwerk/logs"));
 
         if let Some(p) = prev { env::set_var("HOME", p); } else { env::remove_var("HOME"); }
     }
@@ -160,7 +160,7 @@ mod tests {
         std::fs::create_dir_all(parent).unwrap();
         assert!(parent.exists());
         // file may not exist until first write, but path should be under logs dir
-        assert!(path.to_string_lossy().contains("para-ui"));
+        assert!(path.to_string_lossy().contains("schaltwerk"));
 
         if let Some(p) = prev { env::set_var("HOME", p); } else { env::remove_var("HOME"); }
     }
@@ -181,7 +181,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(100));
         // Ensure file exists and contains our marker
         let content = std::fs::read_to_string(&log_path).unwrap_or_default();
-        assert!(content.contains("Para UI v") || content.contains("test log entry"));
+        assert!(content.contains("Schaltwerk v") || content.contains("test log entry"));
 
         if let Some(p) = prev { env::set_var("HOME", p); } else { env::remove_var("HOME"); }
     }

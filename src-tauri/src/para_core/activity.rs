@@ -19,12 +19,12 @@ pub trait EventEmitter: Send + Sync {
 
 impl EventEmitter for AppHandle {
     fn emit_session_activity(&self, payload: SessionActivityUpdated) -> Result<()> {
-        self.emit("para-ui:session-activity", payload)
+        self.emit("schaltwerk:session-activity", payload)
             .map_err(|e| anyhow::anyhow!("Failed to emit session activity: {e}"))
     }
     
     fn emit_session_git_stats(&self, payload: SessionGitStatsUpdated) -> Result<()> {
-        self.emit("para-ui:session-git-stats", payload)
+        self.emit("schaltwerk:session-git-stats", payload)
             .map_err(|e| anyhow::anyhow!("Failed to emit git stats: {e}"))
     }
 }

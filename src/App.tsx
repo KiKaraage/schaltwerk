@@ -44,8 +44,8 @@ export default function App() {
       }
     }
     
-    window.addEventListener('para-ui:session-action' as any, handleSessionAction)
-    return () => window.removeEventListener('para-ui:session-action' as any, handleSessionAction)
+    window.addEventListener('schaltwerk:session-action' as any, handleSessionAction)
+    return () => window.removeEventListener('schaltwerk:session-action' as any, handleSessionAction)
   }, [])
 
   useEffect(() => {
@@ -81,12 +81,12 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('global-new-session-shortcut', handleGlobalNewSession)
-    window.addEventListener('para-ui:open-diff-view' as any, handleOpenDiffView)
+    window.addEventListener('schaltwerk:open-diff-view' as any, handleOpenDiffView)
     
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('global-new-session-shortcut', handleGlobalNewSession)
-      window.removeEventListener('para-ui:open-diff-view' as any, handleOpenDiffView)
+      window.removeEventListener('schaltwerk:open-diff-view' as any, handleOpenDiffView)
     }
   }, [newSessionOpen, cancelModalOpen])
   

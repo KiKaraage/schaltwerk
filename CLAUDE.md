@@ -1,10 +1,10 @@
-# CLAUDE.md - Para UI Development Guidelines
+# CLAUDE.md - Schaltwerk Development Guidelines
 
-This file provides guidance to Claude Code when working with the Para UI codebase.
+This file provides guidance to Claude Code when working with the Schaltwerk codebase.
 
 ## Project Overview
 
-Para UI is a Tauri-based desktop application that provides a visual interface for managing Para sessions. It features multiple terminal panels, session management, and real-time status monitoring.
+Schaltwerk is a Tauri-based desktop application that provides a visual interface for managing Para sessions. It features multiple terminal panels, session management, and real-time status monitoring.
 
 ## Essential Development Commands
 
@@ -121,7 +121,7 @@ Never consider a task complete unless `npm run test` passes without errors.
 3. **Cleanup**: All processes killed via cleanup module on app exit
 
 ### Event System
-- `para-ui:selection`: Emitted when user selects different session
+- `schaltwerk:selection`: Emitted when user selects different session
 - `terminal-output-{id}`: Terminal output events from backend
 - Components listen and react to maintain synchronization
 

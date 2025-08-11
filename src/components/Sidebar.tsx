@@ -66,7 +66,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     const { setFocusForSession, setCurrentFocus } = useFocus()
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
     const [filterMode, setFilterMode] = useState<'all' | 'unreviewed' | 'reviewed'>(() => {
-        const saved = typeof window !== 'undefined' ? window.localStorage.getItem('para-ui:sessions:filterMode') : null
+        const saved = typeof window !== 'undefined' ? window.localStorage.getItem('schaltwerk:sessions:filterMode') : null
         return (saved === 'unreviewed' || saved === 'reviewed') ? saved : 'all'
     })
     const [loading, setLoading] = useState(true)
@@ -123,7 +123,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             if (selectedSession) {
                 if (immediate) {
                     // immediate cancel without modal
-                    window.dispatchEvent(new CustomEvent('para-ui:session-action', {
+                    window.dispatchEvent(new CustomEvent('schaltwerk:session-action', {
                         detail: {
                             action: 'cancel-immediate',
                             sessionId: selectedSession.info.session_id,
@@ -132,7 +132,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                         }
                     }))
                 } else {
-                    window.dispatchEvent(new CustomEvent('para-ui:session-action', {
+                    window.dispatchEvent(new CustomEvent('schaltwerk:session-action', {
                         detail: {
                             action: 'cancel',
                             sessionId: selectedSession.info.session_id,
@@ -217,7 +217,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
         onOpenDiffViewer: () => {
             // Only open if a session is selected
             if (selection.kind !== 'session') return
-            window.dispatchEvent(new CustomEvent('para-ui:open-diff-view'))
+            window.dispatchEvent(new CustomEvent('schaltwerk:open-diff-view'))
         },
         onFocusTerminal: () => {
             const sessionKey = selection.kind === 'orchestrator' ? 'orchestrator' : (selection.payload || 'unknown')
@@ -229,7 +229,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
 
     // Persist user preferences
     useEffect(() => {
-        try { window.localStorage.setItem('para-ui:sessions:filterMode', filterMode) } catch {}
+        try { window.localStorage.setItem('schaltwerk:sessions:filterMode', filterMode) } catch {}
     }, [filterMode])
 
     // Initial load only; push updates keep it fresh thereafter
@@ -261,7 +261,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     // Listen for sessions-refreshed events (e.g., after name generation)
     useEffect(() => {
         const setupRefreshListener = async () => {
-            const unlisten = await listen<EnrichedSession[]>('para-ui:sessions-refreshed', (event) => {
+            const unlisten = await listen<EnrichedSession[]>('schaltwerk:sessions-refreshed', (event) => {
                 console.log('Sessions refreshed event received, updating session list')
                 setSessions(event.payload.map(s => ({
                     ...s,
@@ -311,7 +311,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 session_id: string
                 session_name: string
                 last_activity_ts: number
-            }>('para-ui:session-activity', (event) => {
+            }>('schaltwerk:session-activity', (event) => {
                 const { session_name, last_activity_ts } = event.payload
                 setSessions(prev => prev.map(s => {
                     if (s.info.session_id !== session_name) return s
@@ -335,7 +335,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 lines_added: number
                 lines_removed: number
                 has_uncommitted: boolean
-            }>('para-ui:session-git-stats', (event) => {
+            }>('schaltwerk:session-git-stats', (event) => {
                 const { session_name, files_changed, lines_added, lines_removed, has_uncommitted } = event.payload
                 setSessions(prev => prev.map(s => {
                     if (s.info.session_id !== session_name) return s
@@ -363,7 +363,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 branch: string
                 worktree_path: string
                 parent_branch: string
-            }>('para-ui:session-added', (event) => {
+            }>('schaltwerk:session-added', (event) => {
                 const { session_name, branch, worktree_path, parent_branch } = event.payload
                 setSessions(prev => {
                     // Avoid duplicates
@@ -400,7 +400,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             unlisteners.push(u3)
 
             // Session removed
-            const u4 = await listen<{ session_name: string }>('para-ui:session-removed', async (event) => {
+            const u4 = await listen<{ session_name: string }>('schaltwerk:session-removed', async (event) => {
                 const { session_name } = event.payload
                 const currentSelection = latestSelectionRef.current
                 const currentSorted = latestSortedSessionsRef.current
@@ -420,7 +420,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             unlisteners.push(u4)
             
             // Listen for stuck terminal notifications
-            const u5 = await listen<TerminalStuckNotification>('para-ui:terminal-stuck', (event) => {
+            const u5 = await listen<TerminalStuckNotification>('schaltwerk:terminal-stuck', (event) => {
                 const { session_id } = event.payload
                 if (session_id) {
                     setStuckTerminals(prev => new Set([...prev, session_id]))
@@ -429,7 +429,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             unlisteners.push(u5)
             
             // Listen for unstuck terminal notifications
-            const u6 = await listen<TerminalUnstuckNotification>('para-ui:terminal-unstuck', (event) => {
+            const u6 = await listen<TerminalUnstuckNotification>('schaltwerk:terminal-unstuck', (event) => {
                 const { session_id } = event.payload
                 if (session_id) {
                     setStuckTerminals(prev => {
@@ -532,7 +532,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                                     }
                                 }}
                                 onCancel={(sessionId, hasUncommitted) => {
-                                    window.dispatchEvent(new CustomEvent('para-ui:session-action', {
+                                    window.dispatchEvent(new CustomEvent('schaltwerk:session-action', {
                                         detail: {
                                             action: 'cancel',
                                             sessionId,
