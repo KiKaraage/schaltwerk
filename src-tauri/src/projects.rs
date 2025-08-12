@@ -99,3 +99,54 @@ pub fn is_git_repository(path: &Path) -> bool {
 pub fn directory_exists(path: &Path) -> bool {
     path.exists() && path.is_dir()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use std::env;
+
+    #[test]
+    fn test_project_history_add_update_remove_and_persist() {
+        // Redirect HOME so dirs::config_dir points under temp
+        let tmp = TempDir::new().unwrap();
+        let prev = env::var("HOME").ok();
+        env::set_var("HOME", tmp.path());
+
+        let mut hist = ProjectHistory::load().unwrap();
+        assert_eq!(hist.get_recent_projects().len(), 0);
+
+        hist.add_project("/a/b/c").unwrap();
+        hist.add_project("/x/y").unwrap();
+        let projects = hist.get_recent_projects();
+        assert_eq!(projects.len(), 2);
+
+        // Update timestamp and ensure order changes (most recent first)
+        hist.update_timestamp("/a/b/c").unwrap();
+        let recent = hist.get_recent_projects();
+        assert_eq!(recent[0].path, "/a/b/c");
+
+        // Remove and persist
+        hist.remove_project("/a/b/c").unwrap();
+        let after_remove = ProjectHistory::load().unwrap();
+        let list = after_remove.get_recent_projects();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].path, "/x/y");
+
+        if let Some(p) = prev { env::set_var("HOME", p); } else { env::remove_var("HOME"); }
+    }
+
+    #[test]
+    fn test_is_git_repository_and_directory_exists() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        // Initially no .git
+        assert!(!is_git_repository(root));
+        assert!(directory_exists(root));
+
+        // Create bare .git dir
+        std::fs::create_dir(root.join(".git")).unwrap();
+        assert!(is_git_repository(root));
+    }
+}

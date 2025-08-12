@@ -169,4 +169,21 @@ mod tests {
             .await
             .unwrap());
     }
+
+    #[tokio::test]
+    async fn test_get_terminal_buffer_returns_output() {
+        let manager = TerminalManager::new();
+        manager
+            .create_terminal("buf-term".to_string(), "/tmp".to_string())
+            .await
+            .unwrap();
+        // Nudge some output
+        manager.write_terminal("buf-term".into(), b"echo hi\n".to_vec()).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+        let buf = manager.get_terminal_buffer("buf-term".into()).await.unwrap();
+        assert!(!buf.is_empty());
+
+        manager.close_terminal("buf-term".into()).await.unwrap();
+    }
 }

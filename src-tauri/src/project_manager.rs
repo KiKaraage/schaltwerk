@@ -168,3 +168,60 @@ impl ProjectManager {
         Ok(project.para_core.clone())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn test_switch_to_project_sets_current_and_reuses_instance() {
+        let mgr = ProjectManager::new();
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().to_path_buf();
+
+        let p1 = mgr.switch_to_project(path.clone()).await.unwrap();
+        // Switching again to the same canonicalized path should reuse the same Arc
+        let p2 = mgr.switch_to_project(path.clone()).await.unwrap();
+
+        assert!(Arc::ptr_eq(&p1, &p2));
+
+        let current = mgr.current_project().await.unwrap();
+        assert!(Arc::ptr_eq(&p1, &current));
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_all_when_no_terminals() {
+        let mgr = ProjectManager::new();
+        let tmp1 = TempDir::new().unwrap();
+        let tmp2 = TempDir::new().unwrap();
+
+        let _ = mgr.switch_to_project(tmp1.path().to_path_buf()).await.unwrap();
+        let _ = mgr.switch_to_project(tmp2.path().to_path_buf()).await.unwrap();
+
+        // Should not error even if there are no active terminals
+        mgr.cleanup_all().await;
+    }
+
+    #[test]
+    fn test_get_project_db_path_is_unique_and_sanitized() {
+        let base = TempDir::new().unwrap();
+        let p1 = base.path().join("my project !@#");
+        let p2 = base.path().join("my project !@#").join("nested").join("..").join("my project !@#");
+        std::fs::create_dir_all(&p1).unwrap();
+        std::fs::create_dir_all(&p2).unwrap();
+
+        let db1 = Project::get_project_db_path(&p1).unwrap();
+        let db2 = Project::get_project_db_path(&p2).unwrap();
+
+        // Same leaf name but different canonical path => different db paths
+        assert_ne!(db1, db2);
+
+        // Folder name should contain sanitized project name and an underscore
+        let folder1 = db1.parent().unwrap().file_name().unwrap().to_string_lossy().to_string();
+        assert!(folder1.contains("my_project___"));
+        assert!(folder1.contains("_"));
+        // Should end with sessions.db
+        assert_eq!(db1.file_name().unwrap(), "sessions.db");
+    }
+}

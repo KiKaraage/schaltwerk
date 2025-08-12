@@ -453,6 +453,7 @@ fn get_shell_binary() -> String {
 mod tests {
     use super::*;
     use tokio::time::{sleep, Duration};
+    use std::time::SystemTime;
     
     #[tokio::test]
     async fn test_create_exists() {
@@ -538,5 +539,47 @@ mod tests {
         
         assert!(adapter.exists("concurrent-test").await.unwrap());
         adapter.close("concurrent-test").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_activity_status_transitions_and_get_all() {
+        let adapter = LocalPtyAdapter::new();
+        let id = "activity-test".to_string();
+        let params = CreateParams { id: id.clone(), cwd: "/tmp".into(), app: None };
+        adapter.create(params).await.unwrap();
+
+        // Immediately after create, should not be stuck
+        let (stuck, _elapsed) = adapter.get_activity_status(&id).await.unwrap();
+        assert!(!stuck);
+
+        // Manually simulate old last_output to mark as stuck
+        {
+            let mut terms = adapter.terminals.write().await;
+            if let Some(state) = terms.get_mut(&id) {
+                // Set last_output to 2 minutes in the past
+                state.last_output = SystemTime::now() - std::time::Duration::from_secs(120);
+            }
+        }
+
+        let (stuck2, elapsed2) = adapter.get_activity_status(&id).await.unwrap();
+        assert!(stuck2);
+        assert!(elapsed2 >= 60);
+
+        // get_all_terminal_activity reflects the same
+        let all = adapter.get_all_terminal_activity().await;
+        let found = all.iter().find(|(tid, _, _)| tid == &id).cloned().unwrap();
+        assert_eq!(found.0, id);
+        assert!(found.1);
+
+        adapter.close(&id).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_resize_nonexistent_and_write_nonexistent_are_noop() {
+        let adapter = LocalPtyAdapter::new();
+        // Should not error when resizing non-existing
+        adapter.resize("no-such", 80, 24).await.unwrap();
+        // Should not error when writing non-existing
+        adapter.write("no-such", b"data").await.unwrap();
     }
 }

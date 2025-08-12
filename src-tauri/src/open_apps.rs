@@ -110,6 +110,23 @@ fn open_path_in(app_id: &str, path: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_available_apps_includes_finder_on_macos_or_empty_elsewhere() {
+        let apps = detect_available_apps();
+        if cfg!(target_os = "macos") {
+            assert!(apps.iter().any(|a| a.id == "finder"));
+        } else {
+            // On non-mac, list may be empty or contain CLI detected entries
+            // Ensure any discovered app entries have non-empty ids
+            assert!(apps.iter().all(|a| !a.id.is_empty()));
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn list_available_open_apps() -> Result<Vec<OpenApp>, String> {
     Ok(detect_available_apps())
