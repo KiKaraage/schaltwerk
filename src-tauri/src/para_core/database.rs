@@ -95,7 +95,8 @@ impl Database {
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 skip_permissions BOOLEAN DEFAULT FALSE,
                 agent_type TEXT DEFAULT 'claude',
-                default_open_app TEXT DEFAULT 'finder'
+                default_open_app TEXT DEFAULT 'finder',
+                default_base_branch TEXT
             )",
             [],
         )?;
@@ -123,6 +124,18 @@ impl Database {
         };
         if !default_open_app_exists {
             let _ = conn.execute("ALTER TABLE app_config ADD COLUMN default_open_app TEXT DEFAULT 'finder'", []);
+        }
+        
+        // Migration: Add default_base_branch column if it doesn't exist
+        let default_base_branch_exists = {
+            let result = conn.prepare("SELECT default_base_branch FROM app_config LIMIT 1");
+            match result {
+                Ok(mut stmt) => stmt.query([]).is_ok(),
+                Err(_) => false,
+            }
+        };
+        if !default_base_branch_exists {
+            let _ = conn.execute("ALTER TABLE app_config ADD COLUMN default_base_branch TEXT", []);
         }
         
         conn.execute(
@@ -545,6 +558,32 @@ impl Database {
         conn.execute(
             "UPDATE app_config SET agent_type = ?1 WHERE id = 1",
             params![agent_type],
+        )?;
+        
+        Ok(())
+    }
+
+    pub fn get_default_base_branch(&self) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        
+        let result: SqlResult<Option<String>> = conn.query_row(
+            "SELECT default_base_branch FROM app_config WHERE id = 1",
+            [],
+            |row| row.get(0),
+        );
+        
+        match result {
+            Ok(value) => Ok(value),
+            Err(_) => Ok(None),
+        }
+    }
+    
+    pub fn set_default_base_branch(&self, branch: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        
+        conn.execute(
+            "UPDATE app_config SET default_base_branch = ?1 WHERE id = 1",
+            params![branch],
         )?;
         
         Ok(())

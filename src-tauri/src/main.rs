@@ -737,7 +737,9 @@ fn main() {
             directory_exists,
             initialize_project,
             get_project_default_branch,
-            list_project_branches
+            list_project_branches,
+            get_project_default_base_branch,
+            set_project_default_base_branch
         ])
         .setup(|app| {
             // Start activity tracking for para_core sessions
@@ -863,6 +865,22 @@ async fn list_project_branches() -> Result<Vec<String>, String> {
         crate::para_core::git::list_branches(&current_dir)
             .map_err(|e| format!("Failed to list branches: {e}"))
     }
+}
+
+#[tauri::command]
+async fn get_project_default_base_branch() -> Result<Option<String>, String> {
+    let para_core = get_para_core().await?;
+    let core = para_core.lock().await;
+    core.db.get_default_base_branch()
+        .map_err(|e| format!("Failed to get default base branch: {e}"))
+}
+
+#[tauri::command]
+async fn set_project_default_base_branch(branch: Option<String>) -> Result<(), String> {
+    let para_core = get_para_core().await?;
+    let core = para_core.lock().await;
+    core.db.set_default_base_branch(branch.as_deref())
+        .map_err(|e| format!("Failed to set default base branch: {e}"))
 }
 
 #[cfg(test)]

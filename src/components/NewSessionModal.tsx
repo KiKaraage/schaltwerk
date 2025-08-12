@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react
 import { useClaudeSession } from '../hooks/useClaudeSession'
 import { generateDockerStyleName } from '../utils/dockerNames'
 import { invoke } from '@tauri-apps/api/core'
+import { BranchAutocomplete } from './BranchAutocomplete'
 
 interface Props {
     open: boolean
@@ -95,6 +96,11 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
 
         try {
             setCreating(true)
+            
+            // Save the selected branch as the project default for next time
+            await invoke('set_project_default_base_branch', { branch: baseBranch })
+                .catch(err => console.warn('Failed to save default branch:', err))
+            
             await Promise.resolve(onCreate({
                 name: finalName,
                 prompt: prompt || undefined,
@@ -124,14 +130,17 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             setPrompt('')
             setValidationError('')
             
-            // Fetch available branches and the default branch
+            // Fetch available branches and the project-specific default branch
             setLoadingBranches(true)
             Promise.all([
                 invoke<string[]>('list_project_branches'),
+                invoke<string | null>('get_project_default_base_branch'),
                 invoke<string>('get_project_default_branch')
             ])
-                .then(([branchList, defaultBranch]) => {
+                .then(([branchList, savedDefaultBranch, gitDefaultBranch]) => {
                     setBranches(branchList)
+                    // Use saved default if available, otherwise use git default
+                    const defaultBranch = savedDefaultBranch || gitDefaultBranch
                     setBaseBranch(defaultBranch)
                 })
                 .catch(err => {
@@ -210,27 +219,21 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                     <div className="grid grid-cols-3 gap-3">
                         <div>
                             <label className="block text-sm text-slate-300 mb-1">Base branch</label>
-                            <select 
-                                value={baseBranch} 
-                                onChange={e => setBaseBranch(e.target.value)} 
-                                className="w-full bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700" 
-                                disabled={loadingBranches || branches.length === 0}
-                            >
-                                {loadingBranches ? (
-                                    <option value="">Loading branches...</option>
-                                ) : branches.length === 0 ? (
-                                    <option value="">No branches available</option>
-                                ) : (
-                                    <>
-                                        <option value="">Select a branch</option>
-                                        {branches.map(branch => (
-                                            <option key={branch} value={branch}>
-                                                {branch}
-                                            </option>
-                                        ))}
-                                    </>
-                                )}
-                            </select>
+                            {loadingBranches ? (
+                                <input 
+                                    value="Loading branches..." 
+                                    disabled
+                                    className="w-full bg-slate-800 text-slate-500 rounded px-3 py-2 border border-slate-700" 
+                                />
+                            ) : (
+                                <BranchAutocomplete
+                                    value={baseBranch}
+                                    onChange={setBaseBranch}
+                                    branches={branches}
+                                    disabled={branches.length === 0}
+                                    placeholder={branches.length === 0 ? "No branches available" : "Type to search branches..."}
+                                />
+                            )}
                             <p className="text-xs text-slate-400 mt-1">Branch from which to create the worktree</p>
                         </div>
                         <div>
@@ -270,7 +273,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                     </button>
                     <button 
                         onClick={handleCreate} 
-                        disabled={!name.trim() || creating}
+                        disabled={!name.trim() || !baseBranch || creating}
                         className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-white group relative inline-flex items-center gap-2"
                         title="Create session (Cmd+Enter)"
                     >
