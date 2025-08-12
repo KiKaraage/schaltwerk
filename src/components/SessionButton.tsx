@@ -82,7 +82,7 @@ export const SessionButton = memo<SessionButtonProps>(({
         <button
             onClick={() => onSelect(index)}
             className={clsx(
-                'group w-full text-left p-3 rounded-md mb-2 border transition-all duration-300',
+                'group w-full text-left px-3 py-2.5 rounded-md mb-2 border transition-all duration-300',
                 isReadyToMerge && !isSelected
                     ? 'session-ring session-ring-green border-transparent opacity-75'
                     : isSelected
@@ -126,7 +126,7 @@ export const SessionButton = memo<SessionButtonProps>(({
                     )}
                 </div>
             </div>
-            <div className="mt-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+            <div className="-mt-4 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity whitespace-nowrap">
                 {!isReadyToMerge ? (
                     <button 
                         onClick={(e) => {
@@ -161,7 +161,7 @@ export const SessionButton = memo<SessionButtonProps>(({
                     Cancel
                 </button>
             </div>
-            <div className="mt-2 text-[12px] text-slate-400 truncate">{task}</div>
+            <div className="mt-1 text-[12px] text-slate-400 truncate">{task}</div>
             {progressPercent > 0 && (
                 <>
                     <div className="mt-3 h-2 bg-slate-800 rounded">
