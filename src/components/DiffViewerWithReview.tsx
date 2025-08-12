@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { OptimizedDiffViewer } from './OptimizedDiffViewer'
+import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
 import { useSelection } from '../contexts/SelectionContext'
 import { useReview } from '../contexts/ReviewContext'
 import { VscClose, VscChevronLeft, VscFile, VscDiffAdded, VscDiffModified, VscDiffRemoved, VscComment, VscSend, VscCheck } from 'react-icons/vsc'
@@ -76,11 +76,9 @@ const CommentInput = memo(({
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && e.metaKey) {
       e.preventDefault()
-      e.stopPropagation()
       handleSubmit()
     } else if (e.key === 'Escape') {
       e.preventDefault()
-      e.stopPropagation()
       onCancel()
     }
   }, [handleSubmit, onCancel])
@@ -135,6 +133,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
   } | null>(null)
   
   const [lineSelection, setLineSelection] = useState<LineSelection | null>(null)
+  const [isSelecting, setIsSelecting] = useState(false)
   const [showCommentForm, setShowCommentForm] = useState(false)
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentText, setEditingCommentText] = useState('')
@@ -154,7 +153,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
   const [scrollTop, setScrollTop] = useState(0)
   const scrollTopRef = useRef(0)
   const scrollRafRef = useRef<number | null>(null)
-  const [isSelecting, setIsSelecting] = useState(false)
   
   const sessionName = selection.kind === 'session' ? selection.payload : null
   
@@ -175,14 +173,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     try {
       const changedFiles = await invoke<ChangedFile[]>('get_changed_files_from_main', { sessionName })
       setFiles(changedFiles)
-      // Auto-select first file when opening if none selected
-      // Use callback to get current selectedFile value to avoid stale closure
-      setSelectedFile(currentSelected => {
-        if (!currentSelected && changedFiles.length > 0) {
-          return changedFiles[0].path
-        }
-        return currentSelected
-      })
       
       const currentBranch = await invoke<string>('get_current_branch_name', { sessionName })
       const baseBranch = await invoke<string>('get_base_branch_name', { sessionName })
@@ -235,7 +225,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       loadChangedFiles()
     }
   }, [isOpen, loadChangedFiles])
-
   
   useEffect(() => {
     if (selectedFile && isOpen) {
@@ -635,8 +624,33 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       'toml': 'toml', 'md': 'markdown',
       'css': 'css', 'scss': 'scss', 'less': 'less'
     }
-    return languageMap[ext || ''] || undefined
+    return languageMap[ext || '']
   }, [selectedFile])
+
+  const renderSyntaxHighlight = (code: string) => {
+    if (!highlightEnabled) {
+      return (
+        <code className="hljs block font-mono text-[12px] leading-[1.3] whitespace-pre">{code}</code>
+      )
+    }
+    let html: string
+    try {
+      if (language && hljs.getLanguage(language)) {
+        html = hljs.highlight(code, { language, ignoreIllegals: true }).value
+      } else {
+        const auto = hljs.highlightAuto(code)
+        html = auto.value
+      }
+    } catch {
+      html = code
+    }
+    return (
+      <code
+        className="hljs block font-mono text-[12px] leading-[1.3] whitespace-pre"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    )
+  }
 
   const fileComments = selectedFile ? getCommentsForFile(selectedFile) : []
   
@@ -674,12 +688,9 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                 {files.length} files
               </span>
             </div>
-            {files.length > 0 && (
-              <div className="mt-1 text-[10px] text-slate-500">Navigate: ⌘↑ / ⌘↓</div>
-            )}
           </div>
           
-          <div className="flex-1 overflow-y-auto" ref={fileListRef}>
+          <div className="flex-1 overflow-y-auto">
             <div className="p-2">
               {files.map(file => {
                 const commentsCount = getCommentsForFile(file.path).length
@@ -692,7 +703,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                       selectedFile === file.path && "bg-slate-800"
                     )}
                     onClick={() => loadFileDiff(file.path)}
-                    data-path={file.path}
                   >
                     {getFileIcon(file.change_type)}
                     <div className="flex-1 min-w-0">
@@ -731,11 +741,9 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
               <button
                 onClick={handleFinishReview}
                 className="w-full px-3 py-1.5 bg-blue-600/90 hover:bg-blue-600 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
-                title="Finish Review (⇧⌘↵)"
               >
                 <VscCheck className="text-sm" />
                 <span>Finish Review</span>
-                <span className="text-xs opacity-70">⇧⌘↵</span>
               </button>
             </div>
           )}
@@ -776,11 +784,9 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                     <button
                       onClick={handleFinishReview}
                       className="px-3 py-1.5 bg-blue-600/90 hover:bg-blue-600 rounded text-sm font-medium transition-colors flex items-center gap-1.5"
-                      title="Finish Review (⇧⌘↵)"
                     >
                       <VscCheck className="text-sm" />
                       <span>Finish Review ({currentReview.comments.length})</span>
-                      <span className="text-xs opacity-70">⇧⌘↵</span>
                     </button>
                   )}
                   <button
@@ -794,8 +800,9 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
               </div>
               
               <div 
-                className="flex-1 overflow-hidden relative" 
+                className="flex-1 overflow-auto diff-wrapper relative" 
                 ref={diffViewerRef}
+                style={{ userSelect: 'none' }}
               >
                 {/* Line selection indicator */}
                 {lineSelection && (
@@ -813,6 +820,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                   .selection-hitlayer { position: absolute; left: 0; right: 0; pointer-events: auto; }
                   .selection-rect { position: absolute; background: rgba(59,130,246,0.18); border-left: 3px solid rgb(59,130,246); }
                 `}</style>
+                
                 {loading ? (
                   <div className="h-full flex items-center justify-center text-slate-500">
                     <div className="text-center">
@@ -833,6 +841,49 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                       onLineSelect={handleLineSelect}
                       leftTitle={`${branchInfo?.baseBranch || 'base'} (${branchInfo?.baseCommit || 'base'})`}
                       rightTitle={`${branchInfo?.currentBranch || 'current'} (${branchInfo?.headCommit || 'HEAD'})`}
+                      renderContent={renderSyntaxHighlight}
+                      showDiffOnly={false}
+                      hideLineNumbers={false}
+                      useDarkTheme={true}
+                      styles={{
+                        variables: {
+                          dark: {
+                            diffViewerBackground: 'transparent',
+                            diffViewerColor: '#cbd5e1',
+                            gutterBackground: 'transparent',
+                            gutterBackgroundDark: 'transparent',
+                            codeFoldBackground: 'transparent',
+                            codeFoldGutterBackground: 'transparent',
+                            emptyLineBackground: 'transparent',
+                            highlightBackground: '#334155',
+                            highlightGutterBackground: '#475569',
+                            addedBackground: 'rgba(34, 197, 94, 0.18)',
+                            addedColor: '#cbd5e1',
+                            removedBackground: 'rgba(239, 68, 68, 0.18)',
+                            removedColor: '#cbd5e1',
+                            wordAddedBackground: 'rgba(34, 197, 94, 0.32)',
+                            wordRemovedBackground: 'rgba(239, 68, 68, 0.32)',
+                            addedGutterBackground: 'rgba(34, 197, 94, 0.24)',
+                            removedGutterBackground: 'rgba(239, 68, 68, 0.24)',
+                            gutterColor: '#64748b',
+                            addedGutterColor: '#cbd5e1',
+                            removedGutterColor: '#cbd5e1',
+                            codeFoldContentColor: '#64748b',
+                            diffViewerTitleBackground: 'transparent',
+                            diffViewerTitleColor: '#cbd5e1',
+                            diffViewerTitleBorderColor: '#334155',
+                          }
+                        },
+                        diffAdded: { background: 'rgba(34, 197, 94, 0.18)' },
+                        diffRemoved: { background: 'rgba(239, 68, 68, 0.18)' },
+                        diffContainer: { background: 'transparent' },
+                        line: {
+                          fontFamily: 'SF Mono, Monaco, Consolas, monospace',
+                          fontSize: '12px',
+                          lineHeight: '1.3',
+                          whiteSpace: 'pre'
+                        }
+                      }}
                     />
 
                 {/* Selection overlay (visual only, above diff) */}
@@ -882,11 +933,9 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                             setShowCommentForm(true)
                           }}
                           className="px-4 py-2 bg-blue-600/90 hover:bg-blue-600 rounded-lg text-sm transition-colors flex items-center gap-2 shadow-xl text-white"
-                          title="Add Comment (⌘↵)"
                         >
                           <VscComment />
                           <span>Add Comment</span>
-                          <span className="text-xs opacity-70">⌘↵</span>
                         </button>
                       </div>
                     )}

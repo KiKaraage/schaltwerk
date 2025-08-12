@@ -278,6 +278,7 @@ impl SessionManager {
                 base_branch: session.parent_branch.clone(),
                 merge_mode: "rebase".to_string(),
                 status: status_type,
+                created_at: Some(session.created_at),
                 last_modified: session.last_activity.or(Some(session.updated_at)),
                 has_uncommitted_changes: Some(has_uncommitted),
                 is_current: false,

@@ -138,6 +138,7 @@ pub struct SessionInfo {
     pub base_branch: String,
     pub merge_mode: String,
     pub status: SessionStatusType,
+    pub created_at: Option<DateTime<Utc>>,
     pub last_modified: Option<DateTime<Utc>>,
     pub has_uncommitted_changes: Option<bool>,
     pub is_current: bool,

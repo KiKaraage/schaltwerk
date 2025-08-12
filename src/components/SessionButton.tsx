@@ -17,6 +17,7 @@ interface SessionInfo {
     base_branch: string
     merge_mode: string
     status: 'active' | 'dirty' | 'missing' | 'archived'
+    created_at?: string
     last_modified?: string
     has_uncommitted_changes?: boolean
     is_current: boolean

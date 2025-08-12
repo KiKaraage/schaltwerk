@@ -1,7 +1,6 @@
-import { useState, useEffect, useMemo, startTransition, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, startTransition, useRef } from 'react'
 import { clsx } from 'clsx'
 import { invoke } from '@tauri-apps/api/core'
-import { sortSessions } from '../utils/sessionSort'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { useFocus } from '../contexts/FocusContext'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
@@ -27,6 +26,7 @@ interface SessionInfo {
     base_branch: string
     merge_mode: string
     status: 'active' | 'dirty' | 'missing' | 'archived'
+    created_at?: string
     last_modified?: string
     has_uncommitted_changes?: boolean
     is_current: boolean
@@ -71,6 +71,20 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
         const saved = typeof window !== 'undefined' ? window.localStorage.getItem('schaltwerk:sessions:filterMode') : null
         return (saved === 'unreviewed' || saved === 'reviewed') ? saved : 'all'
     })
+    const [sortMode, setSortMode] = useState<'name' | 'created' | 'last-edited'>(() => {
+        if (typeof window === 'undefined') return 'name'
+        
+        try {
+            const saved = window.localStorage.getItem('schaltwerk:sessions:sortMode')
+            if (saved === 'name' || saved === 'created' || saved === 'last-edited') {
+                return saved
+            }
+        } catch (error) {
+            console.warn('Failed to load sort mode from localStorage:', error)
+        }
+        
+        return 'name'
+    })
     const [loading, setLoading] = useState(true)
     const [stuckTerminals, setStuckTerminals] = useState<Set<string>>(new Set())
     const [markReadyModal, setMarkReadyModal] = useState<{ open: boolean; sessionName: string; hasUncommitted: boolean }>({
@@ -81,6 +95,41 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     const [switchOrchestratorModal, setSwitchOrchestratorModal] = useState(false)
     const sidebarRef = useRef<HTMLDivElement>(null)
     
+    // Extract sorting logic
+    const applySortMode = useCallback((sessionList: EnrichedSession[], mode: typeof sortMode) => {
+        switch (mode) {
+            case 'last-edited':
+                // Sort by last modified time (most recent first)
+                return [...sessionList].sort((a, b) => {
+                    const aTime = a.info.last_modified ? new Date(a.info.last_modified).getTime() : 0
+                    const bTime = b.info.last_modified ? new Date(b.info.last_modified).getTime() : 0
+                    return bTime - aTime // Most recent first
+                })
+            case 'created':
+                // Sort by creation time (newest first)
+                return [...sessionList].sort((a, b) => {
+                    const aTime = a.info.created_at ? new Date(a.info.created_at).getTime() : 0
+                    const bTime = b.info.created_at ? new Date(b.info.created_at).getTime() : 0
+                    
+                    // If both have creation times, sort newest first
+                    if (aTime && bTime) {
+                        return bTime - aTime
+                    }
+                    // If only one has creation time, it comes first
+                    if (aTime) return -1
+                    if (bTime) return 1
+                    // Otherwise alphabetical
+                    return a.info.session_id.localeCompare(b.info.session_id)
+                })
+            case 'name':
+            default:
+                // Alphabetical sort by session_id
+                return [...sessionList].sort((a, b) => 
+                    a.info.session_id.localeCompare(b.info.session_id)
+                )
+        }
+    }, [])
+    
     // Memoize displayed sessions (filter + sort) to prevent re-computation on every render
     const sortedSessions = useMemo(() => {
         let filtered = sessions
@@ -89,9 +138,18 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
         } else if (filterMode === 'reviewed') {
             filtered = sessions.filter(s => !!s.info.ready_to_merge)
         }
-        // Original sorting behavior
-        return sortSessions(filtered)
-    }, [sessions, filterMode])
+        
+        // Separate reviewed and unreviewed
+        const reviewed = filtered.filter(s => s.info.ready_to_merge)
+        const unreviewed = filtered.filter(s => !s.info.ready_to_merge)
+        
+        // Apply sorting to each group
+        const sortedUnreviewed = applySortMode(unreviewed, sortMode)
+        const sortedReviewed = applySortMode(reviewed, 'name') // Always sort reviewed by name
+        
+        // Unreviewed on top, reviewed at bottom
+        return [...sortedUnreviewed, ...sortedReviewed]
+    }, [sessions, filterMode, sortMode, applySortMode])
 
     const handleSelectOrchestrator = async () => {
         await setSelection({ kind: 'orchestrator' })
@@ -234,6 +292,16 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     useEffect(() => {
         try { window.localStorage.setItem('schaltwerk:sessions:filterMode', filterMode) } catch {}
     }, [filterMode])
+    
+    useEffect(() => {
+        try {
+            if (typeof window !== 'undefined') {
+                window.localStorage.setItem('schaltwerk:sessions:sortMode', sortMode)
+            }
+        } catch (error) {
+            console.warn('Failed to save sort mode to localStorage:', error)
+        }
+    }, [sortMode])
 
     // Initial load only; push updates keep it fresh thereafter
     useEffect(() => {
@@ -490,26 +558,45 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 </button>
             </div>
 
-            <div className="px-3 py-2 border-t border-b border-slate-800 text-sm text-slate-300 flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                    <span>Sessions {sortedSessions.length > 0 && <span className="text-slate-500">({sortedSessions.length})</span>}</span>
+            <div className="px-3 py-2 border-t border-b border-slate-800 text-sm text-slate-300 flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-xs">Sessions {sortedSessions.length > 0 && <span className="text-slate-500">({sortedSessions.length})</span>}</span>
                 </div>
-                <div className="flex items-center gap-1 ml-auto sm:ml-4">
+                <div className="flex items-center gap-0.5 ml-auto">
                     <button
-                        className={clsx('text-[11px] px-2 py-1 rounded', filterMode === 'all' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
+                        className={clsx('text-[10px] px-1.5 py-0.5 rounded', filterMode === 'all' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
                         onClick={() => setFilterMode('all')}
                         title="Show all sessions"
                     >All</button>
                     <button
-                        className={clsx('text-[11px] px-2 py-1 rounded', filterMode === 'unreviewed' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
+                        className={clsx('text-[10px] px-1.5 py-0.5 rounded', filterMode === 'unreviewed' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
                         onClick={() => setFilterMode('unreviewed')}
                         title="Show only unreviewed sessions"
-                    >Unreviewed</button>
+                    >New</button>
                     <button
-                        className={clsx('text-[11px] px-2 py-1 rounded', filterMode === 'reviewed' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
+                        className={clsx('text-[10px] px-1.5 py-0.5 rounded', filterMode === 'reviewed' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
                         onClick={() => setFilterMode('reviewed')}
                         title="Show only reviewed sessions"
                     >Reviewed</button>
+                    <button
+                        className="px-1.5 py-0.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-white flex items-center gap-0.5"
+                        onClick={() => {
+                            // Cycle through: name -> created -> last-edited -> name
+                            const nextMode = sortMode === 'name' ? 'created' : 
+                                           sortMode === 'created' ? 'last-edited' : 'name'
+                            setSortMode(nextMode)
+                        }}
+                        title={`Sort: ${sortMode === 'name' ? 'Name (A-Z)' : sortMode === 'created' ? 'Creation Time' : 'Last Edited'}`}
+                    >
+                        {/* Sort icon - compact */}
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                        </svg>
+                        {/* Compact text indicator */}
+                        <span className="text-[9px] font-medium leading-none">
+                            {sortMode === 'name' ? 'A-Z' : sortMode === 'created' ? 'New' : 'Edit'}
+                        </span>
+                    </button>
                 </div>
             </div>
             <div className="flex-1 overflow-y-auto px-2 pt-2">
