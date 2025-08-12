@@ -1,14 +1,45 @@
 # Para UI Development Commands
 
-# Install all dependencies for development
+# Install the application to ~/Applications
 install:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "📦 Installing npm dependencies..."
+    
+    echo "🔨 Building Tauri application..."
     npm install
-    echo "🦀 Installing Rust dependencies..."
-    cd src-tauri && cargo build --release
-    echo "✅ All dependencies installed successfully!"
+    npm run build
+    npm run tauri build
+    
+    echo "📦 Installing to ~/Applications..."
+    
+    # Create user Applications directory if it doesn't exist
+    mkdir -p ~/Applications
+    
+    # Find the built app bundle
+    APP_BUNDLE=$(find src-tauri/target/release/bundle -name "*.app" -type d | head -1)
+    
+    if [ -z "$APP_BUNDLE" ]; then
+        echo "❌ Error: Could not find built app bundle"
+        exit 1
+    fi
+    
+    APP_NAME=$(basename "$APP_BUNDLE")
+    
+    # Remove old installation if it exists
+    if [ -d ~/Applications/"$APP_NAME" ]; then
+        echo "🗑️  Removing old installation..."
+        rm -rf ~/Applications/"$APP_NAME"
+    fi
+    
+    # Copy the app bundle to user Applications
+    echo "📋 Copying $APP_NAME to ~/Applications..."
+    cp -R "$APP_BUNDLE" ~/Applications/
+    
+    # Clear quarantine attributes to avoid Gatekeeper issues
+    xattr -cr ~/Applications/"$APP_NAME" 2>/dev/null || true
+    
+    echo "✅ Successfully installed $APP_NAME to ~/Applications/"
+    echo "🚀 You can now run the app from ~/Applications/$APP_NAME"
 
 # Find an available port starting from a base port
 _find_available_port base_port:
