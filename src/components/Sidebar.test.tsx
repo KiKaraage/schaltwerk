@@ -480,6 +480,7 @@ describe('Sidebar', () => {
     })
 
     it('should handle loading failure gracefully', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       mockInvoke.mockRejectedValueOnce(new Error('Failed to load sessions'))
 
       render(<Sidebar />, { wrapper: createTestWrapper() })
@@ -488,6 +489,8 @@ describe('Sidebar', () => {
         // no session selection buttons rendered on failure
         expect(screen.queryAllByTitle(/Select session/i).length).toBe(0)
       })
+      
+      consoleErrorSpy.mockRestore()
     })
   })
 })

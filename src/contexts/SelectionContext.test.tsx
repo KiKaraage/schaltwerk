@@ -195,6 +195,8 @@ describe('SelectionContext', () => {
     })
 
     it('should fallback to current directory on session fetch error', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      
       mockInvoke.mockImplementation((command: string) => {
         if (command === 'para_core_get_session') {
           return Promise.reject(new Error('Session not found'))
@@ -224,6 +226,8 @@ describe('SelectionContext', () => {
         id: 'session-missing-session-top',
         cwd: '/fallback/cwd'
       })
+      
+      consoleErrorSpy.mockRestore()
     })
 
     it('should not create terminals that already exist', async () => {

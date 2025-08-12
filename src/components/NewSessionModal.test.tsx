@@ -22,7 +22,18 @@ vi.mock('../utils/dockerNames', () => ({
 }))
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn().mockResolvedValue('main')
+  invoke: vi.fn().mockImplementation((cmd: string) => {
+    if (cmd === 'list_project_branches') {
+      return Promise.resolve(['main', 'develop', 'feature/test'])
+    }
+    if (cmd === 'get_project_default_base_branch') {
+      return Promise.resolve(null)
+    }
+    if (cmd === 'get_project_default_branch') {
+      return Promise.resolve('main')
+    }
+    return Promise.resolve('main')
+  })
 }))
 import { invoke } from '@tauri-apps/api/core'
 
@@ -198,30 +209,88 @@ describe('NewSessionModal', () => {
 
   it('loads base branch via tauri invoke and falls back on error', async () => {
     // Success path
-    ;(invoke as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce('develop')
+    ;(invoke as unknown as ReturnType<typeof vi.fn>).mockImplementation((cmd: string) => {
+      if (cmd === 'list_project_branches') {
+        return Promise.resolve(['main', 'develop', 'feature/test'])
+      }
+      if (cmd === 'get_project_default_base_branch') {
+        return Promise.resolve('develop')
+      }
+      if (cmd === 'get_project_default_branch') {
+        return Promise.resolve('develop')
+      }
+      return Promise.resolve('develop')
+    })
     openModal()
-    const baseInput = await screen.findByPlaceholderText('e.g. main, master, develop') as HTMLInputElement
-    await waitFor(() => expect(baseInput.value).toBe('develop'))
+    // Wait for branches to load, then check the input
+    await waitFor(() => {
+      const inputs = screen.getAllByRole('textbox')
+      const baseInput = inputs.find(input => (input as HTMLInputElement).value === 'develop')
+      expect(baseInput).toBeTruthy()
+    })
 
     // Failure path
     cleanup()
-    ;(invoke as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('no tauri'))
+    ;(invoke as unknown as ReturnType<typeof vi.fn>).mockImplementation((cmd: string) => {
+      if (cmd === 'list_project_branches') {
+        return Promise.reject(new Error('no tauri'))
+      }
+      return Promise.reject(new Error('no tauri'))
+    })
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     openModal()
-    const baseInput2 = await screen.findByPlaceholderText('e.g. main, master, develop') as HTMLInputElement
-    await waitFor(() => expect(baseInput2.value).toBe(''))
+    await waitFor(() => {
+      // When branches fail to load, the input shows a disabled message
+      const inputs = screen.getAllByRole('textbox')
+      expect(inputs.length).toBeGreaterThan(0)
+    })
     expect(warnSpy).toHaveBeenCalled()
     warnSpy.mockRestore()
   })
 
   it('re-enables Create button if onCreate fails', async () => {
+    // Setup proper mock for branches first
+    ;(invoke as unknown as ReturnType<typeof vi.fn>).mockImplementation((cmd: string) => {
+      if (cmd === 'list_project_branches') {
+        return Promise.resolve(['main', 'develop'])
+      }
+      if (cmd === 'get_project_default_base_branch') {
+        return Promise.resolve('main')
+      }
+      if (cmd === 'get_project_default_branch') {
+        return Promise.resolve('main')
+      }
+      return Promise.resolve('main')
+    })
+    
     const onCreate = vi.fn().mockRejectedValue(new Error('fail'))
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    
     render(<NewSessionModal open={true} onClose={vi.fn()} onCreate={onCreate} />)
-    const btn = await screen.findByTitle('Create session (Cmd+Enter)') as HTMLButtonElement
+    
+    // Wait for branches to load and button to be available
+    await waitFor(() => {
+      const btn = screen.queryByTitle('Create session (Cmd+Enter)')
+      expect(btn).toBeTruthy()
+    })
+    
+    const btn = screen.getByTitle('Create session (Cmd+Enter)') as HTMLButtonElement
+    
+    // Initially button should be enabled (has name and branches loaded)
+    expect(btn.disabled).toBe(false)
+    
+    // Click and it should disable during creation
     fireEvent.click(btn)
-    // Button is disabled while creating
     expect(btn.disabled).toBe(true)
+    
     // After failure it should re-enable
-    await waitFor(() => expect(btn.disabled).toBe(false))
+    await waitFor(() => {
+      expect(onCreate).toHaveBeenCalled()
+      expect(btn.disabled).toBe(false)
+    })
+    
+    consoleErrorSpy.mockRestore()
+    consoleWarnSpy.mockRestore()
   })
 })

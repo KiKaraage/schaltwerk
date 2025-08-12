@@ -50,6 +50,8 @@ describe('useClaudeSession', () => {
   })
 
   it('gets and sets agent type with defaults on error', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    
     mockInvoke.mockResolvedValueOnce('cursor')
     const { result } = renderHook(() => useClaudeSession())
 
@@ -64,5 +66,7 @@ describe('useClaudeSession', () => {
     const setOk = await result.current.setAgentType('cursor')
     expect(setOk).toBe(true)
     expect(mockInvoke).toHaveBeenCalledWith('para_core_set_agent_type', { agentType: 'cursor' })
+    
+    consoleErrorSpy.mockRestore()
   })
 })

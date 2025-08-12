@@ -348,6 +348,7 @@ describe('Terminal component', () => {
   // Removed flaky unmount listener test: behavior now relies on coalesced async cleanup
 
   it('handles hydration failure and still flushes buffered output (batched)', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     ;(TauriCore as any).__setInvokeHandler('get_terminal_buffer', () => { throw new Error('fail') })
     render(<Terminal terminalId="session-hydratefail-top" sessionName="hf" />)
     // Emit before hydration completes -> should be buffered but not flushed due to failure
@@ -360,6 +361,7 @@ describe('Terminal component', () => {
     expect(xterm.write).toHaveBeenCalled()
     const combined = xterm.write.mock.calls.map((c: any[]) => c[0]).join('')
     expect(combined).toBe('AB')
+    consoleErrorSpy.mockRestore()
   })
 
   it('exposes focus via ref', async () => {
