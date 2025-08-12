@@ -142,12 +142,22 @@ describe('App.tsx', () => {
     errSpy.mockRestore()
   })
 
-  it('displays project path in top bar when repository is detected automatically', async () => {
-    // Make initial repo check succeed
+  it('displays project path in top bar when a project is opened', async () => {
+    renderApp()
+
+    // Initially on home screen
+    expect(await screen.findByTestId('home-screen')).toBeInTheDocument()
+
+    // Open a project
     mockState.isGitRepo = true
     mockState.currentDir = '/Users/me/projects/cool-app'
+    
+    fireEvent.click(screen.getByTestId('open-project'))
 
-    renderApp()
+    // Wait for app to switch to main view
+    await waitFor(() => {
+      expect(screen.getByTestId('sidebar')).toBeInTheDocument()
+    })
 
     // The basename of the project path should appear, along with the full path
     await waitFor(() => {

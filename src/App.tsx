@@ -40,22 +40,8 @@ export default function App() {
   const [isDiffViewerOpen, setIsDiffViewerOpen] = useState(false)
   const [showHome, setShowHome] = useState(true)
   
-  useEffect(() => {
-    const checkCurrentProject = async () => {
-      try {
-        const currentDir = await invoke<string>('get_current_directory')
-        const isGitRepo = await invoke<boolean>('is_git_repository', { path: currentDir })
-        if (isGitRepo) {
-          setProjectPath(currentDir)
-          setShowHome(false)
-          // SelectionContext will automatically update orchestrator when projectPath changes
-        }
-      } catch (err) {
-        console.error('Failed to check current project:', err)
-      }
-    }
-    checkCurrentProject()
-  }, [])
+  // Start with home screen, user must explicitly choose a project
+  // Remove automatic project detection to ensure home screen is shown first
 
   useEffect(() => {
     const handleSessionAction = (event: CustomEvent<SessionActionEvent>) => {

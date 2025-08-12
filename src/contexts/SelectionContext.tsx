@@ -30,8 +30,10 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
         top: 'orchestrator-default-top',
         bottom: 'orchestrator-default-bottom'
     })
+    // Start as not ready, will become ready once we have initialized with a project
     const [isReady, setIsReady] = useState(false)
     const previousProjectPath = useRef<string | null>(null)
+    const hasInitialized = useRef(false)
     
     // Track which terminals we've created to avoid duplicates
     const terminalsCreated = useRef(new Set<string>())
@@ -136,7 +138,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
         ])
         
         return ids
-    }, [getTerminalIds, createTerminal])
+    }, [getTerminalIds, createTerminal, projectPath])
     
     // Clear terminal tracking for specific terminals
     const clearTerminalTracking = useCallback((terminalIds: string[]) => {
@@ -148,7 +150,6 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     
     // Set selection atomically
     const setSelection = useCallback(async (newSelection: Selection, forceRecreate = false) => {
-        
         // Check if we're actually changing selection (but allow initial setup or force recreate)
         if (!forceRecreate && isReady && selection.kind === newSelection.kind && selection.payload === newSelection.payload) {
             return
@@ -177,7 +178,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
                 sessionName: newSelection.payload
             }))
             
-            // Mark as reviewed
+            // Mark as ready
             setIsReady(true)
 
         } catch (error) {
@@ -185,27 +186,25 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             // Stay on current selection if we fail
             setIsReady(true)
         }
-    }, [ensureTerminals, getTerminalIds, clearTerminalTracking])
+    }, [ensureTerminals, getTerminalIds, clearTerminalTracking, isReady, selection])
     
-    // Watch for project path changes and update orchestrator terminals when project changes
-    useEffect(() => {
-        // Skip initial mount and when projectPath hasn't actually changed
-        if (previousProjectPath.current === projectPath) {
-            return
-        }
-        
-        // If we had a previous project and now have a new one, force orchestrator update
-        if (previousProjectPath.current !== null && projectPath !== null && selection.kind === 'orchestrator') {
-            // Force recreate orchestrator terminals with new project path
-            setSelection({ kind: 'orchestrator' }, true)
-        }
-        
-        previousProjectPath.current = projectPath
-    }, [projectPath, selection.kind, setSelection])
-    
-    // Initialize on mount
+    // Initialize on mount and when project path changes
     useEffect(() => {
         const initialize = async () => {
+            // Skip if already initialized with same project path
+            if (hasInitialized.current && previousProjectPath.current === projectPath) {
+                return
+            }
+            
+            // Check if we need to force recreate for orchestrator when changing projects
+            const shouldForceRecreate = hasInitialized.current && 
+                                       previousProjectPath.current !== null && 
+                                       projectPath !== null && 
+                                       selection.kind === 'orchestrator'
+            
+            // Set initialized flag and update previous path
+            hasInitialized.current = true
+            previousProjectPath.current = projectPath
             
             // Try to restore from localStorage
             const stored = localStorage.getItem('schaltwerk-selection')
@@ -235,12 +234,17 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
                 }
             }
             
-            // Set the initial selection
-            await setSelection(initialSelection)
+            // Set the initial selection (force recreate if changing projects)
+            await setSelection(initialSelection, shouldForceRecreate)
         }
         
-        initialize()
-    }, []) // Only run once on mount, setSelection is stable
+        // Only run if not currently initializing
+        initialize().catch(error => {
+            console.error('[SelectionContext] Failed to initialize:', error)
+            // Still mark as ready even on error so UI doesn't hang
+            setIsReady(true)
+        })
+    }, [projectPath, setSelection]) // Re-run when projectPath changes
     
     return (
         <SelectionContext.Provider value={{ 

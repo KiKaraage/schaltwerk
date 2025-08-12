@@ -100,10 +100,11 @@ let bridge: {
   getFocusForSession: ReturnType<typeof useFocus>['getFocusForSession']
   getSessionKey: () => string
   isReady: boolean
+  terminals: ReturnType<typeof useSelection>['terminals']
 } | null = null
 
 function ControlBridge() {
-  const { selection, setSelection, isReady } = useSelection()
+  const { selection, setSelection, isReady, terminals } = useSelection()
   const { setCurrentFocus, setFocusForSession, getFocusForSession } = useFocus()
   useEffect(() => {
     bridge = {
@@ -113,8 +114,9 @@ function ControlBridge() {
       getFocusForSession,
       getSessionKey: () => (selection.kind === 'orchestrator' ? 'orchestrator' : selection.payload || 'unknown'),
       isReady,
+      terminals,
     }
-  }, [selection, setSelection, setCurrentFocus, setFocusForSession, getFocusForSession, isReady])
+  }, [selection, setSelection, setCurrentFocus, setFocusForSession, getFocusForSession, isReady, terminals])
   return null
 }
 
@@ -145,8 +147,14 @@ beforeEach(() => {
       case 'get_current_directory':
         return Promise.resolve('/test/cwd')
       case 'terminal_exists':
+        // Terminal doesn't exist initially, forcing creation
         return Promise.resolve(false)
       case 'create_terminal':
+        // Mark as created
+        const terminalId = args?.id
+        if (terminalId) {
+          mountCount.set(terminalId, 0) // Mark as created but not yet mounted
+        }
         return Promise.resolve()
       case 'para_core_get_session':
         return Promise.resolve({
@@ -176,17 +184,29 @@ describe('TerminalGrid', () => {
   it('renders dual-terminal layout with correct headers and ids (orchestrator)', async () => {
     renderGrid()
 
-    // Headers
+    // Wait for bridge to be ready
+    await waitFor(() => {
+      expect(bridge?.isReady).toBe(true)
+    })
+
+    // Headers should be visible
     expect(screen.getByText('Orchestrator — main repo')).toBeInTheDocument()
     expect(screen.getByText('Terminal — main')).toBeInTheDocument()
 
-    // Terminal components (mocked)
-    expect(screen.getByTestId('terminal-orchestrator-default-top')).toBeInTheDocument()
-    expect(screen.getByTestId('terminal-orchestrator-default-bottom')).toBeInTheDocument()
+    // Terminal components should use the actual IDs from the context
+    if (!bridge) throw new Error('Bridge not initialized')
+    expect(screen.getByTestId(`terminal-${bridge.terminals.top}`)).toBeInTheDocument()
+    expect(screen.getByTestId(`terminal-${bridge.terminals.bottom}`)).toBeInTheDocument()
   })
 
   it('respects split view proportions and layout props', async () => {
     renderGrid()
+    
+    // Wait for bridge to be ready
+    await waitFor(() => {
+      expect(bridge?.isReady).toBe(true)
+    })
+    
     const split = screen.getByTestId('split')
     expect(split.getAttribute('data-direction')).toBe('vertical')
     expect(split.getAttribute('data-sizes')).toBe(JSON.stringify([65, 35]))
@@ -197,27 +217,32 @@ describe('TerminalGrid', () => {
   it('focuses top/bottom terminals on header and body clicks', async () => {
     renderGrid()
 
+    // Wait for bridge to be ready
+    await waitFor(() => {
+      expect(bridge?.isReady).toBe(true)
+    })
+
     // Click top header -> focus claude (top) after 100ms
     fireEvent.click(screen.getByText('Orchestrator — main repo'))
     await advance(110)
     const topFocus = (await import('./Terminal')) as any
-    expect(topFocus.__getFocusSpy('orchestrator-default-top')).toHaveBeenCalled()
+    expect(topFocus.__getFocusSpy(bridge!.terminals.top)).toHaveBeenCalled()
 
     // Click bottom header -> focus terminal (bottom)
     fireEvent.click(screen.getByText('Terminal — main'))
     await advance(110)
     const bottomFocusSpy = (await import('./Terminal')) as any
-    expect(bottomFocusSpy.__getFocusSpy('orchestrator-default-bottom')).toHaveBeenCalled()
+    expect(bottomFocusSpy.__getFocusSpy(bridge!.terminals.bottom)).toHaveBeenCalled()
 
     // Also clicking bodies should focus
-    const topBody = screen.getByTestId('terminal-orchestrator-default-top').parentElement as HTMLElement
-    const bottomBody = screen.getByTestId('terminal-orchestrator-default-bottom').parentElement as HTMLElement
+    const topBody = screen.getByTestId(`terminal-${bridge!.terminals.top}`).parentElement as HTMLElement
+    const bottomBody = screen.getByTestId(`terminal-${bridge!.terminals.bottom}`).parentElement as HTMLElement
     fireEvent.click(topBody)
     await advance(110)
-    expect(topFocus.__getFocusSpy('orchestrator-default-top')).toHaveBeenCalled()
+    expect(topFocus.__getFocusSpy(bridge!.terminals.top)).toHaveBeenCalled()
     fireEvent.click(bottomBody)
     await advance(110)
-    expect(bottomFocusSpy.__getFocusSpy('orchestrator-default-bottom')).toHaveBeenCalled()
+    expect(bottomFocusSpy.__getFocusSpy(bridge!.terminals.bottom)).toHaveBeenCalled()
   })
 
   it('switches terminals when session changes and focuses according to session focus state', async () => {
@@ -259,9 +284,17 @@ describe('TerminalGrid', () => {
   it('handles terminal reset events by remounting terminals and cleans up on unmount', async () => {
     const utils = renderGrid()
 
+    // Wait for bridge to be ready
+    await waitFor(() => {
+      expect(bridge?.isReady).toBe(true)
+    })
+
     const m = (await import('./Terminal')) as any
-    expect(m.__getMountCount('orchestrator-default-top')).toBe(1)
-    expect(m.__getMountCount('orchestrator-default-bottom')).toBe(1)
+    const topId = bridge!.terminals.top
+    const bottomId = bridge!.terminals.bottom
+    
+    expect(m.__getMountCount(topId)).toBe(1)
+    expect(m.__getMountCount(bottomId)).toBe(1)
 
     // Dispatch reset event -> key increments -> both terminals remount
     act(() => {
@@ -271,14 +304,14 @@ describe('TerminalGrid', () => {
       await Promise.resolve()
     })
 
-    expect(m.__getMountCount('orchestrator-default-top')).toBe(2)
-    expect(m.__getMountCount('orchestrator-default-bottom')).toBe(2)
+    expect(m.__getMountCount(topId)).toBe(2)
+    expect(m.__getMountCount(bottomId)).toBe(2)
 
     // Unmount component -> listener should be removed; subsequent events won't change counts
     utils.unmount()
     // Each terminal should have unmounted at least once
-    expect(m.__getUnmountCount('orchestrator-default-top')).toBeGreaterThan(0)
-    expect(m.__getUnmountCount('orchestrator-default-bottom')).toBeGreaterThan(0)
+    expect(m.__getUnmountCount(topId)).toBeGreaterThan(0)
+    expect(m.__getUnmountCount(bottomId)).toBeGreaterThan(0)
     act(() => {
       window.dispatchEvent(new Event('para-ui:reset-terminals'))
     })

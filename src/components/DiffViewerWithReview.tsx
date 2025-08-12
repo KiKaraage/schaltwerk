@@ -810,7 +810,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                   <>
                 {/* Hidden line measure element */}
                 <div ref={measureLineRef} style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', lineHeight: '1.3', fontSize: 12, whiteSpace: 'pre' }}>X</div>
-
                 <OptimizedDiffViewer
                   oldContent={mainContent}
                   newContent={worktreeContent}
@@ -825,6 +824,39 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
 
                 {/* Selection overlay (visual only, above diff) */}
                 <div
+                  className="selection-overlay"
+                  ref={overlayRef}
+                  style={{ zIndex: 5 }}
+                >
+                  {lineSelection && (
+                    <div
+                      className="selection-rect"
+                      style={{
+                        top: (contentStartOffset - scrollTop) + ((Math.min(lineSelection.startLine, lineSelection.endLine) - 1) * (lineHeightRef.current || 16)),
+                        height: ((Math.abs(lineSelection.endLine - lineSelection.startLine) + 1) * (lineHeightRef.current || 16)),
+                        left: splitView ? (lineSelection.side === 'old' ? 0 : '50%') : 0,
+                        width: splitView ? '50%' : '100%'
+                      }}
+                    />
+                  )}
+                </div>
+
+                {/* Hit layer (captures mouse and maps to lines) */}
+                <div
+                  ref={hitLayerRef}
+                  className="selection-hitlayer"
+                  style={{
+                    top: contentStartOffset - scrollTop,
+                    height: Math.max(0, (totalLinesRef.current || 0) * (lineHeightRef.current || 16)),
+                    zIndex: 6
+                  }}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                />
+
+                {/* Selection overlay (visual only, above diff) */}
+                    <div
                   className="selection-overlay"
                   ref={overlayRef}
                   style={{ zIndex: 5 }}

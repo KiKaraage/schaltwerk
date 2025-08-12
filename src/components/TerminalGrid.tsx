@@ -5,7 +5,7 @@ import { useFocus } from '../contexts/FocusContext'
 import { useRef, useEffect, useState } from 'react'
 
 export function TerminalGrid() {
-    const { selection, terminals } = useSelection()
+    const { selection, terminals, isReady } = useSelection()
     const { getFocusForSession, setFocusForSession, currentFocus } = useFocus()
     const [terminalKey, setTerminalKey] = useState(0)
     
@@ -76,6 +76,15 @@ export function TerminalGrid() {
     }
 
     // No prompt UI here anymore; moved to right panel dock
+
+    // Don't render terminals until selection is ready
+    if (!isReady) {
+        return (
+            <div className="h-full p-2 relative flex items-center justify-center">
+                <div className="text-slate-500 text-sm">Initializing terminals...</div>
+            </div>
+        )
+    }
 
     return (
         <div className="h-full p-2 relative">
