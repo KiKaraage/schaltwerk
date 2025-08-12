@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { VscFolderOpened, VscHistory, VscWarning, VscTrash } from 'react-icons/vsc'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
+import { AsciiBuilderLogo } from './AsciiBuilderLogo'
 
 interface RecentProject {
   path: string
@@ -16,6 +17,7 @@ interface HomeScreenProps {
 export function HomeScreen({ onOpenProject }: HomeScreenProps) {
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [animPaused, setAnimPaused] = useState(false)
 
   useEffect(() => {
     loadRecentProjects()
@@ -110,14 +112,19 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
     <div className="h-screen w-screen bg-slate-950 flex flex-col items-center justify-center p-8">
       <div className="max-w-4xl w-full">
         <div className="mb-12 text-center">
-          <pre className="text-cyan-400 text-sm md:text-base lg:text-lg font-mono inline-block">
-{`╔═══╗╔═══╗╔╗ ╔╗╔═══╗╔╗  ╔═══╗╔╗  ╔╗╔═══╗╔═══╗╔╗╔═╗
-║╔═╗║║╔═╗║║║ ║║║╔═╗║║║  ╚╗╔╗║║║  ║║║╔══╝║╔═╗║║║║╔╝
-║╚══╗║║ ╚╝║╚═╝║║╚═╝║║║   ║║║║║║ ╔╝║║╚══╗║╚═╝║║╚╝╝ 
-╚══╗║║║ ╔╗║╔═╗║║╔═╗║║║   ║║║║║║╔╝╔╝║╔══╝║╔╗╔╝║╔╗║ 
-║╚═╝║║╚═╝║║║ ║║║║ ║║║╚═╗ ║║║║║╚╝╔╝ ║╚══╗║║║╚╗║║║╚╗
-╚═══╝╚═══╝╚╝ ╚╝╚╝ ╚╝╚══╝ ╚╝╚╝╚══╝  ╚═══╝╚╝╚═╝╚╝╚═╝`}
-          </pre>
+          <div className="inline-flex items-center gap-3">
+            <AsciiBuilderLogo colorClassName="text-cyan-400" paused={animPaused} />
+            <button
+              type="button"
+              onClick={() => setAnimPaused((p) => !p)}
+              aria-pressed={animPaused}
+              tabIndex={-1}
+              className="h-8 px-3 inline-flex items-center justify-center rounded-md text-xs font-medium bg-slate-800/60 hover:bg-slate-700/60 text-slate-200 border border-slate-700/60"
+              title={animPaused ? 'Play animation' : 'Pause animation'}
+            >
+              {animPaused ? 'Play' : 'Pause'}
+            </button>
+          </div>
           <p className="text-slate-400 mt-4 text-sm">
             Visual interface for managing agentic CLI sessions
           </p>
