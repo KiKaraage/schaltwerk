@@ -10,6 +10,7 @@ use crate::para_core::{
     git,
 };
 use tauri::{AppHandle, Emitter};
+use crate::tauri_events::names as Ev;
 use serde::Serialize;
 
 pub trait EventEmitter: Send + Sync {
@@ -19,12 +20,12 @@ pub trait EventEmitter: Send + Sync {
 
 impl EventEmitter for AppHandle {
     fn emit_session_activity(&self, payload: SessionActivityUpdated) -> Result<()> {
-        self.emit("schaltwerk:session-activity", payload)
+        self.emit(Ev::SESSION_ACTIVITY, payload)
             .map_err(|e| anyhow::anyhow!("Failed to emit session activity: {e}"))
     }
     
     fn emit_session_git_stats(&self, payload: SessionGitStatsUpdated) -> Result<()> {
-        self.emit("schaltwerk:session-git-stats", payload)
+        self.emit(Ev::SESSION_GIT_STATS, payload)
             .map_err(|e| anyhow::anyhow!("Failed to emit git stats: {e}"))
     }
 }

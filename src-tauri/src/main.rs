@@ -15,6 +15,7 @@ mod para_core;
 mod open_apps;
 mod projects;
 mod project_manager;
+mod tauri_events;
 
 use std::sync::Arc;
 use project_manager::ProjectManager;
@@ -176,7 +177,7 @@ async fn start_terminal_monitoring(app: tauri::AppHandle) {
                         
                         log::info!("Terminal {terminal_id} became idle after {elapsed} seconds");
                         
-                        if let Err(e) = app.emit("schaltwerk:terminal-stuck", &notification) {
+                        if let Err(e) = app.emit(crate::tauri_events::names::TERMINAL_STUCK, &notification) {
                             log::error!("Failed to emit terminal stuck notification: {e}");
                         }
                     }
@@ -196,7 +197,7 @@ async fn start_terminal_monitoring(app: tauri::AppHandle) {
                         
                         log::info!("Terminal {terminal_id} became active again");
                         
-                        if let Err(e) = app.emit("schaltwerk:terminal-unstuck", &notification) {
+                        if let Err(e) = app.emit(crate::tauri_events::names::TERMINAL_UNSTUCK, &notification) {
                             log::error!("Failed to emit terminal unstuck notification: {e}");
                         }
                     }
@@ -330,7 +331,7 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
         parent_branch: String,
     }
     let _ = app.emit(
-        "schaltwerk:session-added",
+        crate::tauri_events::names::SESSION_ADDED,
         SessionAddedPayload {
             session_name: session.name.clone(),
             branch: session.branch.clone(),
@@ -417,7 +418,7 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
                     let manager = core.session_manager();
                     if let Ok(sessions) = manager.list_enriched_sessions() {
                         log::info!("Emitting sessions-refreshed event after name generation");
-                        if let Err(e) = app_handle.emit("schaltwerk:sessions-refreshed", &sessions) {
+                        if let Err(e) = app_handle.emit(crate::tauri_events::names::SESSIONS_REFRESHED, &sessions) {
                             log::warn!("Could not emit sessions refreshed: {e}");
                         }
                     }
@@ -474,7 +475,7 @@ async fn para_core_cancel_session(app: tauri::AppHandle, name: String) -> Result
             #[derive(serde::Serialize, Clone)]
             struct SessionRemovedPayload { session_name: String }
             let _ = app.emit(
-                "schaltwerk:session-removed",
+                crate::tauri_events::names::SESSION_REMOVED,
                 SessionRemovedPayload { session_name: name.clone() },
             );
             // Best-effort: close known session terminals to avoid orphaned PTYs

@@ -6,6 +6,7 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 use tauri::{AppHandle, Emitter};
+use crate::tauri_events::names as Ev;
 use tokio::sync::{Mutex, RwLock};
 
 const MAX_BUFFER_SIZE: usize = 2 * 1024 * 1024;
@@ -113,9 +114,9 @@ impl LocalPtyAdapter {
                             PTY_MASTERS.lock().await.remove(&id_clone_for_cleanup);
                             PTY_WRITERS.lock().await.remove(&id_clone_for_cleanup);
                             // Emit terminal closed event
-                            if let Some(handle) = app_handle_clone2.lock().await.as_ref() {
+                                if let Some(handle) = app_handle_clone2.lock().await.as_ref() {
                                 let _ = handle.emit(
-                                    "schaltwerk:terminal-closed",
+                                    Ev::TERMINAL_CLOSED,
                                     &serde_json::json!({"terminal_id": id_clone_for_cleanup}),
                                 );
                             }
@@ -183,7 +184,7 @@ impl LocalPtyAdapter {
                                         }
                                         if let Some(bytes) = data_to_emit {
                                             if let Some(handle) = app_for_emit.lock().await.as_ref() {
-                                                let event_name = format!("terminal-output-{id_for_task}");
+                                                let event_name = crate::tauri_events::terminal_output_event(&id_for_task);
                                                 let payload = String::from_utf8_lossy(&bytes).to_string();
                                                 if let Err(e) = handle.emit(&event_name, payload) {
                                                     warn!("Failed to emit terminal output: {e}");
@@ -211,7 +212,7 @@ impl LocalPtyAdapter {
                                 PTY_WRITERS.lock().await.remove(&id_clone_for_cleanup);
                                 if let Some(handle) = app_handle_clone2.lock().await.as_ref() {
                                     let _ = handle.emit(
-                                        "schaltwerk:terminal-closed",
+                                        Ev::TERMINAL_CLOSED,
                                         &serde_json::json!({"terminal_id": id_clone_for_cleanup}),
                                     );
                                 }

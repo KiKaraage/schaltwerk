@@ -8,6 +8,7 @@ import { NewSessionModal } from './components/NewSessionModal'
 import { CancelConfirmation } from './components/CancelConfirmation'
 import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from './contexts/SelectionContext'
+import { UiEvents } from './events'
 import { useProject } from './contexts/ProjectContext'
 import { OpenInSplitButton } from './components/OpenInSplitButton'
 import { VscGear, VscHome } from 'react-icons/vsc'
@@ -64,8 +65,8 @@ export default function App() {
       }
     }
     
-    window.addEventListener('schaltwerk:session-action' as any, handleSessionAction)
-    return () => window.removeEventListener('schaltwerk:session-action' as any, handleSessionAction)
+    window.addEventListener(UiEvents.sessionAction as any, handleSessionAction)
+    return () => window.removeEventListener(UiEvents.sessionAction as any, handleSessionAction)
   }, [])
 
   useEffect(() => {
@@ -100,13 +101,13 @@ export default function App() {
     }
 
     window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('global-new-session-shortcut', handleGlobalNewSession)
-    window.addEventListener('schaltwerk:open-diff-view' as any, handleOpenDiffView)
+    window.addEventListener(UiEvents.globalNewSessionShortcut as any, handleGlobalNewSession)
+    window.addEventListener(UiEvents.openDiffView as any, handleOpenDiffView)
     
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('global-new-session-shortcut', handleGlobalNewSession)
-      window.removeEventListener('schaltwerk:open-diff-view' as any, handleOpenDiffView)
+      window.removeEventListener(UiEvents.globalNewSessionShortcut as any, handleGlobalNewSession)
+      window.removeEventListener(UiEvents.openDiffView as any, handleOpenDiffView)
     }
   }, [newSessionOpen, cancelModalOpen])
   
