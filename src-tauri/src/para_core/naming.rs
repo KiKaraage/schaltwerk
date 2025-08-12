@@ -153,12 +153,11 @@ Task: {truncated}
 Respond with just the short kebab-case name:"#
     );
     
-    // Set a reasonable timeout for name generation
-    let timeout_duration = Duration::from_secs(10);
-
     // Use the appropriate agent based on user's selection
     if agent_type == "cursor" {
         log::info!("Attempting to generate name with cursor-agent");
+        // Cursor Agent can take longer to initialize; allow more time
+        let timeout_duration = Duration::from_secs(30);
         let cursor_future = Command::new("cursor-agent")
             .args(cursor_namegen_args(&prompt_plain))
             .current_dir(worktree_path)
@@ -177,7 +176,7 @@ Respond with just the short kebab-case name:"#
                 return Err(anyhow!("cursor-agent not available: {e}"));
             },
             Err(_) => {
-                log::warn!("Cursor-agent timed out after 10 seconds");
+                log::warn!("Cursor-agent timed out after 30 seconds");
                 return Err(anyhow!("cursor-agent timed out"));
             },
         };
@@ -186,29 +185,37 @@ Respond with just the short kebab-case name:"#
             if output.status.success() {
                 let stdout = ansi_strip(&String::from_utf8_lossy(&output.stdout));
                 log::debug!("cursor-agent stdout: {stdout}");
-                
-                // Try to parse as JSON
-                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                    // cursor-agent might return the result directly or wrapped
-                    let result_str = v.as_str()
+
+                // Try JSON first
+                let parsed_json: Result<serde_json::Value, _> = serde_json::from_str(&stdout);
+                let candidate = if let Ok(v) = parsed_json {
+                    v.as_str()
                         .or_else(|| v.get("result").and_then(|x| x.as_str()))
-                        .or_else(|| v.get("response").and_then(|x| x.as_str()));
-                    
-                    if let Some(result) = result_str {
-                        log::info!("cursor-agent returned name: {result}");
-                        let name = sanitize_name(result);
-                        log::info!("Sanitized name: {name}");
-                        
-                        if !name.is_empty() {
-                            db.update_session_display_name(session_id, &name)?;
-                            log::info!("Updated database with display_name '{name}' for session_id '{session_id}'");
-                            return Ok(Some(name));
-                        }
+                        .or_else(|| v.get("response").and_then(|x| x.as_str()))
+                        .map(|s| s.to_string())
+                } else {
+                    None
+                }
+                // Fallback to raw plain text if JSON failed or missing fields
+                .or_else(|| {
+                    let raw = stdout.trim();
+                    if !raw.is_empty() { Some(raw.to_string()) } else { None }
+                });
+
+                if let Some(result) = candidate {
+                    log::info!("cursor-agent returned name candidate: {result}");
+                    let name = sanitize_name(&result);
+                    log::info!("Sanitized name: {name}");
+
+                    if !name.is_empty() {
+                        db.update_session_display_name(session_id, &name)?;
+                        log::info!("Updated database with display_name '{name}' for session_id '{session_id}'");
+                        return Ok(Some(name));
                     } else {
-                        log::warn!("cursor-agent JSON response missing result field");
+                        log::warn!("Sanitized name empty after processing cursor-agent output");
                     }
                 } else {
-                    log::warn!("Failed to parse cursor-agent response as JSON");
+                    log::warn!("cursor-agent produced no usable output for naming");
                 }
             } else {
                 log::warn!("cursor-agent returned non-zero exit status");
@@ -227,6 +234,7 @@ Respond with just the short kebab-case name:"#
     }
     
     log::info!("Attempting to generate name with claude");
+    let timeout_duration = Duration::from_secs(10);
     let claude_future = Command::new("claude")
         .args(["--print", prompt_plain.as_str(), "--output-format", "json", "--model", "sonnet"])
         .current_dir(worktree_path)
@@ -252,29 +260,33 @@ Respond with just the short kebab-case name:"#
     if output.status.success() {
         let stdout = ansi_strip(&String::from_utf8_lossy(&output.stdout));
         log::debug!("claude stdout: {stdout}");
-        
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&stdout) {
-            // Claude might return the result directly or in a "result" field
-            let result_str = v.as_str()
-                .or_else(|| v.get("result").and_then(|x| x.as_str()));
-            
-            if let Some(result) = result_str {
-                log::info!("claude returned name: {result}");
-                let name = sanitize_name(result);
-                log::info!("Sanitized name: {name}");
-                
-                if !name.is_empty() {
-                    db.update_session_display_name(session_id, &name)?;
-                    log::info!("Updated database with display_name '{name}' for session_id '{session_id}'");
-                    return Ok(Some(name));
-                } else {
-                    log::warn!("Sanitized name is empty");
-                }
+
+        // Try JSON first, then fallback to raw text
+        let parsed_json: Result<serde_json::Value, _> = serde_json::from_str(&stdout);
+        let candidate = if let Ok(v) = parsed_json {
+            v.as_str()
+                .or_else(|| v.get("result").and_then(|x| x.as_str()))
+                .map(|s| s.to_string())
+        } else { None }
+        .or_else(|| {
+            let raw = stdout.trim();
+            if !raw.is_empty() { Some(raw.to_string()) } else { None }
+        });
+
+        if let Some(result) = candidate {
+            log::info!("claude returned name candidate: {result}");
+            let name = sanitize_name(&result);
+            log::info!("Sanitized name: {name}");
+
+            if !name.is_empty() {
+                db.update_session_display_name(session_id, &name)?;
+                log::info!("Updated database with display_name '{name}' for session_id '{session_id}'");
+                return Ok(Some(name));
             } else {
-                log::warn!("claude JSON response missing result field");
+                log::warn!("Sanitized name is empty");
             }
         } else {
-            log::warn!("Failed to parse claude response as JSON");
+            log::warn!("Claude produced no usable output for naming");
         }
     } else {
         log::warn!("claude returned non-zero exit status");
@@ -286,9 +298,9 @@ Respond with just the short kebab-case name:"#
 
 // Build arguments for cursor-agent name generation
 fn cursor_namegen_args(prompt_plain: &str) -> Vec<String> {
-    // Be explicit: use gpt-5 which is available per cursor-agent help
+    // Align flags with Claude semantics: use --print and JSON output
     vec![
-        "-p".to_string(),
+        "--print".to_string(),
         "--output-format".to_string(),
         "json".to_string(),
         "-m".to_string(),
@@ -305,8 +317,8 @@ mod tests {
     fn test_cursor_namegen_arg_shape_with_gpt5() {
         let prompt = "Generate a short name";
         let args = cursor_namegen_args(prompt);
-        // Expect shape: -p --output-format json -m gpt-5 <prompt>
-        assert_eq!(args[0], "-p");
+        // Expect shape: --print --output-format json -m gpt-5 <prompt>
+        assert_eq!(args[0], "--print");
         assert_eq!(args[1], "--output-format");
         assert_eq!(args[2], "json");
         assert_eq!(args[3], "-m");

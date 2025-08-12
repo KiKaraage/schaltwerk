@@ -3,6 +3,9 @@ import { useSelection } from '../contexts/SelectionContext'
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import clsx from 'clsx'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { VscCopy, VscCheck } from 'react-icons/vsc'
 
 interface SimpleDiffPanelProps {
   onFileSelect: (filePath: string) => void
@@ -13,6 +16,7 @@ export function SimpleDiffPanel({ onFileSelect }: SimpleDiffPanelProps) {
   const [dockOpen, setDockOpen] = useState(false)
   const [originalPrompt, setOriginalPrompt] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     const fetchPrompt = async () => {
@@ -37,6 +41,17 @@ export function SimpleDiffPanel({ onFileSelect }: SimpleDiffPanelProps) {
   const canShowDock = selection.kind === 'session' && !!originalPrompt && (originalPrompt?.trim().length ?? 0) > 0
   const sessionLabel = selection.kind === 'session' ? selection.payload : undefined
 
+  const handleCopy = async () => {
+    if (!originalPrompt) return
+    try {
+      await navigator.clipboard.writeText(originalPrompt)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy text:', err)
+    }
+  }
+
   return (
     <div className="relative h-full flex flex-col overflow-hidden">
       <div className={clsx('flex-1 min-h-0 overflow-hidden transition-[max-height] duration-200')}>
@@ -48,15 +63,121 @@ export function SimpleDiffPanel({ onFileSelect }: SimpleDiffPanelProps) {
           className="bg-panel rounded border border-slate-800 overflow-hidden min-h-0 flex flex-col"
           style={{ height: '35%' }}
         >
-          <div className="px-2 py-1 text-xs text-slate-400 border-b border-slate-800 text-center">
-            {sessionLabel ? `Prompt — ${sessionLabel}` : 'Prompt'}
+          <div className="px-2 py-1 text-xs text-slate-400 border-b border-slate-800 flex items-center justify-between">
+            <span className="flex-1 text-center">
+              {sessionLabel ? `Prompt — ${sessionLabel}` : 'Prompt'}
+            </span>
+            <button
+              onClick={handleCopy}
+              className="px-2 py-0.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors flex items-center gap-1"
+              title="Copy prompt to clipboard"
+            >
+              {copied ? (
+                <>
+                  <VscCheck className="text-xs" />
+                  <span>Copied</span>
+                </>
+              ) : (
+                <>
+                  <VscCopy className="text-xs" />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
           </div>
           <div className="session-header-ruler flex-shrink-0" />
-          <div className="flex-1 min-h-0 overflow-auto p-3 font-mono text-[12px] leading-[1.35] text-slate-300 whitespace-pre-wrap">
+          <div className="flex-1 min-h-0 overflow-auto p-3 text-[12px] leading-[1.6] text-slate-300">
             {loading ? (
               <div className="text-slate-500">Loading prompt…</div>
             ) : (
-              originalPrompt
+              <div className="prose prose-sm prose-invert max-w-none">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    pre: ({ children, ...props }) => (
+                      <pre className="bg-slate-800 rounded p-2 overflow-x-auto" {...props}>
+                        {children}
+                      </pre>
+                    ),
+                    code: ({ children, ...props }: any) => {
+                      const inline = !props.className?.includes('language-')
+                      return inline ? (
+                        <code className="bg-slate-800 px-1 py-0.5 rounded text-xs" {...props}>
+                          {children}
+                        </code>
+                      ) : (
+                        <code className="text-xs" {...props}>
+                          {children}
+                        </code>
+                      )
+                    },
+                  ul: ({ children, ...props }) => (
+                    <ul className="list-disc list-inside space-y-1" {...props}>
+                      {children}
+                    </ul>
+                  ),
+                  ol: ({ children, ...props }) => (
+                    <ol className="list-decimal list-inside space-y-1" {...props}>
+                      {children}
+                    </ol>
+                  ),
+                  h1: ({ children, ...props }) => (
+                    <h1 className="text-lg font-bold mb-2" {...props}>
+                      {children}
+                    </h1>
+                  ),
+                  h2: ({ children, ...props }) => (
+                    <h2 className="text-base font-bold mb-2" {...props}>
+                      {children}
+                    </h2>
+                  ),
+                  h3: ({ children, ...props }) => (
+                    <h3 className="text-sm font-bold mb-1" {...props}>
+                      {children}
+                    </h3>
+                  ),
+                  p: ({ children, ...props }) => (
+                    <p className="mb-2" {...props}>
+                      {children}
+                    </p>
+                  ),
+                  a: ({ children, href, ...props }) => (
+                    <a
+                      href={href}
+                      className="text-blue-400 hover:text-blue-300 underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      {...props}
+                    >
+                      {children}
+                    </a>
+                  ),
+                  blockquote: ({ children, ...props }) => (
+                    <blockquote className="border-l-2 border-slate-600 pl-3 italic text-slate-400" {...props}>
+                      {children}
+                    </blockquote>
+                  ),
+                  hr: () => <hr className="border-slate-700 my-3" />,
+                  table: ({ children, ...props }) => (
+                    <table className="border-collapse border border-slate-700" {...props}>
+                      {children}
+                    </table>
+                  ),
+                  th: ({ children, ...props }) => (
+                    <th className="border border-slate-700 px-2 py-1 bg-slate-800" {...props}>
+                      {children}
+                    </th>
+                  ),
+                  td: ({ children, ...props }) => (
+                    <td className="border border-slate-700 px-2 py-1" {...props}>
+                      {children}
+                    </td>
+                  )
+                  }}
+                >
+                  {originalPrompt}
+                </ReactMarkdown>
+              </div>
             )}
           </div>
         </div>
