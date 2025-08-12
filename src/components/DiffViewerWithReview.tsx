@@ -138,9 +138,23 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
   const [showCommentForm, setShowCommentForm] = useState(false)
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentText, setEditingCommentText] = useState('')
-  const [viewMode, setViewMode] = useState<'split' | 'unified'>('unified')
   const diffViewerRef = useRef<HTMLDivElement>(null)
   const fileListRef = useRef<HTMLDivElement>(null)
+  const [splitView, setSplitView] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth > 1400 : true)
+  const [highlightEnabled, setHighlightEnabled] = useState<boolean>(true)
+  const totalLinesRef = useRef<number>(0)
+  const lineHeightRef = useRef<number>(16)
+  const contentStartOffsetRef = useRef<number>(0)
+  const [contentStartOffset, setContentStartOffset] = useState(0)
+  const moveRafRef = useRef<number | null>(null)
+  const selectionSideRef = useRef<'old' | 'new'>('new')
+  const overlayRef = useRef<HTMLDivElement>(null)
+  const hitLayerRef = useRef<HTMLDivElement>(null)
+  const measureLineRef = useRef<HTMLDivElement>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const scrollTopRef = useRef(0)
+  const scrollRafRef = useRef<number | null>(null)
+  const [isSelecting, setIsSelecting] = useState(false)
   
   const sessionName = selection.kind === 'session' ? selection.payload : null
   
@@ -201,6 +215,14 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       
       setMainContent(mainText)
       setWorktreeContent(worktreeText)
+      // Decide defaults for large files
+      const total = Math.max(mainText.split('\n').length, worktreeText.split('\n').length)
+      totalLinesRef.current = total
+      if (total > 200) {
+        // Default to unified view and reduced highlighting on large files
+        setSplitView(false)
+        setHighlightEnabled(false)
+      }
     } catch (error) {
       console.error('Failed to load file diff:', error)
     } finally {
@@ -214,25 +236,220 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     }
   }, [isOpen, loadChangedFiles])
 
-  // Initialize view mode from persisted preference (default unified)
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('para.diffViewMode')
-      if (saved === 'split' || saved === 'unified') {
-        setViewMode(saved)
-      } else {
-        setViewMode('unified')
-      }
-    } catch {
-      setViewMode('unified')
-    }
-  }, [])
   
   useEffect(() => {
     if (selectedFile && isOpen) {
       loadFileDiff(selectedFile)
     }
   }, [selectedFile, isOpen, loadFileDiff])
+  
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showCommentForm) {
+          setShowCommentForm(false)
+          setLineSelection(null)
+        } else if (isOpen) {
+          onClose()
+        }
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, showCommentForm, onClose])
+
+  // Line-based selection handlers with proper offset for react-diff-viewer structure
+  const measureDiffRows = useCallback(() => {
+    // Measure a single line height using a hidden element with the same typography
+    if (measureLineRef.current) {
+      const style = window.getComputedStyle(measureLineRef.current)
+      const lh = parseFloat(style.lineHeight)
+      if (!Number.isNaN(lh) && lh > 0) {
+        lineHeightRef.current = lh
+      }
+    }
+    // Find first code block to align overlay start
+    if (!diffViewerRef.current) return
+    const container = diffViewerRef.current
+    const codeEl = container.querySelector('pre, code') as HTMLElement | null
+    if (codeEl) {
+      const containerRect = container.getBoundingClientRect()
+      const codeRect = codeEl.getBoundingClientRect()
+      const offset = Math.max(0, (codeRect.top - containerRect.top) + container.scrollTop)
+      contentStartOffsetRef.current = offset
+      setContentStartOffset(offset)
+    } else {
+      contentStartOffsetRef.current = 0
+      setContentStartOffset(0)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (loading) return
+    // Measure after render
+    const id = window.requestAnimationFrame(measureDiffRows)
+    return () => window.cancelAnimationFrame(id)
+  }, [loading, mainContent, worktreeContent, splitView, measureDiffRows])
+
+  // Track container scroll to position selection overlay correctly
+  useEffect(() => {
+    const el = diffViewerRef.current
+    if (!el) return
+    const onScroll = () => {
+      scrollTopRef.current = el.scrollTop
+      if (scrollRafRef.current != null) return
+      scrollRafRef.current = requestAnimationFrame(() => {
+        scrollRafRef.current = null
+        setScrollTop(scrollTopRef.current)
+      })
+    }
+    el.addEventListener('scroll', onScroll)
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current)
+      scrollRafRef.current = null
+    }
+  }, [diffViewerRef])
+
+  const getLineFromMouse = useCallback((ev: MouseEvent): number | null => {
+    if (!hitLayerRef.current || !diffViewerRef.current) return null
+    const layer = hitLayerRef.current
+    const container = diffViewerRef.current
+    const layerRect = layer.getBoundingClientRect()
+    const y = ev.clientY
+    const relativeY = (y - layerRect.top) + container.scrollTop
+    const lh = lineHeightRef.current || 16
+    let lineNum = Math.floor(relativeY / lh) + 1
+    if (!isFinite(lineNum)) return null
+    lineNum = Math.max(1, Math.min(totalLinesRef.current || 1, lineNum))
+    return lineNum
+  }, [])
+
+  const getSideFromMouse = useCallback((ev: MouseEvent): 'old' | 'new' => {
+    if (!splitView || !diffViewerRef.current) return 'new'
+    const contRect = diffViewerRef.current.getBoundingClientRect()
+    return ev.clientX < (contRect.left + contRect.width / 2) ? 'old' : 'new'
+  }, [splitView])
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!diffViewerRef.current) return
+    const target = e.target as HTMLElement
+    if (target.closest('.review-comment-button') || target.closest('.review-comment-form')) return
+    const nativeEvent = e.nativeEvent as MouseEvent
+    const line = getLineFromMouse(nativeEvent)
+    if (!line) return
+    e.preventDefault()
+    // Fix the side on mousedown to avoid side flips while dragging
+    const side = getSideFromMouse(nativeEvent)
+    selectionSideRef.current = side
+    setIsSelecting(true)
+    setShowCommentForm(false)
+    setLineSelection({ side, startLine: line, endLine: line, content: [] })
+    // Attach window-level listeners only for the active drag
+    const handleMove = (ev: MouseEvent) => {
+      if (moveRafRef.current != null) return
+      moveRafRef.current = window.requestAnimationFrame(() => {
+        moveRafRef.current = null
+        const ln = getLineFromMouse(ev)
+        if (!ln) return
+        setLineSelection(prev => prev ? { ...prev, endLine: ln } : prev)
+      })
+    }
+    const handleUp = () => {
+      window.removeEventListener('mousemove', handleMove)
+      window.removeEventListener('mouseup', handleUp)
+      setIsSelecting(false)
+      // compute content now that range is final
+      setLineSelection(prev => {
+        if (!prev) return prev
+        const lines = prev.side === 'old' ? mainContent.split('\n') : worktreeContent.split('\n')
+        const startIdx = Math.min(prev.startLine - 1, prev.endLine - 1)
+        const endIdx = Math.max(prev.startLine - 1, prev.endLine - 1)
+        const content = lines.slice(startIdx, endIdx + 1)
+        return {
+          ...prev,
+          startLine: Math.min(prev.startLine, prev.endLine),
+          endLine: Math.max(prev.startLine, prev.endLine),
+          content
+        }
+      })
+    }
+    window.addEventListener('mousemove', handleMove)
+    window.addEventListener('mouseup', handleUp, { once: true })
+  }, [getLineFromMouse, getSideFromMouse, isSelecting, mainContent, worktreeContent])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isSelecting || !lineSelection) return
+    if (moveRafRef.current != null) return
+    const nativeEvent = e.nativeEvent as MouseEvent
+    moveRafRef.current = window.requestAnimationFrame(() => {
+      moveRafRef.current = null
+      const ln = getLineFromMouse(nativeEvent)
+      if (!ln) return
+      setLineSelection(prev => prev ? { ...prev, endLine: ln } : prev)
+    })
+  }, [isSelecting, lineSelection, getLineFromMouse])
+
+  const handleMouseUp = useCallback(() => {
+    if (!isSelecting) return
+    setIsSelecting(false)
+    setLineSelection(prev => {
+      if (!prev) return prev
+      const lines = prev.side === 'old' ? mainContent.split('\n') : worktreeContent.split('\n')
+      const startIdx = Math.min(prev.startLine - 1, prev.endLine - 1)
+      const endIdx = Math.max(prev.startLine - 1, prev.endLine - 1)
+      const content = lines.slice(startIdx, endIdx + 1)
+      return {
+        ...prev,
+        startLine: Math.min(prev.startLine, prev.endLine),
+        endLine: Math.max(prev.startLine, prev.endLine),
+        content
+      }
+    })
+  }, [isSelecting, mainContent, worktreeContent])
+
+  // No DOM row mutation; selection is visualized by overlay rectangle
+
+  // Apply visual highlighting to selected lines with better performance
+  useEffect(() => {
+    if (!diffViewerRef.current) return
+    
+    const startLine = lineSelection ? Math.min(lineSelection.startLine, lineSelection.endLine) : -1
+    const endLine = lineSelection ? Math.max(lineSelection.startLine, lineSelection.endLine) : -1
+    
+    // Use data attributes instead of iterating through all rows
+    diffViewerRef.current.setAttribute('data-selection-start', startLine.toString())
+    diffViewerRef.current.setAttribute('data-selection-end', endLine.toString())
+    diffViewerRef.current.setAttribute('data-selection-active', lineSelection ? 'true' : 'false')
+    
+    return () => {
+      if (diffViewerRef.current) {
+        diffViewerRef.current.removeAttribute('data-selection-start')
+        diffViewerRef.current.removeAttribute('data-selection-end')
+        diffViewerRef.current.removeAttribute('data-selection-active')
+      }
+    }
+  }, [lineSelection?.startLine, lineSelection?.endLine])
+  
+  const handleAddComment = useCallback((commentText: string) => {
+    if (!lineSelection || !selectedFile || !commentText) return
+
+    addComment({
+      filePath: selectedFile,
+      lineRange: {
+        start: lineSelection.startLine,
+        end: lineSelection.endLine
+      },
+      side: lineSelection.side,
+      selectedText: lineSelection.content.join('\n'),
+      comment: commentText
+    })
+
+    setShowCommentForm(false)
+    setLineSelection(null)
+  }, [lineSelection, selectedFile, addComment])
+
 
   const formatReviewForPrompt = (comments: ReviewComment[]) => {
     let output = '\n# Code Review Comments\n\n'
@@ -351,14 +568,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [isOpen, showCommentForm, onClose, files, selectedFile, loadFileDiff, lineSelection, currentReview, handleFinishReview])
 
-  const handleViewModeChange = useCallback((mode: 'split' | 'unified') => {
-    setViewMode(mode)
-    try {
-      localStorage.setItem('para.diffViewMode', mode)
-    } catch {
-      // ignore storage errors
-    }
-  }, [])
 
   const handleLineSelect = useCallback((side: 'old' | 'new', startLine: number, endLine: number, content: string[]) => {
     setLineSelection({
@@ -399,25 +608,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       ;(el as HTMLElement).scrollIntoView({ block: 'nearest' })
     }
   }, [selectedFile])
-  
-  const handleAddComment = useCallback((commentText: string) => {
-    if (!lineSelection || !selectedFile || !commentText) return
-
-    addComment({
-      filePath: selectedFile,
-      lineRange: {
-        start: lineSelection.startLine,
-        end: lineSelection.endLine
-      },
-      side: lineSelection.side,
-      selectedText: lineSelection.content.join('\n'),
-      comment: commentText
-    })
-
-    setShowCommentForm(false)
-    setLineSelection(null)
-  }, [lineSelection, selectedFile, addComment])
-
   
   const getFileIcon = (changeType: string) => {
     switch (changeType) {
@@ -564,6 +754,24 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 mr-2">
+                    <span className="text-xs text-slate-400">View:</span>
+                    <button
+                      onClick={() => setSplitView(false)}
+                      className={clsx('px-2 py-1 text-xs rounded', !splitView ? 'bg-slate-800 text-white' : 'bg-slate-800/40 text-slate-300 hover:bg-slate-800/60')}
+                    >Unified</button>
+                    <button
+                      onClick={() => setSplitView(true)}
+                      className={clsx('px-2 py-1 text-xs rounded', splitView ? 'bg-slate-800 text-white' : 'bg-slate-800/40 text-slate-300 hover:bg-slate-800/60')}
+                    >Split</button>
+                  </div>
+                  <div className="flex items-center gap-1 mr-2">
+                    <span className="text-xs text-slate-400">Syntax:</span>
+                    <button
+                      onClick={() => setHighlightEnabled((v) => !v)}
+                      className={clsx('px-2 py-1 text-xs rounded', highlightEnabled ? 'bg-slate-800 text-white' : 'bg-slate-800/40 text-slate-300 hover:bg-slate-800/60')}
+                    >{highlightEnabled ? 'On' : 'Off'}</button>
+                  </div>
                   {currentReview && currentReview.comments.length > 0 && (
                     <button
                       onClick={handleFinishReview}
@@ -598,6 +806,13 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                   </div>
                 )}
                 
+                {/* Overlay styles */}
+                <style>{`
+                  .diff-wrapper { user-select: none; position: relative; }
+                  .selection-overlay { position: absolute; inset: 0; pointer-events: none; }
+                  .selection-hitlayer { position: absolute; left: 0; right: 0; pointer-events: auto; }
+                  .selection-rect { position: absolute; background: rgba(59,130,246,0.18); border-left: 3px solid rgb(59,130,246); }
+                `}</style>
                 {loading ? (
                   <div className="h-full flex items-center justify-center text-slate-500">
                     <div className="text-center">
@@ -607,16 +822,51 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                   </div>
                 ) : (
                   <>
+                {/* Hidden line measure element */}
+                <div ref={measureLineRef} style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', lineHeight: '1.3', fontSize: 12, whiteSpace: 'pre' }}>X</div>
+
                     <OptimizedDiffViewer
                       oldContent={mainContent}
                       newContent={worktreeContent}
                       language={language}
-                      viewMode={viewMode}
-                      onViewModeChange={handleViewModeChange}
+                      viewMode={splitView ? 'split' : 'unified'}
                       onLineSelect={handleLineSelect}
                       leftTitle={`${branchInfo?.baseBranch || 'base'} (${branchInfo?.baseCommit || 'base'})`}
                       rightTitle={`${branchInfo?.currentBranch || 'current'} (${branchInfo?.headCommit || 'HEAD'})`}
                     />
+
+                {/* Selection overlay (visual only, above diff) */}
+                    <div
+                  className="selection-overlay"
+                  ref={overlayRef}
+                  style={{ zIndex: 5 }}
+                >
+                  {lineSelection && (
+                    <div
+                      className="selection-rect"
+                      style={{
+                        top: (contentStartOffset - scrollTop) + ((Math.min(lineSelection.startLine, lineSelection.endLine) - 1) * (lineHeightRef.current || 16)),
+                        height: ((Math.abs(lineSelection.endLine - lineSelection.startLine) + 1) * (lineHeightRef.current || 16)),
+                        left: splitView ? (lineSelection.side === 'old' ? 0 : '50%') : 0,
+                        width: splitView ? '50%' : '100%'
+                      }}
+                    />
+                  )}
+                </div>
+
+                {/* Hit layer (captures mouse and maps to lines) */}
+                <div
+                  ref={hitLayerRef}
+                  className="selection-hitlayer"
+                  style={{
+                    top: contentStartOffset - scrollTop,
+                    height: Math.max(0, (totalLinesRef.current || 0) * (lineHeightRef.current || 16)),
+                    zIndex: 6
+                  }}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                />
 
                     {lineSelection && !showCommentForm && (
                       <div 

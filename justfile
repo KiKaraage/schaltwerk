@@ -19,20 +19,31 @@ _find_available_port base_port:
     done
     echo $port
 
-# Run the application in development mode with auto port detection
+# Run the application in development mode with auto port detection (optimized for speed)
 run:
     #!/usr/bin/env bash
     set -euo pipefail
     
     # Find available port starting from 1420
     port=$(just _find_available_port 1420)
-    echo "🚀 Starting Para UI on port $port"
+    echo "🚀 Starting Para UI on port $port (optimized for speed)"
+    
+    # Enable all available speed optimizations
+    if command -v sccache &> /dev/null; then
+        echo "✨ Using sccache for Rust compilation caching"
+        export RUSTC_WRAPPER=sccache
+        export SCCACHE_DIR=$HOME/.cache/sccache
+    fi
+    
+    # Use optimized dev profile settings
+    export CARGO_PROFILE_DEV_BUILD_OVERRIDE_OPT_LEVEL=1
+    export CARGO_PROFILE_DEV_BUILD_OVERRIDE_DEBUG=0
     
     # Export the port for Vite
     export VITE_PORT=$port
     
-    # Start the full Tauri development environment
-    npm run tauri dev
+    # Start with fast build mode
+    TAURI_SKIP_DEVSERVER_CHECK=true npm run tauri dev
 
 # Run only the frontend (Vite dev server) on auto-detected port
 run-frontend:
@@ -123,6 +134,7 @@ run-port port:
 # Build the application for production
 build:
     npm run build && npm run tauri build
+
 
 # Build and run the application in production mode
 run-build:

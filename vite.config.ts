@@ -35,22 +35,56 @@ export default defineConfig(({ command }) => ({
       compress: {
         drop_console: true,
         drop_debugger: true,
+        pure_funcs: ['console.log', 'console.warn'],
+        passes: 2,
+      },
+      mangle: {
+        safari10: true,
       },
     },
     rollupOptions: {
       output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
-          'xterm-vendor': ['xterm', 'xterm-addon-fit'],
-          'ui-vendor': ['clsx', 'react-icons', 'react-split'],
+        manualChunks: (id) => {
+          if (id.includes('react') || id.includes('react-dom')) {
+            return 'react-vendor';
+          }
+          if (id.includes('xterm')) {
+            return 'xterm-vendor';
+          }
+          if (id.includes('highlight.js')) {
+            return 'highlight-vendor';
+          }
+          if (id.includes('react-diff-viewer')) {
+            return 'diff-vendor';
+          }
+          if (id.includes('clsx') || id.includes('react-icons') || id.includes('react-split')) {
+            return 'ui-vendor';
+          }
+          if (id.includes('@tauri-apps')) {
+            return 'tauri-vendor';
+          }
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
         },
       },
     },
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 600,
     sourcemap: false,
     reportCompressedSize: false,
+    target: 'es2020',
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'xterm', 'xterm-addon-fit'],
+    include: ['react', 'react-dom', 'xterm', 'xterm-addon-fit', '@tauri-apps/api', 'clsx', 'highlight.js'],
+    esbuildOptions: {
+      target: 'es2020',
+    },
+  },
+  esbuild: {
+    target: 'es2020',
+    legalComments: 'none',
+    minifyIdentifiers: true,
+    minifySyntax: true,
+    minifyWhitespace: true,
   },
 }));
