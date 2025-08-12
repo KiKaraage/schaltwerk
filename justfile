@@ -214,3 +214,37 @@ run-port-release port:
     # The tauri build creates the binary with the productName from tauri.conf.json
     # Pass repository path explicitly so backend can discover it
     VITE_PORT={{port}} PORT={{port}} PARA_REPO_PATH="$(pwd)" ./src-tauri/target/release/schaltwerk
+
+# Install the application on macOS as a release build
+install-mac:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "🔨 Building Schaltwerk for macOS..."
+    
+    # Build the release version
+    npm run build
+    npm run tauri build
+    
+    # Check if the app bundle was created
+    if [ ! -d "src-tauri/target/release/bundle/macos/Schaltwerk.app" ]; then
+        echo "❌ Build failed - Schaltwerk.app not found"
+        exit 1
+    fi
+    
+    # Remove old installation if it exists
+    if [ -d "/Applications/Schaltwerk.app" ]; then
+        echo "🗑️  Removing existing Schaltwerk installation..."
+        rm -rf "/Applications/Schaltwerk.app"
+    fi
+    
+    # Copy the app to Applications
+    echo "📦 Installing Schaltwerk to /Applications..."
+    cp -R "src-tauri/target/release/bundle/macos/Schaltwerk.app" "/Applications/"
+    
+    # Set proper permissions
+    chmod -R 755 "/Applications/Schaltwerk.app"
+    
+    echo "✅ Schaltwerk installed successfully!"
+    echo "🚀 You can now launch Schaltwerk from Applications or Spotlight"
+    echo ""
+    echo "To launch from terminal: open /Applications/Schaltwerk.app"
