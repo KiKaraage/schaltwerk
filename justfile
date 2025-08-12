@@ -153,9 +153,33 @@ run-release:
     npm run tauri build
     echo "✅ Build complete. Launching binary from CWD: $(pwd)…"
     # Pass repository path explicitly so backend can discover it even from packaged runs
-    PARA_REPO_PATH="$(pwd)" ./src-tauri/target/release/ui
+    PARA_REPO_PATH="$(pwd)" ./src-tauri/target/release/schaltwerk
 
-# Same as run-release but allows specifying a port environment
-# Useful if parts of the app read PORT/VITE_PORT at runtime
+# Build and run the application in release mode with a specific port
+# This builds fresh like 'just run' does, but creates a release build
 run-port-release port:
-    ./scripts/fast-build.sh {{port}}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "🚀 Building Para UI release on port {{port}}..."
+    
+    # Export port for any runtime components that need it
+    export VITE_PORT={{port}}
+    export PORT={{port}}
+    
+    # Clean old binaries to force rebuild
+    echo "🧹 Cleaning old release binaries..."
+    rm -f ./src-tauri/target/release/schaltwerk
+    rm -f ./src-tauri/target/release/ui
+    
+    # Build frontend
+    echo "📦 Building frontend..."
+    npm run build
+    
+    # Build Tauri app properly (this embeds the frontend assets)
+    echo "🦀 Building Tauri app (with frontend embedded)..."
+    npm run tauri build
+    
+    echo "✅ Build complete. Launching release binary..."
+    # The tauri build creates the binary with the productName from tauri.conf.json
+    # Pass repository path explicitly so backend can discover it
+    VITE_PORT={{port}} PORT={{port}} PARA_REPO_PATH="$(pwd)" ./src-tauri/target/release/schaltwerk

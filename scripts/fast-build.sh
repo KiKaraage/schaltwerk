@@ -3,10 +3,14 @@ set -euo pipefail
 
 PORT=${1:-3212}
 
-echo "🚀 Building Para UI on port $PORT (optimized for speed)"
+echo "🚀 Building Para UI on port $PORT (fresh release build)"
 
 export VITE_PORT=$PORT
 export PORT=$PORT
+
+# Clean old binary to force rebuild
+echo "🧹 Cleaning old release binary..."
+rm -f ./src-tauri/target/release/schaltwerk
 
 # Enable sccache if available for faster Rust builds
 if command -v sccache &> /dev/null; then
@@ -15,27 +19,14 @@ if command -v sccache &> /dev/null; then
     export SCCACHE_DIR=$HOME/.cache/sccache
 fi
 
-# Build frontend and backend in parallel for faster builds
-echo "🔧 Starting parallel builds..."
+# Build frontend
+echo "📦 Building frontend..."
+npm run build
 
-# Start frontend build in background
-echo "📦 Building frontend (optimized)..."
-npm run build &
-frontend_pid=$!
-
-# Start rust build in background with dev profile for speed
-echo "🦀 Building Tauri app with dev profile..."
-(cd src-tauri && cargo build --profile=dev) &
-rust_pid=$!
-
-# Wait for both builds to complete
-echo "⏳ Waiting for parallel builds..."
-wait $frontend_pid && echo "✅ Frontend build complete"
-wait $rust_pid && echo "✅ Rust build complete"
-
-# Now build the final Tauri bundle (embeds frontend)
-echo "🔧 Creating final Tauri bundle..."
-npm run tauri build
+# Build rust with release profile
+echo "🦀 Building Tauri app with release profile..."
+cd src-tauri && cargo build --release
+cd ..
 
 echo "✅ Build complete! Starting application..."
-VITE_PORT=$PORT PORT=$PORT PARA_REPO_PATH="$(pwd)" ./src-tauri/target/release/ui
+VITE_PORT=$PORT PORT=$PORT PARA_REPO_PATH="$(pwd)" ./src-tauri/target/release/schaltwerk
