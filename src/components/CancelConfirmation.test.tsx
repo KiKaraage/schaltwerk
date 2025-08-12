@@ -5,7 +5,8 @@ import { CancelConfirmation } from './CancelConfirmation'
 describe('CancelConfirmation', () => {
   const baseProps = {
     open: true,
-    sessionName: 'sess',
+    displayName: 'sess',
+    branch: 'para/sess',
     hasUncommittedChanges: false,
     onConfirm: vi.fn(),
     onCancel: vi.fn(),
@@ -14,7 +15,7 @@ describe('CancelConfirmation', () => {
   it('renders and confirms cancel', () => {
     const onConfirm = vi.fn()
     render(<CancelConfirmation {...baseProps} onConfirm={onConfirm} />)
-    expect(screen.getByText('Cancel Session: sess?')).toBeInTheDocument()
+    expect(screen.getByText('Cancel Session: sess (para/sess)?')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Cancel Session/ }))
     expect(onConfirm).toHaveBeenCalledWith(false)
   })

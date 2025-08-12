@@ -189,6 +189,8 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                             action: 'cancel-immediate',
                             sessionId: selectedSession.info.session_id,
                             sessionName: selectedSession.info.session_id,
+                            sessionDisplayName: selectedSession.info.display_name || selectedSession.info.session_id,
+                            branch: selectedSession.info.branch,
                             hasUncommittedChanges: selectedSession.info.has_uncommitted_changes || false
                         }
                     }))
@@ -198,6 +200,8 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                             action: 'cancel',
                             sessionId: selectedSession.info.session_id,
                             sessionName: selectedSession.info.session_id,
+                            sessionDisplayName: selectedSession.info.display_name || selectedSession.info.session_id,
+                            branch: selectedSession.info.branch,
                             hasUncommittedChanges: selectedSession.info.has_uncommitted_changes || false
                         }
                     }))
@@ -639,6 +643,8 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                                             action: 'cancel',
                                             sessionId,
                                             sessionName: sessionId,
+                                            sessionDisplayName: session.info.display_name || session.info.session_id,
+                                            branch: session.info.branch,
                                             hasUncommittedChanges: hasUncommitted
                                         }
                                     }))

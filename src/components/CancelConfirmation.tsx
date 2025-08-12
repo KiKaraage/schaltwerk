@@ -3,7 +3,8 @@ import { ConfirmModal } from './ConfirmModal'
 
 interface CancelConfirmationProps {
   open: boolean
-  sessionName: string
+  displayName: string
+  branch: string
   hasUncommittedChanges: boolean
   onConfirm: (force: boolean) => void
   onCancel: () => void
@@ -12,7 +13,8 @@ interface CancelConfirmationProps {
 
 export function CancelConfirmation({ 
   open, 
-  sessionName, 
+  displayName,
+  branch,
   hasUncommittedChanges, 
   onConfirm, 
   onCancel,
@@ -42,7 +44,7 @@ export function CancelConfirmation({
   return (
     <ConfirmModal
       open={open}
-      title={<span>Cancel Session: {sessionName}?</span>}
+      title={<span>Cancel Session: {displayName} ({branch})?</span>}
       body={body}
       confirmText={hasUncommittedChanges ? 'Force Cancel' : 'Cancel Session'}
       confirmTitle="Cancel session (Enter)"

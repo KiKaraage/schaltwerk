@@ -16,6 +16,8 @@ export interface SessionActionEvent {
   action: 'cancel' | 'cancel-immediate'
   sessionId: string
   sessionName: string
+  sessionDisplayName?: string
+  branch?: string
   hasUncommittedChanges?: boolean
 }
 
@@ -25,15 +27,21 @@ export default function App() {
   const [newSessionOpen, setNewSessionOpen] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
-  const [currentSession, setCurrentSession] = useState<{ id: string; name: string; hasUncommittedChanges: boolean } | null>(null)
+  const [currentSession, setCurrentSession] = useState<{ id: string; name: string; displayName: string; branch: string; hasUncommittedChanges: boolean } | null>(null)
   const [selectedDiffFile, setSelectedDiffFile] = useState<string | null>(null)
   const [isDiffViewerOpen, setIsDiffViewerOpen] = useState(false)
   
   useEffect(() => {
     const handleSessionAction = (event: CustomEvent<SessionActionEvent>) => {
-      const { action, sessionId, sessionName, hasUncommittedChanges = false } = event.detail
+      const { action, sessionId, sessionName, sessionDisplayName, branch, hasUncommittedChanges = false } = event.detail
       
-      setCurrentSession({ id: sessionId, name: sessionName, hasUncommittedChanges })
+      setCurrentSession({ 
+        id: sessionId, 
+        name: sessionName, 
+        displayName: sessionDisplayName || sessionName, 
+        branch: branch || '',
+        hasUncommittedChanges 
+      })
       
       if (action === 'cancel') {
         setCancelModalOpen(true)
@@ -212,7 +220,8 @@ export default function App() {
       {currentSession && (
         <CancelConfirmation
           open={cancelModalOpen}
-          sessionName={currentSession.name}
+          displayName={currentSession.displayName}
+          branch={currentSession.branch}
           hasUncommittedChanges={currentSession.hasUncommittedChanges}
           onConfirm={handleCancelSession}
           onCancel={() => setCancelModalOpen(false)}
