@@ -627,6 +627,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     return languageMap[ext || '']
   }, [selectedFile])
 
+  
   const fileComments = selectedFile ? getCommentsForFile(selectedFile) : []
   
   return (
@@ -821,7 +822,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                     />
 
                 {/* Selection overlay (visual only, above diff) */}
-                    <div
+                <div
                   className="selection-overlay"
                   ref={overlayRef}
                   style={{ zIndex: 5 }}
