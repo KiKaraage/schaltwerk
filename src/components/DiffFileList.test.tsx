@@ -1,8 +1,8 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import React from 'react'
+import React, { useEffect } from 'react'
 import { DiffFileList } from './DiffFileList'
 import { SelectionProvider } from '../contexts/SelectionContext'
-import { ProjectProvider } from '../contexts/ProjectContext'
+import { ProjectProvider, useProject } from '../contexts/ProjectContext'
 
 // Mock Tauri invoke
 vi.mock('@tauri-apps/api/core', () => ({
@@ -21,14 +21,31 @@ vi.mock('@tauri-apps/api/core', () => ({
     if (cmd === 'get_current_branch_name') return 'feature/x'
     if (cmd === 'get_base_branch_name') return 'main'
     if (cmd === 'get_commit_comparison_info') return ['abc', 'def']
+    if (cmd === 'get_current_directory') return '/test/project'
+    if (cmd === 'terminal_exists') return false
+    if (cmd === 'create_terminal') return undefined
     return undefined
   }),
 }))
 
+// Component to set project path for tests
+function TestProjectInitializer({ children }: { children: React.ReactNode }) {
+  const { setProjectPath } = useProject()
+  
+  useEffect(() => {
+    // Set a test project path immediately
+    setProjectPath('/test/project')
+  }, [setProjectPath])
+  
+  return <>{children}</>
+}
+
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
     <ProjectProvider>
-      <SelectionProvider>{children}</SelectionProvider>
+      <TestProjectInitializer>
+        <SelectionProvider>{children}</SelectionProvider>
+      </TestProjectInitializer>
     </ProjectProvider>
   )
 }

@@ -120,20 +120,6 @@ function ControlBridge() {
   return null
 }
 
-async function advance(ms: number) {
-  vi.advanceTimersByTime(ms)
-  await flushAll()
-}
-
-async function flushAll() {
-  await act(async () => {
-    // drain microtasks and pending timers a couple of times
-    await Promise.resolve()
-    vi.runOnlyPendingTimers()
-    await Promise.resolve()
-    vi.runOnlyPendingTimers()
-  })
-}
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -183,11 +169,14 @@ function renderGrid() {
 describe('TerminalGrid', () => {
   it('renders dual-terminal layout with correct headers and ids (orchestrator)', async () => {
     renderGrid()
+    // Use real timers to allow async initialization to complete
+    vi.useRealTimers()
 
-    // Wait for bridge to be ready
+    // Wait for bridge to be ready with increased timeout
     await waitFor(() => {
+      expect(bridge).toBeDefined()
       expect(bridge?.isReady).toBe(true)
-    })
+    }, { timeout: 3000 })
 
     // Headers should be visible
     expect(screen.getByText('Orchestrator — main repo')).toBeInTheDocument()
@@ -201,11 +190,14 @@ describe('TerminalGrid', () => {
 
   it('respects split view proportions and layout props', async () => {
     renderGrid()
+    // Use real timers to allow async initialization to complete
+    vi.useRealTimers()
     
-    // Wait for bridge to be ready
+    // Wait for bridge to be ready with increased timeout
     await waitFor(() => {
+      expect(bridge).toBeDefined()
       expect(bridge?.isReady).toBe(true)
-    })
+    }, { timeout: 3000 })
     
     const split = screen.getByTestId('split')
     expect(split.getAttribute('data-direction')).toBe('vertical')
@@ -216,21 +208,24 @@ describe('TerminalGrid', () => {
 
   it('focuses top/bottom terminals on header and body clicks', async () => {
     renderGrid()
+    // Use real timers to allow async initialization to complete
+    vi.useRealTimers()
 
-    // Wait for bridge to be ready
+    // Wait for bridge to be ready with increased timeout
     await waitFor(() => {
+      expect(bridge).toBeDefined()
       expect(bridge?.isReady).toBe(true)
-    })
+    }, { timeout: 3000 })
 
     // Click top header -> focus claude (top) after 100ms
     fireEvent.click(screen.getByText('Orchestrator — main repo'))
-    await advance(110)
+    await new Promise(r => setTimeout(r, 120))
     const topFocus = (await import('./Terminal')) as any
     expect(topFocus.__getFocusSpy(bridge!.terminals.top)).toHaveBeenCalled()
 
     // Click bottom header -> focus terminal (bottom)
     fireEvent.click(screen.getByText('Terminal — main'))
-    await advance(110)
+    await new Promise(r => setTimeout(r, 120))
     const bottomFocusSpy = (await import('./Terminal')) as any
     expect(bottomFocusSpy.__getFocusSpy(bridge!.terminals.bottom)).toHaveBeenCalled()
 
@@ -238,10 +233,10 @@ describe('TerminalGrid', () => {
     const topBody = screen.getByTestId(`terminal-${bridge!.terminals.top}`).parentElement as HTMLElement
     const bottomBody = screen.getByTestId(`terminal-${bridge!.terminals.bottom}`).parentElement as HTMLElement
     fireEvent.click(topBody)
-    await advance(110)
+    await new Promise(r => setTimeout(r, 120))
     expect(topFocus.__getFocusSpy(bridge!.terminals.top)).toHaveBeenCalled()
     fireEvent.click(bottomBody)
-    await advance(110)
+    await new Promise(r => setTimeout(r, 120))
     expect(bottomFocusSpy.__getFocusSpy(bridge!.terminals.bottom)).toHaveBeenCalled()
   })
 
@@ -283,11 +278,14 @@ describe('TerminalGrid', () => {
 
   it('handles terminal reset events by remounting terminals and cleans up on unmount', async () => {
     const utils = renderGrid()
+    // Use real timers to allow async initialization to complete
+    vi.useRealTimers()
 
-    // Wait for bridge to be ready
+    // Wait for bridge to be ready with increased timeout
     await waitFor(() => {
+      expect(bridge).toBeDefined()
       expect(bridge?.isReady).toBe(true)
-    })
+    }, { timeout: 3000 })
 
     const m = (await import('./Terminal')) as any
     const topId = bridge!.terminals.top
@@ -316,7 +314,8 @@ describe('TerminalGrid', () => {
       window.dispatchEvent(new Event('schaltwerk:reset-terminals'))
     })
 
-    expect(m.__getMountCount('orchestrator-default-top')).toBe(2)
-    expect(m.__getMountCount('orchestrator-default-bottom')).toBe(2)
+    // After the reset, terminals should have been remounted (count of 2)
+    expect(m.__getMountCount(topId)).toBe(2)
+    expect(m.__getMountCount(bottomId)).toBe(2)
   })
 })

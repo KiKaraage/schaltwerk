@@ -2,8 +2,9 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { DiffViewerWithReview } from './DiffViewerWithReview'
 import { SelectionProvider } from '../contexts/SelectionContext'
 import { ReviewProvider } from '../contexts/ReviewContext'
-import { ProjectProvider } from '../contexts/ProjectContext'
+import { ProjectProvider, useProject } from '../contexts/ProjectContext'
 import { vi } from 'vitest'
+import { useEffect } from 'react'
 
 // Mock OptimizedDiffViewer to expose onLineSelect easily and to avoid heavy DOM
 vi.mock('./OptimizedDiffViewer', () => ({
@@ -40,12 +41,26 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: (cmd: string, ...args: any[]) => invokeMock(cmd, ...args),
 }))
 
+// Component to set project path for tests
+function TestProjectInitializer({ children }: { children: React.ReactNode }) {
+  const { setProjectPath } = useProject()
+  
+  useEffect(() => {
+    // Set a test project path immediately
+    setProjectPath('/test/project')
+  }, [setProjectPath])
+  
+  return <>{children}</>
+}
+
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
     <ProjectProvider>
-      <SelectionProvider>
-        <ReviewProvider>{children}</ReviewProvider>
-      </SelectionProvider>
+      <TestProjectInitializer>
+        <SelectionProvider>
+          <ReviewProvider>{children}</ReviewProvider>
+        </SelectionProvider>
+      </TestProjectInitializer>
     </ProjectProvider>
   )
 }

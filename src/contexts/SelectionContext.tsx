@@ -191,6 +191,11 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     // Initialize on mount and when project path changes
     useEffect(() => {
         const initialize = async () => {
+            // Wait for projectPath to be set before initializing
+            if (!projectPath) {
+                return
+            }
+            
             // Skip if already initialized with same project path
             if (hasInitialized.current && previousProjectPath.current === projectPath) {
                 return
@@ -220,10 +225,14 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
                                 name: parsed.sessionName 
                             }) as any
                             
-                            initialSelection = {
-                                kind: 'session',
-                                payload: parsed.sessionName,
-                                worktreePath: sessionData.worktree_path
+                            if (sessionData && sessionData.worktree_path) {
+                                initialSelection = {
+                                    kind: 'session',
+                                    payload: parsed.sessionName,
+                                    worktreePath: sessionData.worktree_path
+                                }
+                            } else {
+                                console.warn('Session data missing worktree_path, using orchestrator')
                             }
                         } catch (e) {
                             console.warn('Session not found, using orchestrator:', e)

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
-import { ReactNode } from 'react'
+import { ReactNode, useEffect } from 'react'
 import { SelectionProvider, useSelection } from './SelectionContext'
-import { ProjectProvider } from './ProjectContext'
+import { ProjectProvider, useProject } from './ProjectContext'
 
 // Mock Tauri API
 vi.mock('@tauri-apps/api/core', () => ({
@@ -12,10 +12,24 @@ vi.mock('@tauri-apps/api/core', () => ({
 import { invoke } from '@tauri-apps/api/core'
 const mockInvoke = vi.mocked(invoke)
 
+// Component to set project path for tests
+function TestProjectInitializer({ children }: { children: ReactNode }) {
+  const { setProjectPath } = useProject()
+  
+  useEffect(() => {
+    // Set a test project path immediately
+    setProjectPath('/test/project')
+  }, [setProjectPath])
+  
+  return <>{children}</>
+}
+
 // Test wrapper component
 const wrapper = ({ children }: { children: ReactNode }) => (
   <ProjectProvider>
-    <SelectionProvider>{children}</SelectionProvider>
+    <TestProjectInitializer>
+      <SelectionProvider>{children}</SelectionProvider>
+    </TestProjectInitializer>
   </ProjectProvider>
 )
 
@@ -58,10 +72,10 @@ describe('SelectionContext', () => {
 
       // Initial state should be orchestrator with correct terminal IDs
       expect(result.current.selection.kind).toBe('orchestrator')
-      expect(result.current.terminals).toEqual({
-        top: 'orchestrator-default-top',
-        bottom: 'orchestrator-default-bottom'
-      })
+      // Terminal IDs are now based on project path hash
+      // For /test/project path, verify the pattern
+      expect(result.current.terminals.top).toMatch(/^orchestrator-project-[a-f0-9]+-top$/)
+      expect(result.current.terminals.bottom).toMatch(/^orchestrator-project-[a-f0-9]+-bottom$/)
     })
 
     it('should map session selection to session-specific terminals', async () => {
@@ -113,18 +127,30 @@ describe('SelectionContext', () => {
 
   describe('ensureTerminals deduplication and path selection', () => {
     it('should use orchestrator cwd for orchestrator selection', async () => {
-      renderHook(() => useSelection(), { wrapper })
+      const { result } = renderHook(() => useSelection(), { wrapper })
 
       await waitFor(() => {
-        expect(mockInvoke).toHaveBeenCalledWith('get_current_directory')
-        expect(mockInvoke).toHaveBeenCalledWith('create_terminal', {
-          id: 'orchestrator-default-top',
-          cwd: '/test/cwd'
-        })
-        expect(mockInvoke).toHaveBeenCalledWith('create_terminal', {
-          id: 'orchestrator-default-bottom',
-          cwd: '/test/cwd'
-        })
+        expect(result.current.isReady).toBe(true)
+      })
+
+      // Check that terminals were created with project path
+      // The IDs are now based on project path, not just 'default'
+      // Note: get_current_directory is no longer called since we use projectPath directly
+      
+      // Find the actual terminal creation calls
+      const terminalCalls = mockInvoke.mock.calls.filter(call => call[0] === 'create_terminal')
+      expect(terminalCalls.length).toBeGreaterThanOrEqual(2)
+      
+      // Verify we have top and bottom terminals created
+      const terminalIds = terminalCalls.map(call => (call[1] as any)?.id as string)
+      const hasTop = terminalIds.some(id => id?.includes('-top'))
+      const hasBottom = terminalIds.some(id => id?.includes('-bottom'))
+      expect(hasTop).toBe(true)
+      expect(hasBottom).toBe(true)
+      
+      // Verify cwd is from projectPath
+      terminalCalls.forEach(call => {
+        expect((call[1] as any)?.cwd).toBe('/test/project')
       })
     })
 

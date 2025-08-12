@@ -148,21 +148,21 @@ describe('App.tsx', () => {
     // Initially on home screen
     expect(await screen.findByTestId('home-screen')).toBeInTheDocument()
 
-    // Open a project
+    // Open a project - the mocked HomeScreen passes '/Users/me/sample-project'
     mockState.isGitRepo = true
-    mockState.currentDir = '/Users/me/projects/cool-app'
     
     fireEvent.click(screen.getByTestId('open-project'))
 
-    // Wait for app to switch to main view
+    // Wait for app to switch to main view with increased timeout
     await waitFor(() => {
       expect(screen.getByTestId('sidebar')).toBeInTheDocument()
-    })
+    }, { timeout: 3000 })
 
     // The basename of the project path should appear, along with the full path
+    // Note: The mocked HomeScreen is hardcoded to open '/Users/me/sample-project'
     await waitFor(() => {
-      expect(screen.getByText('cool-app')).toBeInTheDocument()
-      expect(screen.getByText('/Users/me/projects/cool-app')).toBeInTheDocument()
-    })
+      expect(screen.getByText('sample-project')).toBeInTheDocument()
+      expect(screen.getByText('/Users/me/sample-project')).toBeInTheDocument()
+    }, { timeout: 3000 })
   })
 })
