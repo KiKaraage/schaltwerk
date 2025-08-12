@@ -22,6 +22,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [baseBranch, setBaseBranch] = useState('')
     const [branches, setBranches] = useState<string[]>([])
     const [loadingBranches, setLoadingBranches] = useState(false)
+    const [isValidBranch, setIsValidBranch] = useState(true)
     const [skipPermissions, setSkipPermissions] = useState(false)
     const [agentType, setAgentType] = useState<'claude' | 'cursor'>('claude')
     const [validationError, setValidationError] = useState('')
@@ -81,9 +82,15 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             return
         }
         
-        // Validate that base branch is selected
+        // Validate that base branch is selected and exists
         if (!baseBranch) {
             setValidationError('Please select a base branch')
+            return
+        }
+        
+        // Check if the branch exists in the repository
+        if (!branches.includes(baseBranch)) {
+            setValidationError(`Branch "${baseBranch}" does not exist in the repository`)
             return
         }
         
@@ -200,7 +207,12 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                             placeholder={name || "e.g. eager_cosmos"} 
                         />
                         {validationError && (
-                            <p className="text-xs text-red-400 mt-1">{validationError}</p>
+                            <div className="flex items-start gap-2 mt-1">
+                                <svg className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <p className="text-xs text-red-400">{validationError}</p>
+                            </div>
                         )}
                     </div>
 
@@ -228,10 +240,17 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                             ) : (
                                 <BranchAutocomplete
                                     value={baseBranch}
-                                    onChange={setBaseBranch}
+                                    onChange={(value) => {
+                                        setBaseBranch(value)
+                                        // Clear validation error when user changes branch
+                                        if (validationError && validationError.includes('Branch')) {
+                                            setValidationError('')
+                                        }
+                                    }}
                                     branches={branches}
                                     disabled={branches.length === 0}
                                     placeholder={branches.length === 0 ? "No branches available" : "Type to search branches..."}
+                                    onValidationChange={setIsValidBranch}
                                 />
                             )}
                             <p className="text-xs text-slate-400 mt-1">Branch from which to create the worktree</p>
@@ -273,9 +292,9 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                     </button>
                     <button 
                         onClick={handleCreate} 
-                        disabled={!name.trim() || !baseBranch || creating}
+                        disabled={!name.trim() || !baseBranch || !isValidBranch || creating}
                         className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-white group relative inline-flex items-center gap-2"
-                        title="Create session (Cmd+Enter)"
+                        title={!isValidBranch ? "Please select a valid branch" : "Create session (Cmd+Enter)"}
                     >
                         {creating && (
                             <span
