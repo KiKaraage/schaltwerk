@@ -144,6 +144,47 @@ pub fn get_default_branch(repo_path: &Path) -> Result<String> {
     Err(anyhow!("No branches found in repository"))
 }
 
+pub fn list_branches(repo_path: &Path) -> Result<Vec<String>> {
+    log::info!("Listing branches for repo: {}", repo_path.display());
+    
+    // Get both local and remote branches
+    let output = Command::new("git")
+        .args([
+            "-C", repo_path.to_str().unwrap(),
+            "branch", "-a", "--format=%(refname:short)"
+        ])
+        .output()?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow!("Failed to list branches: {}", stderr));
+    }
+    
+    let branches_str = String::from_utf8_lossy(&output.stdout);
+    let mut branches: Vec<String> = branches_str
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            // Remove "origin/" prefix from remote branches for cleaner display
+            if let Some(branch) = line.strip_prefix("origin/") {
+                branch.to_string()
+            } else {
+                line.to_string()
+            }
+        })
+        .collect();
+    
+    // Remove duplicates (same branch might exist locally and remotely)
+    branches.sort();
+    branches.dedup();
+    
+    // Filter out HEAD references
+    branches.retain(|b| !b.contains("HEAD"));
+    
+    log::debug!("Found {} branches", branches.len());
+    Ok(branches)
+}
+
 pub fn delete_branch(repo_path: &Path, branch_name: &str) -> Result<()> {
     let output = Command::new("git")
         .args([
@@ -167,11 +208,26 @@ pub fn create_worktree_from_base(
     worktree_path: &Path,
     base_branch: &str
 ) -> Result<()> {
+    // First validate that the base branch exists
+    let base_check = Command::new("git")
+        .args([
+            "-C", repo_path.to_str().unwrap(),
+            "rev-parse", "--verify", "--quiet", base_branch
+        ])
+        .output()?;
+    
+    if !base_check.status.success() {
+        return Err(anyhow!(
+            "Base branch '{}' does not exist in the repository",
+            base_branch
+        ));
+    }
+    
     if let Some(parent) = worktree_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     
-    // First check if branch already exists and delete it if it does
+    // Check if branch already exists and delete it if it does
     let branch_check = Command::new("git")
         .args([
             "-C", repo_path.to_str().unwrap(),

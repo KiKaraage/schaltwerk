@@ -19,6 +19,8 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [, setWasEdited] = useState(false)
     const [prompt, setPrompt] = useState('')
     const [baseBranch, setBaseBranch] = useState('')
+    const [branches, setBranches] = useState<string[]>([])
+    const [loadingBranches, setLoadingBranches] = useState(false)
     const [skipPermissions, setSkipPermissions] = useState(false)
     const [agentType, setAgentType] = useState<'claude' | 'cursor'>('claude')
     const [validationError, setValidationError] = useState('')
@@ -78,6 +80,12 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             return
         }
         
+        // Validate that base branch is selected
+        if (!baseBranch) {
+            setValidationError('Please select a base branch')
+            return
+        }
+        
         // Replace spaces with underscores for the actual session name
         finalName = finalName.replace(/ /g, '_')
         
@@ -116,14 +124,22 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             setPrompt('')
             setValidationError('')
             
-            // Fetch the default branch for the current project
-            invoke<string>('get_project_default_branch')
-                .then(branch => setBaseBranch(branch))
+            // Fetch available branches and the default branch
+            setLoadingBranches(true)
+            Promise.all([
+                invoke<string[]>('list_project_branches'),
+                invoke<string>('get_project_default_branch')
+            ])
+                .then(([branchList, defaultBranch]) => {
+                    setBranches(branchList)
+                    setBaseBranch(defaultBranch)
+                })
                 .catch(err => {
-                    console.warn('Failed to get default branch:', err)
-                    // Fallback to empty string - user will need to enter it manually
+                    console.warn('Failed to get branches:', err)
+                    setBranches([])
                     setBaseBranch('')
                 })
+                .finally(() => setLoadingBranches(false))
             
             getSkipPermissions().then(setSkipPermissions)
             getAgentType().then(type => setAgentType(type as 'claude' | 'cursor'))
@@ -194,12 +210,27 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                     <div className="grid grid-cols-3 gap-3">
                         <div>
                             <label className="block text-sm text-slate-300 mb-1">Base branch</label>
-                            <input 
+                            <select 
                                 value={baseBranch} 
                                 onChange={e => setBaseBranch(e.target.value)} 
                                 className="w-full bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700" 
-                                placeholder="e.g. main, master, develop"
-                            />
+                                disabled={loadingBranches || branches.length === 0}
+                            >
+                                {loadingBranches ? (
+                                    <option value="">Loading branches...</option>
+                                ) : branches.length === 0 ? (
+                                    <option value="">No branches available</option>
+                                ) : (
+                                    <>
+                                        <option value="">Select a branch</option>
+                                        {branches.map(branch => (
+                                            <option key={branch} value={branch}>
+                                                {branch}
+                                            </option>
+                                        ))}
+                                    </>
+                                )}
+                            </select>
                             <p className="text-xs text-slate-400 mt-1">Branch from which to create the worktree</p>
                         </div>
                         <div>

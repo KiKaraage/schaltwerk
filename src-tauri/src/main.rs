@@ -736,7 +736,8 @@ fn main() {
             is_git_repository,
             directory_exists,
             initialize_project,
-            get_project_default_branch
+            get_project_default_branch,
+            list_project_branches
         ])
         .setup(|app| {
             // Start activity tracking for para_core sessions
@@ -846,6 +847,21 @@ async fn get_project_default_branch() -> Result<String, String> {
             .map_err(|e| format!("Failed to get current directory: {e}"))?;
         crate::para_core::git::get_default_branch(&current_dir)
             .map_err(|e| format!("Failed to get default branch: {e}"))
+    }
+}
+
+#[tauri::command]
+async fn list_project_branches() -> Result<Vec<String>, String> {
+    let manager = get_project_manager().await;
+    if let Ok(project) = manager.current_project().await {
+        crate::para_core::git::list_branches(&project.path)
+            .map_err(|e| format!("Failed to list branches: {e}"))
+    } else {
+        // No active project, try current directory
+        let current_dir = std::env::current_dir()
+            .map_err(|e| format!("Failed to get current directory: {e}"))?;
+        crate::para_core::git::list_branches(&current_dir)
+            .map_err(|e| format!("Failed to list branches: {e}"))
     }
 }
 

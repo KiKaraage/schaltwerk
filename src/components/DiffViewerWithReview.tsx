@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
 import { useSelection } from '../contexts/SelectionContext'
 import { useReview } from '../contexts/ReviewContext'
 import { VscClose, VscChevronLeft, VscFile, VscDiffAdded, VscDiffModified, VscDiffRemoved, VscComment, VscSend, VscCheck } from 'react-icons/vsc'
 import clsx from 'clsx'
 import hljs from 'highlight.js'
 import { ReviewComment } from '../types/review'
-import { OptimizedDiffViewer } from './OptimizedDiffViewer'
 
 interface ChangedFile {
   path: string
@@ -138,7 +138,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
   const [editingCommentText, setEditingCommentText] = useState('')
   const diffViewerRef = useRef<HTMLDivElement>(null)
-  const fileListRef = useRef<HTMLDivElement>(null)
   const [splitView, setSplitView] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth > 1400 : true)
   const [highlightEnabled, setHighlightEnabled] = useState<boolean>(true)
   const totalLinesRef = useRef<number>(0)
@@ -156,11 +155,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
   
   const sessionName = selection.kind === 'session' ? selection.payload : null
   
-  // Unmount entire overlay when closed to avoid any lingering layers catching events
-  if (!isOpen) {
-    return null
-  }
-
   useEffect(() => {
     setSelectedFile(filePath)
   }, [filePath])
@@ -444,6 +438,25 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     setLineSelection(null)
   }, [lineSelection, selectedFile, addComment])
 
+  const handleFinishReview = async () => {
+    if (!currentReview || currentReview.comments.length === 0) return
+    if (!sessionName) return
+
+    const reviewText = formatReviewForPrompt(currentReview.comments)
+    
+    try {
+      const terminalId = `session-${sessionName}-top`
+      await invoke('write_terminal', { 
+        id: terminalId, 
+        data: reviewText 
+      })
+      
+      clearReview()
+      onClose()
+    } catch (error) {
+      console.error('Failed to send review to terminal:', error)
+    }
+  }
 
   const formatReviewForPrompt = (comments: ReviewComment[]) => {
     let output = '\n# Code Review Comments\n\n'
@@ -468,140 +481,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
 
     return output
   }
-
-  const handleFinishReview = useCallback(async () => {
-    if (!currentReview || currentReview.comments.length === 0) return
-    if (!sessionName) return
-
-    const reviewText = formatReviewForPrompt(currentReview.comments)
-    
-    try {
-      const terminalId = `session-${sessionName}-top`
-      await invoke('write_terminal', { 
-        id: terminalId, 
-        data: reviewText 
-      })
-      
-      clearReview()
-      onClose()
-    } catch (error) {
-      console.error('Failed to send review to terminal:', error)
-    }
-  }, [currentReview, sessionName, clearReview, onClose])
-  
-  useEffect(() => {
-    // Only register keyboard handler when the diff viewer is open
-    if (!isOpen) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const isMac = navigator.userAgent.includes('Mac')
-      const modifierKey = isMac ? e.metaKey : e.ctrlKey
-
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        // Clear any transient UI first
-        if (showCommentForm) {
-          setShowCommentForm(false)
-          return
-        }
-        if (lineSelection) {
-          setLineSelection(null)
-          return
-        }
-        // Then close the diff viewer
-        onClose()
-        return
-      }
-
-      // Cmd/Ctrl+ArrowUp/Down: navigate files
-      if (modifierKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-        if (!files.length) return
-        e.preventDefault()
-        e.stopImmediatePropagation?.()
-        const currentIndex = files.findIndex(f => f.path === selectedFile)
-        if (e.key === 'ArrowDown') {
-          const nextIndex = currentIndex < 0 ? 0 : Math.min(currentIndex + 1, files.length - 1)
-          const next = files[nextIndex]
-          if (next && next.path !== selectedFile) {
-            loadFileDiff(next.path)
-          }
-        } else if (e.key === 'ArrowUp') {
-          const prevIndex = currentIndex < 0 ? 0 : Math.max(currentIndex - 1, 0)
-          const prev = files[prevIndex]
-          if (prev && prev.path !== selectedFile) {
-            loadFileDiff(prev.path)
-          }
-        }
-        return
-      }
-
-      // Cmd/Ctrl+Enter: open comment form (if selection)
-      if (modifierKey && !e.shiftKey && e.key === 'Enter') {
-        if (lineSelection && !showCommentForm) {
-          e.preventDefault()
-          e.stopImmediatePropagation?.()
-          setShowCommentForm(true)
-          return
-        }
-      }
-
-      // Cmd/Ctrl+Shift+Enter: finish review
-      if (modifierKey && e.shiftKey && e.key === 'Enter') {
-        if (!showCommentForm && currentReview && currentReview.comments.length > 0) {
-          e.preventDefault()
-          e.stopImmediatePropagation?.()
-          void handleFinishReview()
-          return
-        }
-      }
-    }
-    
-    // Use capture phase to handle Escape before other handlers
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [isOpen, showCommentForm, onClose, files, selectedFile, loadFileDiff, lineSelection, currentReview, handleFinishReview])
-
-
-  const handleLineSelect = useCallback((side: 'old' | 'new', startLine: number, endLine: number, content: string[]) => {
-    setLineSelection({
-      side,
-      startLine,
-      endLine,
-      content
-    })
-    setShowCommentForm(false)
-  }, [])
-
-  // Apply visual highlighting to selected lines with better performance
-  useEffect(() => {
-    if (!diffViewerRef.current) return
-    
-    const startLine = lineSelection ? Math.min(lineSelection.startLine, lineSelection.endLine) : -1
-    const endLine = lineSelection ? Math.max(lineSelection.startLine, lineSelection.endLine) : -1
-    
-    // Use data attributes instead of iterating through all rows
-    diffViewerRef.current.setAttribute('data-selection-start', startLine.toString())
-    diffViewerRef.current.setAttribute('data-selection-end', endLine.toString())
-    diffViewerRef.current.setAttribute('data-selection-active', lineSelection ? 'true' : 'false')
-    
-    return () => {
-      if (diffViewerRef.current) {
-        diffViewerRef.current.removeAttribute('data-selection-start')
-        diffViewerRef.current.removeAttribute('data-selection-end')
-        diffViewerRef.current.removeAttribute('data-selection-active')
-      }
-    }
-  }, [lineSelection?.startLine, lineSelection?.endLine])
-
-  // Ensure selected file is kept in view within the file list
-  useEffect(() => {
-    if (!fileListRef.current || !selectedFile) return
-    const el = fileListRef.current.querySelector(`[data-path="${CSS.escape(selectedFile)}"]`)
-    if (el && 'scrollIntoView' in el) {
-      ;(el as HTMLElement).scrollIntoView({ block: 'nearest' })
-    }
-  }, [selectedFile])
   
   const getFileIcon = (changeType: string) => {
     switch (changeType) {
@@ -632,7 +511,31 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     return languageMap[ext || '']
   }, [selectedFile])
 
-  // No longer used; highlighting handled by OptimizedDiffViewer + HighlightedCode
+  const renderSyntaxHighlight = (code: string) => {
+    if (!highlightEnabled) {
+      return (
+        <code className="hljs block font-mono text-[12px] leading-[1.3] whitespace-pre">{code}</code>
+      )
+    }
+    let html: string
+    try {
+      if (language && hljs.getLanguage(language)) {
+        html = hljs.highlight(code, { language, ignoreIllegals: true }).value
+      } else {
+        const auto = hljs.highlightAuto(code)
+        html = auto.value
+      }
+    } catch {
+      html = code
+    }
+    return (
+      <code
+        className="hljs block font-mono text-[12px] leading-[1.3] whitespace-pre"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    )
+  }
+
   const fileComments = selectedFile ? getCommentsForFile(selectedFile) : []
   
   return (
@@ -647,12 +550,11 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       
       <div 
         className={clsx(
-          "fixed inset-0 z-50 flex items-center justify-center p-2",
-          "transition-all duration-300 ease-in-out",
-          isOpen ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+          "fixed inset-y-0 right-0 w-[94vw] z-50 bg-slate-950 shadow-2xl flex",
+          "transition-transform duration-300 ease-in-out",
+          isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
-        <div className="w-[96vw] max-w-[1800px] h-[92vh] bg-slate-950 shadow-2xl rounded-lg flex overflow-hidden">
         <div className="w-72 border-r border-slate-800 flex flex-col bg-slate-900/30">
           <div className="px-3 py-3 border-b border-slate-800">
             <div className="flex items-center justify-between">
@@ -672,14 +574,13 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
             </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto" ref={fileListRef}>
+          <div className="flex-1 overflow-y-auto">
             <div className="p-2">
               {files.map(file => {
                 const commentsCount = getCommentsForFile(file.path).length
                 return (
                   <div
                     key={file.path}
-                    data-path={file.path}
                     className={clsx(
                       "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer",
                       "hover:bg-slate-800/50 transition-colors text-sm",
@@ -736,15 +637,15 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
           {selectedFile && (
             <>
               <div className="flex items-center justify-between px-4 py-3 bg-slate-900/50 border-b border-slate-800">
-                <div className="min-w-0 flex-1 mr-4">
-                  <div className="text-sm font-mono truncate">{selectedFile}</div>
+                <div>
+                  <div className="text-sm font-mono">{selectedFile}</div>
                   {branchInfo && (
-                    <div className="text-xs text-slate-500 mt-0.5 truncate">
+                    <div className="text-xs text-slate-500 mt-0.5">
                       Comparing {branchInfo.currentBranch} → {branchInfo.baseBranch} ({branchInfo.baseCommit}..{branchInfo.headCommit})
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1 mr-2">
                     <span className="text-xs text-slate-400">View:</span>
                     <button
@@ -815,18 +716,61 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                   <>
                 {/* Hidden line measure element */}
                 <div ref={measureLineRef} style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', lineHeight: '1.3', fontSize: 12, whiteSpace: 'pre' }}>X</div>
-                <OptimizedDiffViewer
-                  oldContent={mainContent}
-                  newContent={worktreeContent}
-                  language={language}
-                  viewMode={splitView ? 'split' : 'unified'}
-                  onLineSelect={handleLineSelect}
-                  leftTitle={`${branchInfo?.baseBranch || 'base'} (${branchInfo?.baseCommit || 'base'})`}
-                  rightTitle={`${branchInfo?.currentBranch || 'current'} (${branchInfo?.headCommit || 'HEAD'})`}
-                />
+
+                <ReactDiffViewer
+                      oldValue={mainContent}
+                      newValue={worktreeContent}
+                      splitView={splitView}
+                      compareMethod={DiffMethod.LINES}
+                      leftTitle={`${branchInfo?.baseBranch || 'base'} (${branchInfo?.baseCommit || 'base'})`}
+                      rightTitle={`${branchInfo?.currentBranch || 'current'} (${branchInfo?.headCommit || 'HEAD'})`}
+                      renderContent={renderSyntaxHighlight}
+                      showDiffOnly={false}
+                      hideLineNumbers={false}
+                      useDarkTheme={true}
+                      styles={{
+                        variables: {
+                          dark: {
+                            diffViewerBackground: 'transparent',
+                            diffViewerColor: '#cbd5e1',
+                            gutterBackground: 'transparent',
+                            gutterBackgroundDark: 'transparent',
+                            codeFoldBackground: 'transparent',
+                            codeFoldGutterBackground: 'transparent',
+                            emptyLineBackground: 'transparent',
+                            highlightBackground: '#334155',
+                            highlightGutterBackground: '#475569',
+                            addedBackground: 'rgba(34, 197, 94, 0.18)',
+                            addedColor: '#cbd5e1',
+                            removedBackground: 'rgba(239, 68, 68, 0.18)',
+                            removedColor: '#cbd5e1',
+                            wordAddedBackground: 'rgba(34, 197, 94, 0.32)',
+                            wordRemovedBackground: 'rgba(239, 68, 68, 0.32)',
+                            addedGutterBackground: 'rgba(34, 197, 94, 0.24)',
+                            removedGutterBackground: 'rgba(239, 68, 68, 0.24)',
+                            gutterColor: '#64748b',
+                            addedGutterColor: '#cbd5e1',
+                            removedGutterColor: '#cbd5e1',
+                            codeFoldContentColor: '#64748b',
+                            diffViewerTitleBackground: 'transparent',
+                            diffViewerTitleColor: '#cbd5e1',
+                            diffViewerTitleBorderColor: '#334155',
+                          }
+                        },
+                        diffAdded: { background: 'rgba(34, 197, 94, 0.18)' },
+                        diffRemoved: { background: 'rgba(239, 68, 68, 0.18)' },
+                        diffContainer: { background: 'transparent' },
+                        line: {
+                          fontFamily: 'SF Mono, Monaco, Consolas, monospace',
+                          fontSize: '12px',
+                          lineHeight: '1.3',
+                          whiteSpace: 'pre'
+                        }
+                      }}
+                    />
 
                 {/* Selection overlay (visual only, above diff) */}
-                <div
+                    <div
                   className="selection-overlay"
                   ref={overlayRef}
                   style={{ zIndex: 5 }}
@@ -858,155 +802,155 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                   onMouseUp={handleMouseUp}
                 />
 
-                {lineSelection && !showCommentForm && (
-                  <div 
-                    className="fixed z-50 review-comment-button"
-                    style={{
-                      bottom: '80px',
-                      right: '40px'
-                    }}
-                  >
-                    <button
-                      onClick={() => {
-                        setShowCommentForm(true)
-                      }}
-                      className="px-4 py-2 bg-blue-600/90 hover:bg-blue-600 rounded-lg text-sm transition-colors flex items-center gap-2 shadow-xl text-white"
-                    >
-                      <VscComment />
-                      <span>Add Comment</span>
-                    </button>
-                  </div>
-                )}
-
-                {showCommentForm && lineSelection && (
-                  <div 
-                    className="fixed z-50 review-comment-form bg-slate-900 border border-slate-700 rounded-lg shadow-xl p-4"
-                    style={{
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      minWidth: '500px',
-                      maxWidth: '700px'
-                    }}
-                  >
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-xs text-slate-400">
-                        Lines {lineSelection.startLine === lineSelection.endLine 
-                          ? lineSelection.startLine 
-                          : `${lineSelection.startLine}-${lineSelection.endLine}`} ({lineSelection.side === 'old' ? 'base' : 'current'})
-                      </span>
-                      <span className="text-xs text-slate-500">
-                        {selectedFile?.split('/').pop()}
-                      </span>
-                    </div>
-                    <HighlightedCode 
-                      content={lineSelection.content}
-                      language={language}
-                    />
-                    <style>{`
-                      .custom-scrollbar::-webkit-scrollbar {
-                        width: 8px;
-                      }
-                      .custom-scrollbar::-webkit-scrollbar-track {
-                        background: rgba(30, 41, 59, 0.5);
-                        border-radius: 4px;
-                      }
-                      .custom-scrollbar::-webkit-scrollbar-thumb {
-                        background: rgba(71, 85, 105, 0.8);
-                        border-radius: 4px;
-                      }
-                      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                        background: rgba(100, 116, 139, 0.9);
-                      }
-                    `}</style>
-                    <CommentInput 
-                      onSubmit={handleAddComment}
-                      onCancel={() => setShowCommentForm(false)}
-                    />
-                  </div>
-                )}
-
-                {fileComments.length > 0 && (
-                  <div className="absolute top-0 right-0 m-4 max-w-sm">
-                    <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-xl">
-                      <div className="px-3 py-2 border-b border-slate-700 text-sm font-medium">
-                        Comments ({fileComments.length})
+                    {lineSelection && !showCommentForm && (
+                      <div 
+                        className="fixed z-50 review-comment-button"
+                        style={{
+                          bottom: '80px',
+                          right: '40px'
+                        }}
+                      >
+                        <button
+                          onClick={() => {
+                            console.log('Add Comment clicked')
+                            setShowCommentForm(true)
+                          }}
+                          className="px-4 py-2 bg-blue-600/90 hover:bg-blue-600 rounded-lg text-sm transition-colors flex items-center gap-2 shadow-xl text-white"
+                        >
+                          <VscComment />
+                          <span>Add Comment</span>
+                        </button>
                       </div>
-                      <div className="max-h-64 overflow-y-auto">
-                        {fileComments.map(comment => (
-                          <div key={comment.id} className="p-3 border-b border-slate-800 last:border-b-0">
-                            <div className="text-xs text-slate-400 mb-1">
-                              Line {comment.lineRange.start} ({comment.side === 'old' ? 'base' : 'current'})
-                            </div>
-                            <div className="text-xs font-mono bg-slate-800 p-1 rounded mb-2 overflow-x-auto">
-                              {comment.selectedText.substring(0, 50)}
-                              {comment.selectedText.length > 50 && '...'}
-                            </div>
-                            {editingCommentId === comment.id ? (
-                              <div>
-                                <textarea
-                                  value={editingCommentText}
-                                  onChange={(e) => setEditingCommentText(e.target.value)}
-                                  className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-sm focus:outline-none focus:border-blue-500 resize-none"
-                                  rows={2}
-                                  autoFocus
-                                />
-                                <div className="mt-2 flex justify-end gap-2">
-                                  <button
-                                    onClick={() => {
-                                      setEditingCommentId(null)
-                                      setEditingCommentText('')
-                                    }}
-                                    className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition-colors"
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      updateComment(comment.id, editingCommentText)
-                                      setEditingCommentId(null)
-                                      setEditingCommentText('')
-                                    }}
-                                    className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded transition-colors"
-                                  >
-                                    Save
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div>
-                                <div className="text-sm mb-2">{comment.comment}</div>
-                                <div className="flex justify-end gap-2">
-                                  <button
-                                    onClick={() => {
-                                      setEditingCommentId(comment.id)
-                                      setEditingCommentText(comment.comment)
-                                    }}
-                                    className="text-xs text-blue-400 hover:text-blue-300"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => removeComment(comment.id)}
-                                    className="text-xs text-red-400 hover:text-red-300"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              </div>
-                            )}
+                    )}
+
+                    {showCommentForm && lineSelection && (
+                      <div 
+                        className="fixed z-50 review-comment-form bg-slate-900 border border-slate-700 rounded-lg shadow-xl p-4"
+                        style={{
+                          top: '50%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          minWidth: '500px',
+                          maxWidth: '700px'
+                        }}
+                      >
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-xs text-slate-400">
+                            Lines {lineSelection.startLine === lineSelection.endLine 
+                              ? lineSelection.startLine 
+                              : `${lineSelection.startLine}-${lineSelection.endLine}`} ({lineSelection.side === 'old' ? 'base' : 'current'})
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {selectedFile?.split('/').pop()}
+                          </span>
+                        </div>
+                        <HighlightedCode 
+                          content={lineSelection.content}
+                          language={language}
+                        />
+                        <style>{`
+                          .custom-scrollbar::-webkit-scrollbar {
+                            width: 8px;
+                          }
+                          .custom-scrollbar::-webkit-scrollbar-track {
+                            background: rgba(30, 41, 59, 0.5);
+                            border-radius: 4px;
+                          }
+                          .custom-scrollbar::-webkit-scrollbar-thumb {
+                            background: rgba(71, 85, 105, 0.8);
+                            border-radius: 4px;
+                          }
+                          .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                            background: rgba(100, 116, 139, 0.9);
+                          }
+                        `}</style>
+                        <CommentInput 
+                          onSubmit={handleAddComment}
+                          onCancel={() => setShowCommentForm(false)}
+                        />
+                      </div>
+                    )}
+
+                    {fileComments.length > 0 && (
+                      <div className="absolute top-0 right-0 m-4 max-w-sm">
+                        <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-xl">
+                          <div className="px-3 py-2 border-b border-slate-700 text-sm font-medium">
+                            Comments ({fileComments.length})
                           </div>
-                        ))}
+                          <div className="max-h-64 overflow-y-auto">
+                            {fileComments.map(comment => (
+                              <div key={comment.id} className="p-3 border-b border-slate-800 last:border-b-0">
+                                <div className="text-xs text-slate-400 mb-1">
+                                  Line {comment.lineRange.start} ({comment.side === 'old' ? 'base' : 'current'})
+                                </div>
+                                <div className="text-xs font-mono bg-slate-800 p-1 rounded mb-2 overflow-x-auto">
+                                  {comment.selectedText.substring(0, 50)}
+                                  {comment.selectedText.length > 50 && '...'}
+                                </div>
+                                {editingCommentId === comment.id ? (
+                                  <div>
+                                    <textarea
+                                      value={editingCommentText}
+                                      onChange={(e) => setEditingCommentText(e.target.value)}
+                                      className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-sm focus:outline-none focus:border-blue-500 resize-none"
+                                      rows={2}
+                                      autoFocus
+                                    />
+                                    <div className="mt-2 flex justify-end gap-2">
+                                      <button
+                                        onClick={() => {
+                                          setEditingCommentId(null)
+                                          setEditingCommentText('')
+                                        }}
+                                        className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          updateComment(comment.id, editingCommentText)
+                                          setEditingCommentId(null)
+                                          setEditingCommentText('')
+                                        }}
+                                        className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+                                      >
+                                        Save
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div className="text-sm mb-2">{comment.comment}</div>
+                                    <div className="flex justify-end gap-2">
+                                      <button
+                                        onClick={() => {
+                                          setEditingCommentId(comment.id)
+                                          setEditingCommentText(comment.comment)
+                                        }}
+                                        className="text-xs text-blue-400 hover:text-blue-300"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => removeComment(comment.id)}
+                                        className="text-xs text-red-400 hover:text-red-300"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                )}
+                    )}
                   </>
                 )}
               </div>
             </>
           )}
-        </div>
         </div>
       </div>
     </>
