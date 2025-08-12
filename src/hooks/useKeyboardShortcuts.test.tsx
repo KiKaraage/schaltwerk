@@ -3,7 +3,7 @@ import { renderHook } from '@testing-library/react'
 import { useKeyboardShortcuts } from './useKeyboardShortcuts'
 
 function pressKey(key: string, { metaKey = false, ctrlKey = false, shiftKey = false } = {}) {
-  const event = new KeyboardEvent('keydown', { key, metaKey, ctrlKey, shiftKey })
+  const event = new KeyboardEvent('keydown', { key, metaKey, ctrlKey, shiftKey, bubbles: true, cancelable: true })
   window.dispatchEvent(event)
 }
 
@@ -105,5 +105,112 @@ describe('useKeyboardShortcuts', () => {
 
     expect(onSelectPrevSession).toHaveBeenCalled()
     expect(onSelectNextSession).toHaveBeenCalled()
+  })
+
+  it('uses ctrl on non-mac platforms and meta on mac', () => {
+    const onSelectOrchestrator = vi.fn()
+    const onSelectSession = vi.fn()
+
+    // Non-mac: meta should NOT trigger, ctrl SHOULD
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', configurable: true })
+    renderHook(() => useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, sessionCount: 0 }))
+    pressKey('1', { metaKey: true })
+    expect(onSelectOrchestrator).not.toHaveBeenCalled()
+    pressKey('1', { ctrlKey: true })
+    expect(onSelectOrchestrator).toHaveBeenCalled()
+
+    // Mac: meta SHOULD trigger
+    Object.defineProperty(navigator, 'userAgent', { value: 'Macintosh Mac OS', configurable: true })
+    const onSelectOrchestrator2 = vi.fn()
+    renderHook(() => useKeyboardShortcuts({ onSelectOrchestrator: onSelectOrchestrator2, onSelectSession, sessionCount: 0 }))
+    pressKey('1', { metaKey: true })
+    expect(onSelectOrchestrator2).toHaveBeenCalled()
+  })
+
+  it('preventDefault is called for handled shortcuts and not for ignored ones', () => {
+    const onSelectOrchestrator = vi.fn()
+    const onSelectSession = vi.fn()
+    const onSelectPrevSession = vi.fn()
+    const onOpenDiffViewer = vi.fn()
+    const onFocusTerminal = vi.fn()
+
+    Object.defineProperty(navigator, 'userAgent', { value: 'Macintosh', configurable: true })
+    renderHook(() => useKeyboardShortcuts({ 
+      onSelectOrchestrator, 
+      onSelectSession, 
+      onSelectPrevSession,
+      onOpenDiffViewer,
+      onFocusTerminal,
+      sessionCount: 3,
+      isDiffViewerOpen: false,
+    }))
+
+    const captureDefault = (key: string, opts: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean } = {}) => {
+      let prevented = false
+      const listener = (e: Event) => { prevented = (e as KeyboardEvent).defaultPrevented }
+      window.addEventListener('keydown', listener)
+      pressKey(key, opts)
+      window.removeEventListener('keydown', listener)
+      return prevented
+    }
+
+    expect(captureDefault('1', { metaKey: true })).toBe(true)
+    expect(captureDefault('2', { metaKey: true })).toBe(true)
+    expect(captureDefault('g', { metaKey: true })).toBe(true)
+    expect(captureDefault('/', { metaKey: true })).toBe(true)
+
+    // Not handled: missing modifier
+    expect(captureDefault('1', { metaKey: false })).toBe(false)
+  })
+
+  it('shift modifies cancel behavior (immediate=true)', () => {
+    const onCancelSelectedSession = vi.fn()
+    const onSelectOrchestrator = vi.fn()
+    const onSelectSession = vi.fn()
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mac', configurable: true })
+    renderHook(() => useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onCancelSelectedSession, sessionCount: 2 }))
+
+    pressKey('d', { metaKey: true, shiftKey: true })
+    expect(onCancelSelectedSession).toHaveBeenCalledWith(true)
+  })
+
+  it('context-specific: arrows do not preventDefault when diff viewer open', () => {
+    const onSelectPrevSession = vi.fn()
+    const onSelectOrchestrator = vi.fn()
+    const onSelectSession = vi.fn()
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mac', configurable: true })
+    renderHook(() => useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onSelectPrevSession, sessionCount: 2, isDiffViewerOpen: true }))
+    let prevented = false
+    const listener = (e: Event) => { prevented = (e as KeyboardEvent).defaultPrevented }
+    window.addEventListener('keydown', listener)
+    pressKey('ArrowUp', { metaKey: true })
+    window.removeEventListener('keydown', listener)
+    expect(prevented).toBe(false)
+    expect(onSelectPrevSession).not.toHaveBeenCalled()
+  })
+
+  it('context-specific: \'/\' only prevents when callback provided', () => {
+    const onSelectOrchestrator = vi.fn()
+    const onSelectSession = vi.fn()
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mac', configurable: true })
+    // Without callback
+    renderHook(() => useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, sessionCount: 1 }))
+    let prevented = false
+    const l1 = (e: Event) => { prevented = (e as KeyboardEvent).defaultPrevented }
+    window.addEventListener('keydown', l1)
+    pressKey('/', { metaKey: true })
+    window.removeEventListener('keydown', l1)
+    expect(prevented).toBe(false)
+
+    // With callback
+    const onFocusTerminal = vi.fn()
+    renderHook(() => useKeyboardShortcuts({ onSelectOrchestrator, onSelectSession, onFocusTerminal, sessionCount: 1 }))
+    prevented = false
+    const l2 = (e: Event) => { prevented = (e as KeyboardEvent).defaultPrevented }
+    window.addEventListener('keydown', l2)
+    pressKey('/', { metaKey: true })
+    window.removeEventListener('keydown', l2)
+    expect(prevented).toBe(true)
+    expect(onFocusTerminal).toHaveBeenCalled()
   })
 })
