@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with the Schaltwerk code
 
 ## Project Overview
 
-Schaltwerk is a Tauri-based desktop application that provides a visual interface for managing Para sessions. It features multiple terminal panels, session management, and real-time status monitoring.
+Schaltwerk is a Tauri-based desktop application that provides a visual interface for managing Schaltwerk sessions. It features multiple terminal panels, session management, and real-time status monitoring.
 
 ## Essential Development Commands
 
@@ -174,9 +174,9 @@ The application uses the Rust `log` crate with `env_logger` for comprehensive lo
 
 ### Log File Location
 Log files are automatically created at application startup:
-- **macOS**: `~/Library/Application Support/para-ui/logs/para-ui-{timestamp}.log`
-- **Linux**: `~/.local/share/para-ui/logs/para-ui-{timestamp}.log`
-- **Windows**: `%LOCALAPPDATA%\para-ui\logs\para-ui-{timestamp}.log`
+- **macOS**: `~/Library/Application Support/schaltwerk/logs/schaltwerk-{timestamp}.log`
+- **Linux**: `~/.local/share/schaltwerk/logs/schaltwerk-{timestamp}.log`
+- **Windows**: `%LOCALAPPDATA%\schaltwerk\logs\schaltwerk-{timestamp}.log`
 
 The exact log file path is printed to stderr when the app starts with a 📝 emoji prefix.
 
@@ -269,16 +269,16 @@ WARN Failed to kill terminal process session-old: No such process
 ### Viewing Logs
 ```bash
 # View latest log file (macOS)
-tail -f ~/Library/Application\ Support/para-ui/logs/para-ui-*.log
+tail -f ~/Library/Application\ Support/schaltwerk/logs/schaltwerk-*.log
 
 # Filter for errors only
-grep ERROR ~/Library/Application\ Support/para-ui/logs/para-ui-*.log
+grep ERROR ~/Library/Application\ Support/schaltwerk/logs/schaltwerk-*.log
 
 # Watch for specific terminal
-grep "orchestrator-top" ~/Library/Application\ Support/para-ui/logs/para-ui-*.log
+grep "orchestrator-top" ~/Library/Application\ Support/schaltwerk/logs/schaltwerk-*.log
 
 # Monitor performance issues
-grep -E "slow|WARN|ERROR" ~/Library/Application\ Support/para-ui/logs/para-ui-*.log
+grep -E "slow|WARN|ERROR" ~/Library/Application\ Support/schaltwerk/logs/schaltwerk-*.log
 ```
 
 ### Debugging Tips

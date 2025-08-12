@@ -298,7 +298,7 @@ describe('TerminalGrid', () => {
 
     // Dispatch reset event -> key increments -> both terminals remount
     act(() => {
-      window.dispatchEvent(new Event('para-ui:reset-terminals'))
+      window.dispatchEvent(new Event('schaltwerk:reset-terminals'))
     })
     await act(async () => {
       await Promise.resolve()
@@ -313,7 +313,7 @@ describe('TerminalGrid', () => {
     expect(m.__getUnmountCount(topId)).toBeGreaterThan(0)
     expect(m.__getUnmountCount(bottomId)).toBeGreaterThan(0)
     act(() => {
-      window.dispatchEvent(new Event('para-ui:reset-terminals'))
+      window.dispatchEvent(new Event('schaltwerk:reset-terminals'))
     })
 
     expect(m.__getMountCount('orchestrator-default-top')).toBe(2)

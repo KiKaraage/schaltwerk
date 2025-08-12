@@ -114,7 +114,7 @@ async fn get_terminal_manager() -> Result<Arc<terminal::TerminalManager>, String
         .map_err(|e| format!("Failed to get terminal manager: {e}"))
 }
 
-async fn get_para_core() -> Result<Arc<tokio::sync::Mutex<para_core::ParaCore>>, String> {
+async fn get_para_core() -> Result<Arc<tokio::sync::Mutex<para_core::SchaltwerkCore>>, String> {
     let manager = get_project_manager().await;
     manager.current_para_core().await
         .map_err(|e| format!("Failed to get para core: {e}"))

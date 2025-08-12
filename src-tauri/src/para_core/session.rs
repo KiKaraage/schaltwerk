@@ -66,9 +66,9 @@ impl SessionManager {
         }
         
         let session_id = Uuid::new_v4().to_string();
-        let branch = format!("para/{name}");
+        let branch = format!("schaltwerk/{name}");
         let worktree_path = self.repo_path
-            .join(".para")
+            .join(".schaltwerk")
             .join("worktrees")
             .join(name);
         
@@ -221,7 +221,7 @@ impl SessionManager {
         let worktrees = git::list_worktrees(&self.repo_path)?;
         
         for worktree_path in worktrees {
-            if !worktree_path.to_string_lossy().contains("/.para/worktrees/") {
+            if !worktree_path.to_string_lossy().contains("/.schaltwerk/worktrees/") {
                 continue;
             }
             

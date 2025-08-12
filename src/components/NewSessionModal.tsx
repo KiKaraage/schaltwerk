@@ -158,7 +158,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     return (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
             <div className="w-[720px] max-w-[95vw] bg-slate-900 border border-slate-700 rounded-xl shadow-xl overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-800 text-slate-200 font-medium">Start new Para session</div>
+                <div className="px-4 py-3 border-b border-slate-800 text-slate-200 font-medium">Start new Schaltwerk session</div>
                 <div className="p-4 space-y-4">
                     <div>
                         <label className="block text-sm text-slate-300 mb-1">Session name</label>
@@ -188,7 +188,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                             className="w-full h-28 bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700" 
                             placeholder="Describe the task for the Claude session" 
                         />
-                        <p className="text-xs text-slate-400 mt-1">Equivalent to: para start &lt;name&gt; -p "&lt;prompt&gt;"</p>
+                        <p className="text-xs text-slate-400 mt-1">Equivalent to: schaltwerk start &lt;name&gt; -p "&lt;prompt&gt;"</p>
                     </div>
 
                     <div className="grid grid-cols-3 gap-3">

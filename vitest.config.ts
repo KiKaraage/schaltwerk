@@ -13,7 +13,7 @@ export default defineConfig({
     exclude: [
       'node_modules/**',
       'vscode/**',
-      '.para/**',
+      '.schaltwerk/**',
       'dist/**'
     ],
     coverage: {

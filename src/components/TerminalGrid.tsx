@@ -23,8 +23,8 @@ export function TerminalGrid() {
             setTerminalKey(prev => prev + 1)
         }
         
-        window.addEventListener('para-ui:reset-terminals', handleTerminalReset)
-        return () => window.removeEventListener('para-ui:reset-terminals', handleTerminalReset)
+        window.addEventListener('schaltwerk:reset-terminals', handleTerminalReset)
+        return () => window.removeEventListener('schaltwerk:reset-terminals', handleTerminalReset)
     }, [])
 
     // Focus appropriate terminal when selection changes

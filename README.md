@@ -1,11 +1,11 @@
-# Para UI
+# Schaltwerk
 
-Para UI is a Tauri-based desktop application that provides a visual interface for managing Para sessions. It features multiple terminal panels, session management, and real-time status monitoring.
+Schaltwerk is a Tauri-based desktop application that provides a visual interface for managing Schaltwerk sessions. It features multiple terminal panels, session management, and real-time status monitoring.
 
 ## Features
 
 - **Multi-terminal Interface**: Dual-pane terminal layout with Claude integration
-- **Session Management**: Create, switch between, and manage Para sessions
+- **Session Management**: Create, switch between, and manage Schaltwerk sessions
 - **Real-time Monitoring**: Live session status and progress tracking  
 - **Diff Viewer**: Integrated diff viewing with review capabilities
 - **Keyboard Navigation**: Comprehensive keyboard shortcuts for efficient workflow

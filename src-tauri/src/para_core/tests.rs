@@ -93,12 +93,12 @@ struct TestEnvironment {
         
         // Verify session properties
         assert_eq!(session.name, "test-feature");
-        assert_eq!(session.branch, "para/test-feature");
+        assert_eq!(session.branch, "schaltwerk/test-feature");
         assert_eq!(session.initial_prompt, Some("Test prompt".to_string()));
         assert_eq!(session.status, SessionStatus::Active);
         
         // Verify worktree path
-        let expected_worktree = env.repo_path.join(".para").join("worktrees").join("test-feature");
+        let expected_worktree = env.repo_path.join(".schaltwerk").join("worktrees").join("test-feature");
         assert_eq!(session.worktree_path, expected_worktree);
         
         // Verify worktree exists on filesystem
@@ -107,13 +107,13 @@ struct TestEnvironment {
         
         // Verify branch exists
         let branches_output = Command::new("git")
-            .args(["branch", "--list", "para/test-feature"])
+            .args(["branch", "--list", "schaltwerk/test-feature"])
             .current_dir(&env.repo_path)
             .output()
             .unwrap();
         
         let branches = String::from_utf8_lossy(&branches_output.stdout);
-        assert!(branches.contains("para/test-feature"));
+        assert!(branches.contains("schaltwerk/test-feature"));
         
         // Verify session is in database
         let sessions = manager.list_sessions().unwrap();
@@ -144,15 +144,15 @@ struct TestEnvironment {
         
         // Verify all branches exist
         let branches_output = Command::new("git")
-            .args(["branch", "--list", "para/*"])
+            .args(["branch", "--list", "schaltwerk/*"])
             .current_dir(&env.repo_path)
             .output()
             .unwrap();
         
         let branches = String::from_utf8_lossy(&branches_output.stdout);
-        assert!(branches.contains("para/feature-1"));
-        assert!(branches.contains("para/feature-2"));
-        assert!(branches.contains("para/bugfix-1"));
+        assert!(branches.contains("schaltwerk/feature-1"));
+        assert!(branches.contains("schaltwerk/feature-2"));
+        assert!(branches.contains("schaltwerk/bugfix-1"));
     }
     
     #[test]
@@ -273,7 +273,7 @@ struct TestEnvironment {
         
         // Verify enriched data
         let session1 = enriched.iter().find(|s| s.info.session_id == "session-1").unwrap();
-        assert_eq!(session1.info.branch, "para/session-1");
+        assert_eq!(session1.info.branch, "schaltwerk/session-1");
         assert_eq!(session1.info.current_task, Some("First session".to_string()));
         assert_eq!(session1.terminals.len(), 3);
         assert!(session1.terminals.contains(&"session-session-1-top".to_string()));
@@ -329,11 +329,11 @@ struct TestEnvironment {
         let session1 = manager.create_session("proper-session", None, None).unwrap();
         
         // Create an orphaned worktree manually (not through session manager)
-        let orphan_path = env.repo_path.join(".para").join("worktrees").join("orphan");
+        let orphan_path = env.repo_path.join(".schaltwerk").join("worktrees").join("orphan");
         std::fs::create_dir_all(orphan_path.parent().unwrap()).unwrap();
         
         Command::new("git")
-            .args(["worktree", "add", orphan_path.to_str().unwrap(), "-b", "para/orphan"])
+            .args(["worktree", "add", orphan_path.to_str().unwrap(), "-b", "schaltwerk/orphan"])
             .current_dir(&env.repo_path)
             .output()
             .unwrap();

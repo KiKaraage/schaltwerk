@@ -45,7 +45,7 @@ describe('NewSessionModal', () => {
   it('initializes and can create a session', async () => {
     const { onCreate } = openModal()
 
-    expect(screen.getByText('Start new Para session')).toBeInTheDocument()
+    expect(screen.getByText('Start new Schaltwerk session')).toBeInTheDocument()
     // The input is not explicitly associated with the label, select by placeholder/value
     const nameInput = screen.getByPlaceholderText('eager_cosmos') as HTMLInputElement
     expect(nameInput).toBeInTheDocument()

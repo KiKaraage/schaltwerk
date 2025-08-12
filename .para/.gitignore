@@ -1,4 +1,4 @@
-# Ignore all para contents except configuration and setup scripts
+# Ignore all schaltwerk contents except configuration and setup scripts
 *
 !.gitignore
 !config.json

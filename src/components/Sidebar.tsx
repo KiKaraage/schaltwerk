@@ -703,7 +703,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                     setSwitchOrchestratorModal(false)
                     
                     // Dispatch event to reset terminals UI
-                    window.dispatchEvent(new Event('para-ui:reset-terminals'))
+                    window.dispatchEvent(new Event('schaltwerk:reset-terminals'))
                     
                     // Small delay to ensure terminals are closed before recreating
                     setTimeout(async () => {

@@ -17,16 +17,16 @@ pub use types::{Session, EnrichedSession};
 use std::path::PathBuf;
 use anyhow::Result;
 
-pub struct ParaCore {
+pub struct SchaltwerkCore {
     pub db: Database,
     pub repo_path: PathBuf,
 }
 
-impl ParaCore {
+impl SchaltwerkCore {
     pub fn new(db_path: Option<PathBuf>) -> Result<Self> {
         let repo_path = git::discover_repository()?;
         let db = Database::new(db_path)?;
-        log::warn!("Using ParaCore::new() - should use new_with_repo_path() instead");
+        log::warn!("Using SchaltwerkCore::new() - should use new_with_repo_path() instead");
         
         Ok(Self {
             db,
@@ -35,7 +35,7 @@ impl ParaCore {
     }
     
     pub fn new_with_repo_path(db_path: Option<PathBuf>, repo_path: PathBuf) -> Result<Self> {
-        log::info!("Creating ParaCore with explicit repo path: {}", repo_path.display());
+        log::info!("Creating SchaltwerkCore with explicit repo path: {}", repo_path.display());
         let db = Database::new(db_path)?;
         
         Ok(Self {

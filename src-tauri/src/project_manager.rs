@@ -7,13 +7,13 @@ use log::{info, debug, warn};
 use sha2::{Sha256, Digest};
 
 use crate::terminal::TerminalManager;
-use crate::para_core::ParaCore;
+use crate::para_core::SchaltwerkCore;
 
 /// Represents a single project with its own terminals and sessions
 pub struct Project {
     pub path: PathBuf,
     pub terminal_manager: Arc<TerminalManager>,
-    pub para_core: Arc<Mutex<ParaCore>>,
+    pub para_core: Arc<Mutex<SchaltwerkCore>>,
 }
 
 impl Project {
@@ -34,7 +34,7 @@ impl Project {
         info!("Using database at: {}", db_path.display());
         
         let para_core = Arc::new(Mutex::new(
-            ParaCore::new_with_repo_path(Some(db_path), path.clone())?
+            SchaltwerkCore::new_with_repo_path(Some(db_path), path.clone())?
         ));
         
         Ok(Self {
@@ -162,8 +162,8 @@ impl ProjectManager {
         Ok(project.terminal_manager.clone())
     }
     
-    /// Get ParaCore for current project
-    pub async fn current_para_core(&self) -> Result<Arc<Mutex<ParaCore>>> {
+    /// Get SchaltwerkCore for current project
+    pub async fn current_para_core(&self) -> Result<Arc<Mutex<SchaltwerkCore>>> {
         let project = self.current_project().await?;
         Ok(project.para_core.clone())
     }

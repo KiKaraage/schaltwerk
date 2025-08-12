@@ -26,12 +26,12 @@ coverage/
 *.sln
 *.sw?
 .mcp.json
-# Para directories and state files
-# Ignore everything in .para except Dockerfile.custom and config.json
-.para/*
-!.para/Dockerfile.custom
-!.para/config.json
+# Schaltwerk directories and state files
+# Ignore everything in .schaltwerk except Dockerfile.custom and config.json
+.schaltwerk/*
+!.schaltwerk/Dockerfile.custom
+!.schaltwerk/config.json
 .vscode/tasks.json
-# Para launch profiles
+# Schaltwerk launch profiles
 *.launch
-.para_state/
+.schaltwerk_state/
