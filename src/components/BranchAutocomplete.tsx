@@ -22,6 +22,7 @@ export function BranchAutocomplete({
     const [isOpen, setIsOpen] = useState(false)
     const [filteredBranches, setFilteredBranches] = useState<string[]>([])
     const [highlightedIndex, setHighlightedIndex] = useState(-1)
+    const [showValidationError, setShowValidationError] = useState(false)
     const inputRef = useRef<HTMLInputElement>(null)
     const dropdownRef = useRef<HTMLDivElement>(null)
     const itemRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -132,12 +133,23 @@ export function BranchAutocomplete({
         onChange(e.target.value)
         setIsOpen(true)
         setHighlightedIndex(-1)
+        setShowValidationError(false) // Hide error while typing
+    }
+
+    const handleBlur = () => {
+        // Show validation error only on blur if branch doesn't exist
+        if (value && !branches.includes(value)) {
+            setShowValidationError(true)
+        }
+        // Close dropdown after a small delay to allow click events to process
+        setTimeout(() => setIsOpen(false), 200)
     }
 
     const handleSelectBranch = (branch: string) => {
         onChange(branch)
         setIsOpen(false)
         setHighlightedIndex(-1)
+        setShowValidationError(false)
         inputRef.current?.focus()
     }
 
@@ -165,7 +177,11 @@ export function BranchAutocomplete({
                 value={value}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                onFocus={() => setIsOpen(true)}
+                onFocus={() => {
+                    setIsOpen(true)
+                    setShowValidationError(false) // Hide error when focusing
+                }}
+                onBlur={handleBlur}
                 disabled={disabled}
                 placeholder={placeholder}
                 className={`w-full bg-slate-800 text-slate-100 rounded px-3 py-2 border ${
@@ -212,7 +228,7 @@ export function BranchAutocomplete({
                 </div>
             )}
             
-            {value && !branches.includes(value) && (
+            {showValidationError && value && !branches.includes(value) && (
                 <div className="absolute z-50 w-full mt-1 bg-slate-900 border border-red-500/50 rounded-md shadow-lg p-2.5">
                     <div className="text-red-400 text-sm flex items-center gap-2">
                         <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
