@@ -156,6 +156,11 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
   
   const sessionName = selection.kind === 'session' ? selection.payload : null
   
+  // Unmount entire overlay when closed to avoid any lingering layers catching events
+  if (!isOpen) {
+    return null
+  }
+
   useEffect(() => {
     setSelectedFile(filePath)
   }, [filePath])
@@ -820,8 +825,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                   rightTitle={`${branchInfo?.currentBranch || 'current'} (${branchInfo?.headCommit || 'HEAD'})`}
                 />
 
-                
-
                 {/* Selection overlay (visual only, above diff) */}
                 <div
                   className="selection-overlay"
@@ -855,182 +858,149 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                   onMouseUp={handleMouseUp}
                 />
 
-                {/* Selection overlay (visual only, above diff) */}
-                    <div
-                  className="selection-overlay"
-                  ref={overlayRef}
-                  style={{ zIndex: 5 }}
-                >
-                  {lineSelection && (
-                    <div
-                      className="selection-rect"
-                      style={{
-                        top: (contentStartOffset - scrollTop) + ((Math.min(lineSelection.startLine, lineSelection.endLine) - 1) * (lineHeightRef.current || 16)),
-                        height: ((Math.abs(lineSelection.endLine - lineSelection.startLine) + 1) * (lineHeightRef.current || 16)),
-                        left: splitView ? (lineSelection.side === 'old' ? 0 : '50%') : 0,
-                        width: splitView ? '50%' : '100%'
+                {lineSelection && !showCommentForm && (
+                  <div 
+                    className="fixed z-50 review-comment-button"
+                    style={{
+                      bottom: '80px',
+                      right: '40px'
+                    }}
+                  >
+                    <button
+                      onClick={() => {
+                        setShowCommentForm(true)
                       }}
+                      className="px-4 py-2 bg-blue-600/90 hover:bg-blue-600 rounded-lg text-sm transition-colors flex items-center gap-2 shadow-xl text-white"
+                    >
+                      <VscComment />
+                      <span>Add Comment</span>
+                    </button>
+                  </div>
+                )}
+
+                {showCommentForm && lineSelection && (
+                  <div 
+                    className="fixed z-50 review-comment-form bg-slate-900 border border-slate-700 rounded-lg shadow-xl p-4"
+                    style={{
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      minWidth: '500px',
+                      maxWidth: '700px'
+                    }}
+                  >
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs text-slate-400">
+                        Lines {lineSelection.startLine === lineSelection.endLine 
+                          ? lineSelection.startLine 
+                          : `${lineSelection.startLine}-${lineSelection.endLine}`} ({lineSelection.side === 'old' ? 'base' : 'current'})
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        {selectedFile?.split('/').pop()}
+                      </span>
+                    </div>
+                    <HighlightedCode 
+                      content={lineSelection.content}
+                      language={language}
                     />
-                  )}
-                </div>
+                    <style>{`
+                      .custom-scrollbar::-webkit-scrollbar {
+                        width: 8px;
+                      }
+                      .custom-scrollbar::-webkit-scrollbar-track {
+                        background: rgba(30, 41, 59, 0.5);
+                        border-radius: 4px;
+                      }
+                      .custom-scrollbar::-webkit-scrollbar-thumb {
+                        background: rgba(71, 85, 105, 0.8);
+                        border-radius: 4px;
+                      }
+                      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                        background: rgba(100, 116, 139, 0.9);
+                      }
+                    `}</style>
+                    <CommentInput 
+                      onSubmit={handleAddComment}
+                      onCancel={() => setShowCommentForm(false)}
+                    />
+                  </div>
+                )}
 
-                {/* Hit layer (captures mouse and maps to lines) */}
-                <div
-                  ref={hitLayerRef}
-                  className="selection-hitlayer"
-                  style={{
-                    top: contentStartOffset - scrollTop,
-                    height: Math.max(0, (totalLinesRef.current || 0) * (lineHeightRef.current || 16)),
-                    zIndex: 6
-                  }}
-                  onMouseDown={handleMouseDown}
-                  onMouseMove={handleMouseMove}
-                  onMouseUp={handleMouseUp}
-                />
-
-                    {lineSelection && !showCommentForm && (
-                      <div 
-                        className="fixed z-50 review-comment-button"
-                        style={{
-                          bottom: '80px',
-                          right: '40px'
-                        }}
-                      >
-                        <button
-                          onClick={() => {
-                            setShowCommentForm(true)
-                          }}
-                          className="px-4 py-2 bg-blue-600/90 hover:bg-blue-600 rounded-lg text-sm transition-colors flex items-center gap-2 shadow-xl text-white"
-                        >
-                          <VscComment />
-                          <span>Add Comment</span>
-                        </button>
+                {fileComments.length > 0 && (
+                  <div className="absolute top-0 right-0 m-4 max-w-sm">
+                    <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-xl">
+                      <div className="px-3 py-2 border-b border-slate-700 text-sm font-medium">
+                        Comments ({fileComments.length})
                       </div>
-                    )}
-
-                    {showCommentForm && lineSelection && (
-                      <div 
-                        className="fixed z-50 review-comment-form bg-slate-900 border border-slate-700 rounded-lg shadow-xl p-4"
-                        style={{
-                          top: '50%',
-                          left: '50%',
-                          transform: 'translate(-50%, -50%)',
-                          minWidth: '500px',
-                          maxWidth: '700px'
-                        }}
-                      >
-                        <div className="mb-2 flex items-center justify-between">
-                          <span className="text-xs text-slate-400">
-                            Lines {lineSelection.startLine === lineSelection.endLine 
-                              ? lineSelection.startLine 
-                              : `${lineSelection.startLine}-${lineSelection.endLine}`} ({lineSelection.side === 'old' ? 'base' : 'current'})
-                          </span>
-                          <span className="text-xs text-slate-500">
-                            {selectedFile?.split('/').pop()}
-                          </span>
-                        </div>
-                        <HighlightedCode 
-                          content={lineSelection.content}
-                          language={language}
-                        />
-                        <style>{`
-                          .custom-scrollbar::-webkit-scrollbar {
-                            width: 8px;
-                          }
-                          .custom-scrollbar::-webkit-scrollbar-track {
-                            background: rgba(30, 41, 59, 0.5);
-                            border-radius: 4px;
-                          }
-                          .custom-scrollbar::-webkit-scrollbar-thumb {
-                            background: rgba(71, 85, 105, 0.8);
-                            border-radius: 4px;
-                          }
-                          .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                            background: rgba(100, 116, 139, 0.9);
-                          }
-                        `}</style>
-                        <CommentInput 
-                          onSubmit={handleAddComment}
-                          onCancel={() => setShowCommentForm(false)}
-                        />
-                      </div>
-                    )}
-
-                    {fileComments.length > 0 && (
-                      <div className="absolute top-0 right-0 m-4 max-w-sm">
-                        <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-xl">
-                          <div className="px-3 py-2 border-b border-slate-700 text-sm font-medium">
-                            Comments ({fileComments.length})
-                          </div>
-                          <div className="max-h-64 overflow-y-auto">
-                            {fileComments.map(comment => (
-                              <div key={comment.id} className="p-3 border-b border-slate-800 last:border-b-0">
-                                <div className="text-xs text-slate-400 mb-1">
-                                  Line {comment.lineRange.start} ({comment.side === 'old' ? 'base' : 'current'})
+                      <div className="max-h-64 overflow-y-auto">
+                        {fileComments.map(comment => (
+                          <div key={comment.id} className="p-3 border-b border-slate-800 last:border-b-0">
+                            <div className="text-xs text-slate-400 mb-1">
+                              Line {comment.lineRange.start} ({comment.side === 'old' ? 'base' : 'current'})
+                            </div>
+                            <div className="text-xs font-mono bg-slate-800 p-1 rounded mb-2 overflow-x-auto">
+                              {comment.selectedText.substring(0, 50)}
+                              {comment.selectedText.length > 50 && '...'}
+                            </div>
+                            {editingCommentId === comment.id ? (
+                              <div>
+                                <textarea
+                                  value={editingCommentText}
+                                  onChange={(e) => setEditingCommentText(e.target.value)}
+                                  className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-sm focus:outline-none focus:border-blue-500 resize-none"
+                                  rows={2}
+                                  autoFocus
+                                />
+                                <div className="mt-2 flex justify-end gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setEditingCommentId(null)
+                                      setEditingCommentText('')
+                                    }}
+                                    className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      updateComment(comment.id, editingCommentText)
+                                      setEditingCommentId(null)
+                                      setEditingCommentText('')
+                                    }}
+                                    className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+                                  >
+                                    Save
+                                  </button>
                                 </div>
-                                <div className="text-xs font-mono bg-slate-800 p-1 rounded mb-2 overflow-x-auto">
-                                  {comment.selectedText.substring(0, 50)}
-                                  {comment.selectedText.length > 50 && '...'}
-                                </div>
-                                {editingCommentId === comment.id ? (
-                                  <div>
-                                    <textarea
-                                      value={editingCommentText}
-                                      onChange={(e) => setEditingCommentText(e.target.value)}
-                                      className="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-sm focus:outline-none focus:border-blue-500 resize-none"
-                                      rows={2}
-                                      autoFocus
-                                    />
-                                    <div className="mt-2 flex justify-end gap-2">
-                                      <button
-                                        onClick={() => {
-                                          setEditingCommentId(null)
-                                          setEditingCommentText('')
-                                        }}
-                                        className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded transition-colors"
-                                      >
-                                        Cancel
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          updateComment(comment.id, editingCommentText)
-                                          setEditingCommentId(null)
-                                          setEditingCommentText('')
-                                        }}
-                                        className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded transition-colors"
-                                      >
-                                        Save
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <div className="text-sm mb-2">{comment.comment}</div>
-                                    <div className="flex justify-end gap-2">
-                                      <button
-                                        onClick={() => {
-                                          setEditingCommentId(comment.id)
-                                          setEditingCommentText(comment.comment)
-                                        }}
-                                        className="text-xs text-blue-400 hover:text-blue-300"
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        onClick={() => removeComment(comment.id)}
-                                        className="text-xs text-red-400 hover:text-red-300"
-                                      >
-                                        Delete
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
                               </div>
-                            ))}
+                            ) : (
+                              <div>
+                                <div className="text-sm mb-2">{comment.comment}</div>
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setEditingCommentId(comment.id)
+                                      setEditingCommentText(comment.comment)
+                                    }}
+                                    className="text-xs text-blue-400 hover:text-blue-300"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => removeComment(comment.id)}
+                                    className="text-xs text-red-400 hover:text-red-300"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
+                        ))}
                       </div>
-                    )}
+                    </div>
+                  </div>
+                )}
                   </>
                 )}
               </div>

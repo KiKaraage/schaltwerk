@@ -282,12 +282,14 @@ export default function App() {
       )}
       </Split>
       
-      {/* Diff Viewer Overlay with Review - renders outside of main layout */}
-      <DiffViewerWithReview 
-        filePath={selectedDiffFile}
-        isOpen={isDiffViewerOpen}
-        onClose={handleCloseDiffViewer}
-      />
+      {/* Diff Viewer Overlay with Review - render only when open */}
+      {isDiffViewerOpen && (
+        <DiffViewerWithReview 
+          filePath={selectedDiffFile}
+          isOpen={true}
+          onClose={handleCloseDiffViewer}
+        />
+      )}
     </>
   )
 }

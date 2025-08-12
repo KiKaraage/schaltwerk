@@ -35,6 +35,11 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
   const [splitView, setSplitView] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth > 1400 : true)
   const [highlightEnabled, setHighlightEnabled] = useState<boolean>(true)
   
+  // Unmount entirely when closed to ensure no overlay can capture clicks
+  if (!isOpen) {
+    return null
+  }
+
   useEffect(() => {
     setSelectedFile(filePath)
   }, [filePath])
