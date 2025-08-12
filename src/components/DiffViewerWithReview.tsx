@@ -627,7 +627,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     return languageMap[ext || '']
   }, [selectedFile])
 
-  
   const fileComments = selectedFile ? getCommentsForFile(selectedFile) : []
   
   return (
