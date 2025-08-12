@@ -4,8 +4,6 @@ import { invoke } from '@tauri-apps/api/core'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { useFocus } from '../contexts/FocusContext'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
-import { AppEvents, UiEvents } from '../events'
-import { StorageKeys } from '../constants/storageKeys'
 import { useSelection } from '../contexts/SelectionContext'
 import { computeNextSelectedSessionId } from '../utils/selectionNext'
 import { MarkReadyConfirmation } from './MarkReadyConfirmation'
@@ -70,14 +68,14 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     const { setFocusForSession, setCurrentFocus } = useFocus()
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
     const [filterMode, setFilterMode] = useState<'all' | 'unreviewed' | 'reviewed'>(() => {
-        const saved = typeof window !== 'undefined' ? window.localStorage.getItem(StorageKeys.sessions.filterMode) : null
+        const saved = typeof window !== 'undefined' ? window.localStorage.getItem('schaltwerk:sessions:filterMode') : null
         return (saved === 'unreviewed' || saved === 'reviewed') ? saved : 'all'
     })
     const [sortMode, setSortMode] = useState<'name' | 'created' | 'last-edited'>(() => {
         if (typeof window === 'undefined') return 'name'
         
         try {
-            const saved = window.localStorage.getItem(StorageKeys.sessions.sortMode)
+            const saved = window.localStorage.getItem('schaltwerk:sessions:sortMode')
             if (saved === 'name' || saved === 'created' || saved === 'last-edited') {
                 return saved
             }
@@ -186,7 +184,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             if (selectedSession) {
                 if (immediate) {
                     // immediate cancel without modal
-                    window.dispatchEvent(new CustomEvent(UiEvents.sessionAction, {
+                    window.dispatchEvent(new CustomEvent('schaltwerk:session-action', {
                         detail: {
                             action: 'cancel-immediate',
                             sessionId: selectedSession.info.session_id,
@@ -197,7 +195,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                         }
                     }))
                 } else {
-                    window.dispatchEvent(new CustomEvent(UiEvents.sessionAction, {
+                    window.dispatchEvent(new CustomEvent('schaltwerk:session-action', {
                         detail: {
                             action: 'cancel',
                             sessionId: selectedSession.info.session_id,
@@ -284,7 +282,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
         onOpenDiffViewer: () => {
             // Only open if a session is selected
             if (selection.kind !== 'session') return
-            window.dispatchEvent(new CustomEvent(UiEvents.openDiffView))
+            window.dispatchEvent(new CustomEvent('schaltwerk:open-diff-view'))
         },
         onFocusTerminal: () => {
             const sessionKey = selection.kind === 'orchestrator' ? 'orchestrator' : (selection.payload || 'unknown')
@@ -296,13 +294,13 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
 
     // Persist user preferences
     useEffect(() => {
-        try { window.localStorage.setItem(StorageKeys.sessions.filterMode, filterMode) } catch {}
+        try { window.localStorage.setItem('schaltwerk:sessions:filterMode', filterMode) } catch {}
     }, [filterMode])
     
     useEffect(() => {
         try {
             if (typeof window !== 'undefined') {
-                window.localStorage.setItem(StorageKeys.sessions.sortMode, sortMode)
+                window.localStorage.setItem('schaltwerk:sessions:sortMode', sortMode)
             }
         } catch (error) {
             console.warn('Failed to save sort mode to localStorage:', error)
@@ -338,7 +336,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     // Listen for sessions-refreshed events (e.g., after name generation)
     useEffect(() => {
         const setupRefreshListener = async () => {
-            const unlisten = await listen<EnrichedSession[]>(AppEvents.sessionsRefreshed, (event) => {
+            const unlisten = await listen<EnrichedSession[]>('schaltwerk:sessions-refreshed', (event) => {
                 setSessions(event.payload.map(s => ({
                     ...s,
                     info: {
@@ -387,7 +385,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 session_id: string
                 session_name: string
                 last_activity_ts: number
-            }>(AppEvents.sessionActivity, (event) => {
+            }>('schaltwerk:session-activity', (event) => {
                 const { session_name, last_activity_ts } = event.payload
                 setSessions(prev => prev.map(s => {
                     if (s.info.session_id !== session_name) return s
@@ -411,7 +409,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 lines_added: number
                 lines_removed: number
                 has_uncommitted: boolean
-            }>(AppEvents.sessionGitStats, (event) => {
+            }>('schaltwerk:session-git-stats', (event) => {
                 const { session_name, files_changed, lines_added, lines_removed, has_uncommitted } = event.payload
                 setSessions(prev => prev.map(s => {
                     if (s.info.session_id !== session_name) return s
@@ -439,7 +437,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 branch: string
                 worktree_path: string
                 parent_branch: string
-            }>(AppEvents.sessionAdded, (event) => {
+            }>('schaltwerk:session-added', (event) => {
                 const { session_name, branch, worktree_path, parent_branch } = event.payload
                 setSessions(prev => {
                     // Avoid duplicates
@@ -482,7 +480,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             unlisteners.push(u3)
 
             // Session removed
-            const u4 = await listen<{ session_name: string }>(AppEvents.sessionRemoved, async (event) => {
+            const u4 = await listen<{ session_name: string }>('schaltwerk:session-removed', async (event) => {
                 const { session_name } = event.payload
                 const currentSelection = latestSelectionRef.current
                 const currentSorted = latestSortedSessionsRef.current
@@ -502,7 +500,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             unlisteners.push(u4)
             
             // Listen for stuck terminal notifications
-            const u5 = await listen<TerminalStuckNotification>(AppEvents.terminalStuck, (event) => {
+            const u5 = await listen<TerminalStuckNotification>('schaltwerk:terminal-stuck', (event) => {
                 const { session_id } = event.payload
                 if (session_id) {
                     setStuckTerminals(prev => new Set([...prev, session_id]))
@@ -511,7 +509,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             unlisteners.push(u5)
             
             // Listen for unstuck terminal notifications
-            const u6 = await listen<TerminalUnstuckNotification>(AppEvents.terminalUnstuck, (event) => {
+            const u6 = await listen<TerminalUnstuckNotification>('schaltwerk:terminal-unstuck', (event) => {
                 const { session_id } = event.payload
                 if (session_id) {
                     setStuckTerminals(prev => {
@@ -645,7 +643,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                                     }
                                 }}
                                 onCancel={(sessionId, hasUncommitted) => {
-                                    window.dispatchEvent(new CustomEvent(UiEvents.sessionAction, {
+                                    window.dispatchEvent(new CustomEvent('schaltwerk:session-action', {
                                         detail: {
                                             action: 'cancel',
                                             sessionId,
@@ -711,7 +709,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                     setSwitchOrchestratorModal(false)
                     
                     // Dispatch event to reset terminals UI
-                    window.dispatchEvent(new Event(UiEvents.resetTerminals))
+                    window.dispatchEvent(new Event('schaltwerk:reset-terminals'))
                     
                     // Small delay to ensure terminals are closed before recreating
                     setTimeout(async () => {

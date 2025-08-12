@@ -3,7 +3,6 @@ import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
-import { UiEvents, terminalOutputEvent } from '../events';
 import 'xterm/css/xterm.css';
 
 // Global guard to avoid starting Claude multiple times for the same terminal id across remounts
@@ -113,12 +112,12 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             
             if (modifierKey && (event.key === 'n' || event.key === 'N')) {
                 // Dispatch a custom event to trigger the global new session handler
-                window.dispatchEvent(new CustomEvent(UiEvents.globalNewSessionShortcut))
+                window.dispatchEvent(new CustomEvent('global-new-session-shortcut'))
                 return false // Prevent xterm.js from processing this event
             }
             if (modifierKey && (event.key === 'r' || event.key === 'R')) {
                 // Dispatch a custom event to trigger the global mark reviewed handler
-                window.dispatchEvent(new CustomEvent(UiEvents.globalMarkReadyShortcut))
+                window.dispatchEvent(new CustomEvent('global-mark-ready-shortcut'))
                 return false
             }
             
@@ -176,7 +175,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
 
         // Listen for terminal output from backend (buffer until hydrated)
         unlistenRef.current = null;
-        unlistenPromiseRef.current = listen(terminalOutputEvent(terminalId), (event) => {
+        unlistenPromiseRef.current = listen(`terminal-output-${terminalId}`, (event) => {
             if (cancelled) return;
             const output = event.payload as string;
             if (!hydratedRef.current) {

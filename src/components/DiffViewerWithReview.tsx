@@ -139,7 +139,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
   const [editingCommentText, setEditingCommentText] = useState('')
   const diffViewerRef = useRef<HTMLDivElement>(null)
   const [splitView, setSplitView] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth > 1400 : true)
-  const [highlightEnabled, setHighlightEnabled] = useState<boolean>(true)
   const totalLinesRef = useRef<number>(0)
   const lineHeightRef = useRef<number>(16)
   const contentStartOffsetRef = useRef<number>(0)
@@ -208,9 +207,8 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
       const total = Math.max(mainText.split('\n').length, worktreeText.split('\n').length)
       totalLinesRef.current = total
       if (total > 200) {
-        // Default to unified view and reduced highlighting on large files
+        // Default to unified view on large files
         setSplitView(false)
-        setHighlightEnabled(false)
       }
     } catch (error) {
       console.error('Failed to load file diff:', error)
@@ -512,11 +510,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
   }, [selectedFile])
 
   const renderSyntaxHighlight = (code: string) => {
-    if (!highlightEnabled) {
-      return (
-        <code className="hljs block font-mono text-[12px] leading-[1.3] whitespace-pre">{code}</code>
-      )
-    }
     let html: string
     try {
       if (language && hljs.getLanguage(language)) {
@@ -656,13 +649,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                       onClick={() => setSplitView(true)}
                       className={clsx('px-2 py-1 text-xs rounded', splitView ? 'bg-slate-800 text-white' : 'bg-slate-800/40 text-slate-300 hover:bg-slate-800/60')}
                     >Split</button>
-                  </div>
-                  <div className="flex items-center gap-1 mr-2">
-                    <span className="text-xs text-slate-400">Syntax:</span>
-                    <button
-                      onClick={() => setHighlightEnabled((v) => !v)}
-                      className={clsx('px-2 py-1 text-xs rounded', highlightEnabled ? 'bg-slate-800 text-white' : 'bg-slate-800/40 text-slate-300 hover:bg-slate-800/60')}
-                    >{highlightEnabled ? 'On' : 'Off'}</button>
                   </div>
                   {currentReview && currentReview.comments.length > 0 && (
                     <button

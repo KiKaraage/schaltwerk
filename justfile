@@ -1,20 +1,45 @@
 # Para UI Development Commands
 
-# Default command - show available commands
-default:
-    @just --list
-
-# Install development dependencies
+# Install the application to ~/Applications
 install:
     #!/usr/bin/env bash
     set -euo pipefail
     
-    echo "📦 Installing development dependencies..."
+    echo "🔨 Building Tauri application..."
     npm install
+    npm run build
+    npm run tauri build
     
-    echo "✅ Development dependencies installed successfully!"
-    echo "💡 Run 'just run' to start the development server"
-    echo "💡 Run 'just deploy-mac' to install the app to /Applications"
+    echo "📦 Installing to ~/Applications..."
+    
+    # Create user Applications directory if it doesn't exist
+    mkdir -p ~/Applications
+    
+    # Find the built app bundle
+    APP_BUNDLE=$(find src-tauri/target/release/bundle -name "*.app" -type d | head -1)
+    
+    if [ -z "$APP_BUNDLE" ]; then
+        echo "❌ Error: Could not find built app bundle"
+        exit 1
+    fi
+    
+    APP_NAME=$(basename "$APP_BUNDLE")
+    
+    # Remove old installation if it exists
+    if [ -d ~/Applications/"$APP_NAME" ]; then
+        echo "🗑️  Removing old installation..."
+        rm -rf ~/Applications/"$APP_NAME"
+    fi
+    
+    # Copy the app bundle to user Applications
+    echo "📋 Copying $APP_NAME to ~/Applications..."
+    cp -R "$APP_BUNDLE" ~/Applications/
+    
+    # Clear quarantine attributes to avoid Gatekeeper issues
+    xattr -cr ~/Applications/"$APP_NAME" 2>/dev/null || true
+    
+    echo "✅ Successfully installed $APP_NAME to ~/Applications/"
+    echo "🚀 You can now run the app from ~/Applications/$APP_NAME"
 
 # Find an available port starting from a base port
 _find_available_port base_port:
@@ -190,8 +215,8 @@ run-port-release port:
     # Pass repository path explicitly so backend can discover it
     VITE_PORT={{port}} PORT={{port}} PARA_REPO_PATH="$(pwd)" ./src-tauri/target/release/schaltwerk
 
-# Deploy the application to /Applications on macOS (system-wide)
-deploy-mac:
+# Install the application on macOS as a release build
+install-mac:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "🔨 Building Schaltwerk for macOS..."
@@ -219,78 +244,7 @@ deploy-mac:
     # Set proper permissions
     chmod -R 755 "/Applications/Schaltwerk.app"
     
-    # Clear extended attributes and quarantine flags
-    echo "🔐 Clearing quarantine attributes..."
-    xattr -cr "/Applications/Schaltwerk.app" 2>/dev/null || true
-    
-    # Attempt ad-hoc code signing with entitlements if developer tools are available
-    if command -v codesign &> /dev/null; then
-        echo "✍️  Code signing the application..."
-        # First remove any existing signature
-        codesign --remove-signature "/Applications/Schaltwerk.app" 2>/dev/null || true
-        # Then sign with entitlements
-        if [ -f "src-tauri/entitlements.plist" ]; then
-            codesign --force --deep --sign - --entitlements "src-tauri/entitlements.plist" "/Applications/Schaltwerk.app" 2>/dev/null || true
-        else
-            codesign --force --deep --sign - "/Applications/Schaltwerk.app" 2>/dev/null || true
-        fi
-    fi
-    
     echo "✅ Schaltwerk installed successfully!"
     echo "🚀 You can now launch Schaltwerk from Applications or Spotlight"
     echo ""
     echo "To launch from terminal: open /Applications/Schaltwerk.app"
-
-# Deploy the application to ~/Applications on macOS (user-specific)
-deploy-mac-user:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "🔨 Building Schaltwerk for macOS..."
-    
-    # Build the release version
-    npm run build
-    npm run tauri build
-    
-    # Check if the app bundle was created
-    if [ ! -d "src-tauri/target/release/bundle/macos/Schaltwerk.app" ]; then
-        echo "❌ Build failed - Schaltwerk.app not found"
-        exit 1
-    fi
-    
-    # Create user Applications directory if it doesn't exist
-    mkdir -p ~/Applications
-    
-    # Remove old installation if it exists
-    if [ -d ~/Applications/Schaltwerk.app ]; then
-        echo "🗑️  Removing existing Schaltwerk installation..."
-        rm -rf ~/Applications/Schaltwerk.app
-    fi
-    
-    # Copy the app to user Applications
-    echo "📦 Installing Schaltwerk to ~/Applications..."
-    cp -R "src-tauri/target/release/bundle/macos/Schaltwerk.app" ~/Applications/
-    
-    # Set proper permissions
-    chmod -R 755 ~/Applications/Schaltwerk.app
-    
-    # Clear quarantine attributes to avoid Gatekeeper issues
-    echo "🔐 Clearing quarantine attributes..."
-    xattr -cr ~/Applications/Schaltwerk.app 2>/dev/null || true
-    
-    # Attempt ad-hoc code signing with entitlements if developer tools are available
-    if command -v codesign &> /dev/null; then
-        echo "✍️  Code signing the application..."
-        # First remove any existing signature
-        codesign --remove-signature ~/Applications/Schaltwerk.app 2>/dev/null || true
-        # Then sign with entitlements
-        if [ -f "src-tauri/entitlements.plist" ]; then
-            codesign --force --deep --sign - --entitlements "src-tauri/entitlements.plist" ~/Applications/Schaltwerk.app 2>/dev/null || true
-        else
-            codesign --force --deep --sign - ~/Applications/Schaltwerk.app 2>/dev/null || true
-        fi
-    fi
-    
-    echo "✅ Schaltwerk installed successfully!"
-    echo "🚀 You can now launch Schaltwerk from ~/Applications"
-    echo ""
-    echo "To launch from terminal: open ~/Applications/Schaltwerk.app"

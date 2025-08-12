@@ -3,7 +3,6 @@ import Split from 'react-split'
 import { useSelection } from '../contexts/SelectionContext'
 import { useFocus } from '../contexts/FocusContext'
 import { useRef, useEffect, useState } from 'react'
-import { UiEvents } from '../events'
 
 export function TerminalGrid() {
     const { selection, terminals, isReady } = useSelection()
@@ -24,8 +23,8 @@ export function TerminalGrid() {
             setTerminalKey(prev => prev + 1)
         }
         
-        window.addEventListener(UiEvents.resetTerminals as any, handleTerminalReset)
-        return () => window.removeEventListener(UiEvents.resetTerminals as any, handleTerminalReset)
+        window.addEventListener('schaltwerk:reset-terminals', handleTerminalReset)
+        return () => window.removeEventListener('schaltwerk:reset-terminals', handleTerminalReset)
     }, [])
 
     // Focus appropriate terminal when selection changes
