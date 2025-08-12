@@ -285,6 +285,7 @@ pub fn remove_worktree(repo_path: &Path, worktree_path: &Path) -> Result<()> {
     Ok(())
 }
 
+
 #[cfg(test)]
 pub fn calculate_git_stats(worktree_path: &Path, parent_branch: &str) -> Result<GitStats> {
     let mut changed_files: HashSet<String> = HashSet::new();

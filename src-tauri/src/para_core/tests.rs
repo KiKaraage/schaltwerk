@@ -156,20 +156,21 @@ struct TestEnvironment {
     }
     
     #[test]
-    fn test_duplicate_session_name_fails() {
+    fn test_duplicate_session_name_auto_increments() {
         let env = TestEnvironment::new().unwrap();
         let manager = env.get_session_manager().unwrap();
         
         // Create first session
-        manager.create_session("duplicate", None, None).unwrap();
+        let session1 = manager.create_session("duplicate", None, None).unwrap();
+        assert_eq!(session1.name, "duplicate");
         
-        // Try to create session with same name
-        let result = manager.create_session("duplicate", None, None);
-        assert!(result.is_err());
+        // Try to create session with same name - should auto-increment
+        let session2 = manager.create_session("duplicate", None, None).unwrap();
+        assert_eq!(session2.name, "duplicate-1");
         
-        // Verify only one session exists
+        // Verify both sessions exist
         let sessions = manager.list_sessions().unwrap();
-        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions.len(), 2);
     }
     
     #[test]
@@ -279,6 +280,88 @@ struct TestEnvironment {
         assert!(session1.terminals.contains(&"session-session-1-top".to_string()));
         assert!(session1.terminals.contains(&"session-session-1-bottom".to_string()));
         assert!(session1.terminals.contains(&"session-session-1-right".to_string()));
+    }
+    
+    #[test]
+    fn test_session_name_conflict_resolution() {
+        let env = TestEnvironment::new().unwrap();
+        let manager = env.get_session_manager().unwrap();
+        
+        // Create first session
+        let session1 = manager.create_session("test-conflict", None, None).unwrap();
+        assert_eq!(session1.name, "test-conflict");
+        assert_eq!(session1.branch, "schaltwerk/test-conflict");
+        
+        // Try to create another session with same name - should auto-increment
+        let session2 = manager.create_session("test-conflict", None, None).unwrap();
+        assert_eq!(session2.name, "test-conflict-1");
+        assert_eq!(session2.branch, "schaltwerk/test-conflict-1");
+        
+        // And another one
+        let session3 = manager.create_session("test-conflict", None, None).unwrap();
+        assert_eq!(session3.name, "test-conflict-2");
+        assert_eq!(session3.branch, "schaltwerk/test-conflict-2");
+        
+        // Verify all worktrees exist
+        assert!(session1.worktree_path.exists());
+        assert!(session2.worktree_path.exists());
+        assert!(session3.worktree_path.exists());
+    }
+    
+    #[test]
+    fn test_worktree_cleanup_on_reuse() {
+        let env = TestEnvironment::new().unwrap();
+        let manager = env.get_session_manager().unwrap();
+        
+        // Create a session
+        let session1 = manager.create_session("reuse-test", None, None).unwrap();
+        
+        // Add a file to the worktree
+        let test_file = session1.worktree_path.join("old-content.txt");
+        std::fs::write(&test_file, "This is old content").unwrap();
+        
+        // Cancel the session
+        manager.cancel_session("reuse-test").unwrap();
+        
+        // Manually corrupt the cleanup (simulate incomplete cleanup)
+        std::fs::create_dir_all(&session1.worktree_path).unwrap();
+        std::fs::write(&test_file, "Leftover content").unwrap();
+        
+        // Create a new session with the same name
+        let session2 = manager.create_session("reuse-test", None, None).unwrap();
+        
+        // Due to conflict resolution, it should have a different name
+        assert_eq!(session2.name, "reuse-test-1");
+        
+        // The new worktree should be clean
+        assert!(session2.worktree_path.exists());
+        assert!(!session2.worktree_path.join("old-content.txt").exists());
+    }
+    
+    #[test]
+    fn test_corrupted_worktree_recovery() {
+        let env = TestEnvironment::new().unwrap();
+        let manager = env.get_session_manager().unwrap();
+        
+        // Create a corrupted worktree situation
+        let worktree_path = env.repo_path.join(".schaltwerk").join("worktrees").join("corrupted");
+        std::fs::create_dir_all(&worktree_path).unwrap();
+        std::fs::write(worktree_path.join("leftover.txt"), "corrupt data").unwrap();
+        
+        // Create a dangling branch
+        Command::new("git")
+            .args(["branch", "schaltwerk/corrupted"])
+            .current_dir(&env.repo_path)
+            .output()
+            .unwrap();
+        
+        // Now try to create a session with that name
+        let session = manager.create_session("corrupted", Some("test prompt"), None).unwrap();
+        
+        // Should get an incremented name due to branch conflict
+        assert_eq!(session.name, "corrupted-1");
+        assert!(session.worktree_path.exists());
+        assert!(!session.worktree_path.join("leftover.txt").exists());
     }
     
     #[test]

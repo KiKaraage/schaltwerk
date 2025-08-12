@@ -12,12 +12,11 @@ const startedGlobal = new Set<string>();
 export function clearTerminalStartedTracking(terminalIds: string[]) {
     terminalIds.forEach(id => startedGlobal.delete(id));
 }
-
 interface TerminalProps {
     terminalId: string;
     className?: string;
-    sessionName?: string; // explicitly provided session name
-    isOrchestrator?: boolean; // explicitly provided orchestrator flag
+    sessionName?: string;
+    isOrchestrator?: boolean;
 }
 
 export interface TerminalHandle {

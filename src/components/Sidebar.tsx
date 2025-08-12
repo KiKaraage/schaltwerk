@@ -470,6 +470,12 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                     // Add new session without re-sorting - will be sorted by memo
                     return [enriched, ...prev]
                 })
+                // Auto-select the newly created session tab immediately
+                setSelection({ 
+                    kind: 'session', 
+                    payload: session_name,
+                    worktreePath: worktree_path
+                })
             })
             unlisteners.push(u3)
 

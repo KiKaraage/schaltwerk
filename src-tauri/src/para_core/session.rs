@@ -50,6 +50,55 @@ impl SessionManager {
         lock
     }
     
+    fn find_unique_session_paths(&self, base_name: &str) -> Result<(String, String, PathBuf)> {
+        let mut counter = 0;
+        loop {
+            let name = if counter == 0 {
+                base_name.to_string()
+            } else {
+                format!("{base_name}-{counter}")
+            };
+            
+            let branch = format!("schaltwerk/{name}");
+            let worktree_path = self.repo_path
+                .join(".schaltwerk")
+                .join("worktrees")
+                .join(&name);
+            
+            // Check if this combination is available
+            let branch_exists = git::branch_exists(&self.repo_path, &branch)?;
+            let worktree_exists = worktree_path.exists();
+            let session_exists = self.db.get_session_by_name(&self.repo_path, &name).is_ok();
+            
+            if !branch_exists && !worktree_exists && !session_exists {
+                log::info!("Found unique session name: {name}");
+                return Ok((name, branch, worktree_path));
+            }
+            
+            log::warn!("Session name '{name}' conflicts (branch: {branch_exists}, worktree: {worktree_exists}, db: {session_exists}), trying next");
+            
+            counter += 1;
+            if counter > 100 {
+                return Err(anyhow!("Could not find unique session name after 100 attempts"));
+            }
+        }
+    }
+    
+    fn cleanup_existing_worktree(&self, worktree_path: &Path) -> Result<()> {
+        // First try to remove as git worktree
+        if let Err(e) = git::remove_worktree(&self.repo_path, worktree_path) {
+            log::debug!("Git worktree removal returned: {e}");
+        }
+        
+        // Then remove directory if it still exists
+        if worktree_path.exists() {
+            log::info!("Removing worktree directory: {}", worktree_path.display());
+            std::fs::remove_dir_all(worktree_path)?;
+        }
+        
+        Ok(())
+    }
+    
     #[cfg(test)]
     pub fn create_session(&self, name: &str, prompt: Option<&str>, base_branch: Option<&str>) -> Result<Session> {
         self.create_session_with_auto_flag(name, prompt, base_branch, false)
@@ -65,12 +114,13 @@ impl SessionManager {
             return Err(anyhow!("Invalid session name: use only letters, numbers, hyphens, and underscores"));
         }
         
+        // Find a unique session name if there's a conflict
+        let (unique_name, branch, worktree_path) = self.find_unique_session_paths(name)?;
+        
         let session_id = Uuid::new_v4().to_string();
-        let branch = format!("schaltwerk/{name}");
-        let worktree_path = self.repo_path
-            .join(".schaltwerk")
-            .join("worktrees")
-            .join(name);
+        
+        // Cleanup any existing worktree at this path (shouldn't happen with unique names, but be safe)
+        self.cleanup_existing_worktree(&worktree_path)?;
         
         let parent_branch = if let Some(base) = base_branch {
             base.to_string()
@@ -97,7 +147,7 @@ impl SessionManager {
         
         let session = Session {
             id: session_id.clone(),
-            name: name.to_string(),
+            name: unique_name.clone(),
             display_name: None,
             repository_path: self.repo_path.clone(),
             repository_name: repo_name,
