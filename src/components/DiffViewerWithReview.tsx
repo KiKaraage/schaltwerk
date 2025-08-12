@@ -821,6 +821,8 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                   rightTitle={`${branchInfo?.currentBranch || 'current'} (${branchInfo?.headCommit || 'HEAD'})`}
                 />
 
+                
+
                 {/* Selection overlay (visual only, above diff) */}
                 <div
                   className="selection-overlay"
