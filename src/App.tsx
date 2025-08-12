@@ -12,6 +12,7 @@ import { useProject } from './contexts/ProjectContext'
 import { OpenInSplitButton } from './components/OpenInSplitButton'
 import { VscGear, VscHome } from 'react-icons/vsc'
 import { HomeScreen } from './components/HomeScreen'
+import { SettingsModal } from './components/SettingsModal'
 // FocusProvider moved to root in main.tsx
 
 export interface SessionActionEvent {
@@ -39,6 +40,7 @@ export default function App() {
   const [selectedDiffFile, setSelectedDiffFile] = useState<string | null>(null)
   const [isDiffViewerOpen, setIsDiffViewerOpen] = useState(false)
   const [showHome, setShowHome] = useState(true)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   
   // Start with home screen, user must explicitly choose a project
   // Remove automatic project detection to ensure home screen is shown first
@@ -79,9 +81,21 @@ export default function App() {
                                document.activeElement?.tagName === 'TEXTAREA' ||
                                document.activeElement?.getAttribute('contenteditable') === 'true'
         
-        if (!newSessionOpen && !cancelModalOpen && !isInputFocused) {
+        if (!newSessionOpen && !cancelModalOpen && !settingsOpen && !isInputFocused) {
           e.preventDefault()
           setNewSessionOpen(true)
+        }
+      }
+      
+      // Add settings shortcut (Cmd+,)
+      if (modifierKey && e.key === ',') {
+        const isInputFocused = document.activeElement?.tagName === 'INPUT' || 
+                               document.activeElement?.tagName === 'TEXTAREA' ||
+                               document.activeElement?.getAttribute('contenteditable') === 'true'
+        
+        if (!settingsOpen && !isInputFocused) {
+          e.preventDefault()
+          setSettingsOpen(true)
         }
       }
     }
@@ -108,7 +122,7 @@ export default function App() {
       window.removeEventListener('global-new-session-shortcut', handleGlobalNewSession)
       window.removeEventListener('schaltwerk:open-diff-view' as any, handleOpenDiffView)
     }
-  }, [newSessionOpen, cancelModalOpen])
+  }, [newSessionOpen, cancelModalOpen, settingsOpen])
   
   
   const handleCancelSession = async (_force: boolean) => {
@@ -227,8 +241,9 @@ export default function App() {
             return await invoke<string>('get_current_directory')
           }} />
           <button
+            onClick={() => setSettingsOpen(true)}
             className="h-7 w-7 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 border border-slate-700/60"
-            title="Settings"
+            title="Settings (⌘,)"
             aria-label="Settings"
           >
             <VscGear className="text-[15px]" />
@@ -290,6 +305,7 @@ export default function App() {
           onClose={handleCloseDiffViewer}
         />
       )}
+      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   )
 }

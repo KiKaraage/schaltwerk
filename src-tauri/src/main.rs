@@ -300,6 +300,184 @@ async fn get_current_directory() -> Result<String, String> {
     }
 }
 
+use std::process::Command;
+use std::sync::Mutex;
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{body::Incoming as IncomingBody, Request, Response, StatusCode};
+use hyper_util::rt::TokioIo;
+use tokio::net::TcpListener;
+use http_body_util::BodyExt;
+
+static MCP_SERVER_PROCESS: Mutex<Option<std::process::Child>> = Mutex::new(None);
+
+async fn start_webhook_server(app: tauri::AppHandle) {
+    async fn handle_webhook(
+        app: tauri::AppHandle,
+        req: Request<IncomingBody>,
+    ) -> Result<Response<String>, hyper::Error> {
+        let method = req.method();
+        let path = req.uri().path();
+        
+        log::debug!("Webhook request: {method} {path}");
+        
+        match (method, path) {
+            (&hyper::Method::POST, "/webhook/session-added") => {
+                // Parse the JSON body
+                let body = req.into_body();
+                let body_bytes = body.collect().await?.to_bytes();
+                
+                if let Ok(body_str) = String::from_utf8(body_bytes.to_vec()) {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                        log::info!("Received session-added webhook: {payload}");
+                        
+                        // Extract session information and emit the event
+                        if let Some(session_name) = payload.get("session_name").and_then(|v| v.as_str()) {
+                            #[derive(serde::Serialize, Clone)]
+                            struct SessionAddedPayload {
+                                session_name: String,
+                                branch: String,
+                                worktree_path: String,
+                                parent_branch: String,
+                            }
+                            
+                            let session_payload = SessionAddedPayload {
+                                session_name: session_name.to_string(),
+                                branch: payload.get("branch").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                worktree_path: payload.get("worktree_path").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                parent_branch: payload.get("parent_branch").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                            };
+                            
+                            if let Err(e) = app.emit("schaltwerk:session-added", &session_payload) {
+                                log::error!("Failed to emit session-added event: {e}");
+                            }
+                        }
+                    }
+                }
+                
+                Ok(Response::new("OK".to_string()))
+            }
+            (&hyper::Method::POST, "/webhook/session-removed") => {
+                // Parse the JSON body for session removal
+                let body = req.into_body();
+                let body_bytes = body.collect().await?.to_bytes();
+                
+                if let Ok(body_str) = String::from_utf8(body_bytes.to_vec()) {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                        log::info!("Received session-removed webhook: {payload}");
+                        
+                        if let Some(session_name) = payload.get("session_name").and_then(|v| v.as_str()) {
+                            #[derive(serde::Serialize, Clone)]
+                            struct SessionRemovedPayload {
+                                session_name: String,
+                            }
+                            
+                            let session_payload = SessionRemovedPayload {
+                                session_name: session_name.to_string(),
+                            };
+                            
+                            if let Err(e) = app.emit("schaltwerk:session-removed", &session_payload) {
+                                log::error!("Failed to emit session-removed event: {e}");
+                            }
+                        }
+                    }
+                }
+                
+                Ok(Response::new("OK".to_string()))
+            }
+            _ => {
+                let mut response = Response::new("Not Found".to_string());
+                *response.status_mut() = StatusCode::NOT_FOUND;
+                Ok(response)
+            }
+        }
+    }
+    
+    // Start the webhook server on a local port
+    let addr = "127.0.0.1:8547";
+    let listener = match TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            log::warn!("Failed to start webhook server on {addr}: {e}");
+            return;
+        }
+    };
+    
+    log::info!("Webhook server listening on http://{addr}");
+    
+    loop {
+        let (stream, _) = match listener.accept().await {
+            Ok(conn) => conn,
+            Err(e) => {
+                log::error!("Failed to accept webhook connection: {e}");
+                continue;
+            }
+        };
+        
+        let io = TokioIo::new(stream);
+        let app_clone = app.clone();
+        
+        tokio::task::spawn(async move {
+            if let Err(err) = http1::Builder::new()
+                .serve_connection(io, service_fn(move |req| handle_webhook(app_clone.clone(), req)))
+                .await
+            {
+                log::error!("Error serving webhook connection: {err:?}");
+            }
+        });
+    }
+}
+
+#[tauri::command]
+async fn start_mcp_server(_port: Option<u16>) -> Result<(), String> {
+    let mut process_guard = MCP_SERVER_PROCESS.lock().unwrap();
+    
+    // Check if already running
+    if let Some(ref mut process) = *process_guard {
+        match process.try_wait() {
+            Ok(Some(_)) => {
+                // Process has exited, continue to start new one
+            }
+            Ok(None) => {
+                // Process is still running
+                return Ok(());
+            }
+            Err(_) => {
+                // Error checking status, continue to start new one
+            }
+        }
+    }
+    
+    // Get the path to the MCP server
+    let app_dir = std::env::current_dir()
+        .map_err(|e| format!("Failed to get current directory: {e}"))?;
+    
+    let mcp_server_path = if app_dir.file_name().and_then(|n| n.to_str()) == Some("src-tauri") {
+        app_dir.parent()
+            .map(|p| p.join("mcp-server").join("build").join("schaltwerk-mcp-server.js"))
+            .ok_or_else(|| "Failed to get parent directory".to_string())?
+    } else {
+        app_dir.join("mcp-server").join("build").join("schaltwerk-mcp-server.js")
+    };
+    
+    if !mcp_server_path.exists() {
+        return Err(format!("MCP server not found at: {}", mcp_server_path.display()));
+    }
+    
+    // Start the MCP server as a subprocess
+    let child = Command::new("node")
+        .arg(mcp_server_path)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to start MCP server: {e}"))?;
+    
+    *process_guard = Some(child);
+    
+    Ok(())
+}
+
 use tauri::Emitter;
 
 #[tauri::command]
@@ -704,6 +882,7 @@ fn main() {
             get_terminal_activity_status,
             get_all_terminal_activity,
             get_current_directory,
+            start_mcp_server,
             para_core_create_session,
             para_core_list_sessions,
             para_core_list_enriched_sessions,
@@ -765,6 +944,19 @@ fn main() {
                 }
             });
             
+            // Start webhook server for MCP notifications
+            let webhook_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                start_webhook_server(webhook_handle).await;
+            });
+            
+            // Try to start MCP server automatically (don't fail if it doesn't work)
+            tauri::async_runtime::spawn(async {
+                if let Err(e) = start_mcp_server(None).await {
+                    log::warn!("Failed to auto-start MCP server: {e}");
+                }
+            });
+            
             Ok(())
         })
         .on_window_event(|_window, event| {
@@ -774,6 +966,13 @@ fn main() {
                     let manager = get_project_manager().await;
                     manager.cleanup_all().await;
                 });
+                
+                // Stop MCP server if running
+                if let Ok(mut guard) = MCP_SERVER_PROCESS.lock() {
+                    if let Some(mut process) = guard.take() {
+                        let _ = process.kill();
+                    }
+                }
             }
         })
         .run(tauri::generate_context!())
