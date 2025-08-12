@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Sidebar } from '../components/Sidebar'
 import { SelectionProvider } from '../contexts/SelectionContext'
 import { FocusProvider } from '../contexts/FocusContext'
+import { ProjectProvider } from '../contexts/ProjectContext'
 import { invoke } from '@tauri-apps/api/core'
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -65,11 +66,13 @@ describe('Session Switching Performance', () => {
         })
 
         const TestWrapper = ({ children }: { children: React.ReactNode }) => (
-            <SelectionProvider>
-                <FocusProvider>
-                    {children}
-                </FocusProvider>
-            </SelectionProvider>
+            <ProjectProvider>
+                <SelectionProvider>
+                    <FocusProvider>
+                        {children}
+                    </FocusProvider>
+                </SelectionProvider>
+            </ProjectProvider>
         )
 
         const startTime = performance.now()
@@ -84,8 +87,7 @@ describe('Session Switching Performance', () => {
             expect(screen.getByText('session-0')).toBeInTheDocument()
         })
 
-        const loadTime = performance.now() - startTime
-        console.log(`Initial load time with 50 sessions: ${loadTime}ms`)
+        performance.now() - startTime // Track initial load time
 
         const session10Button = screen.getByText('session-10').closest('button')
         expect(session10Button).toBeInTheDocument()
@@ -97,7 +99,6 @@ describe('Session Switching Performance', () => {
         await new Promise(resolve => setTimeout(resolve, 100))
 
         const switchTime = performance.now() - switchStartTime
-        console.log(`Session switch time: ${switchTime}ms`)
 
         expect(switchTime).toBeLessThan(500)
 
@@ -109,7 +110,6 @@ describe('Session Switching Performance', () => {
         await new Promise(resolve => setTimeout(resolve, 100))
 
         const secondSwitchTime = performance.now() - secondSwitchStart
-        console.log(`Second session switch time: ${secondSwitchTime}ms`)
 
         expect(secondSwitchTime).toBeLessThan(200)
     })
@@ -133,11 +133,13 @@ describe('Session Switching Performance', () => {
         })
 
         const { rerender } = render(
-            <SelectionProvider>
-                <FocusProvider>
-                    <Sidebar />
-                </FocusProvider>
-            </SelectionProvider>
+            <ProjectProvider>
+                <SelectionProvider>
+                    <FocusProvider>
+                        <Sidebar />
+                    </FocusProvider>
+                </SelectionProvider>
+            </ProjectProvider>
         )
 
         await waitFor(() => {
@@ -146,11 +148,13 @@ describe('Session Switching Performance', () => {
 
         // Force re-render without changing data
         rerender(
-            <SelectionProvider>
-                <FocusProvider>
-                    <Sidebar />
-                </FocusProvider>
-            </SelectionProvider>
+            <ProjectProvider>
+                <SelectionProvider>
+                    <FocusProvider>
+                        <Sidebar />
+                    </FocusProvider>
+                </SelectionProvider>
+            </ProjectProvider>
         )
 
         // Sessions should only be loaded once

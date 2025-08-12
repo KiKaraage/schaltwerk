@@ -18,7 +18,9 @@ describe('useClaudeSession', () => {
     mockInvoke.mockResolvedValueOnce(undefined)
     const { result } = renderHook(() => useClaudeSession())
     await act(async () => result.current.startClaude({ isOrchestrator: true }))
-    expect(mockInvoke).toHaveBeenCalledWith('para_core_start_claude_orchestrator')
+    expect(mockInvoke).toHaveBeenCalledWith('para_core_start_claude_orchestrator', { 
+      terminalId: 'orchestrator-default-top' 
+    })
   })
 
   it('starts session when sessionName is provided', async () => {

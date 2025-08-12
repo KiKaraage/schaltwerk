@@ -13,14 +13,14 @@ mod logging;
 mod terminal;
 mod para_core;
 mod open_apps;
+mod projects;
+mod project_manager;
 
 use std::sync::Arc;
-use terminal::TerminalManager;
-// Manager not directly used anymore; remove import
-use tokio::sync::{OnceCell, Mutex};
+use project_manager::ProjectManager;
+use tokio::sync::OnceCell;
 
-static TERMINAL_MANAGER: OnceCell<Arc<TerminalManager>> = OnceCell::const_new();
-static PARA_CORE: OnceCell<Arc<Mutex<para_core::ParaCore>>> = OnceCell::const_new();
+static PROJECT_MANAGER: OnceCell<Arc<ProjectManager>> = OnceCell::const_new();
 
 fn parse_agent_command(command: &str) -> Result<(String, String, Vec<String>), String> {
     // Command format: "cd /path/to/worktree && {claude|cursor-agent} [args]"
@@ -102,18 +102,22 @@ fn parse_agent_command(command: &str) -> Result<(String, String, Vec<String>), S
     Ok((cwd, agent_name.to_string(), args))
 }
 
-async fn get_terminal_manager() -> Arc<TerminalManager> {
-    TERMINAL_MANAGER.get_or_init(|| async {
-        Arc::new(TerminalManager::new())
+async fn get_project_manager() -> Arc<ProjectManager> {
+    PROJECT_MANAGER.get_or_init(|| async {
+        Arc::new(ProjectManager::new())
     }).await.clone()
 }
 
-async fn get_para_core() -> Arc<Mutex<para_core::ParaCore>> {
-    PARA_CORE.get_or_init(|| async {
-        let core = para_core::ParaCore::new(None)
-            .expect("Failed to initialize para core");
-        Arc::new(Mutex::new(core))
-    }).await.clone()
+async fn get_terminal_manager() -> Result<Arc<terminal::TerminalManager>, String> {
+    let manager = get_project_manager().await;
+    manager.current_terminal_manager().await
+        .map_err(|e| format!("Failed to get terminal manager: {e}"))
+}
+
+async fn get_para_core() -> Result<Arc<tokio::sync::Mutex<para_core::ParaCore>>, String> {
+    let manager = get_project_manager().await;
+    manager.current_para_core().await
+        .map_err(|e| format!("Failed to get para core: {e}"))
 }
 
 async fn start_terminal_monitoring(app: tauri::AppHandle) {
@@ -142,7 +146,13 @@ async fn start_terminal_monitoring(app: tauri::AppHandle) {
         loop {
             interval.tick().await;
             
-            let manager = get_terminal_manager().await;
+            let manager = match get_terminal_manager().await {
+                Ok(m) => m,
+                Err(e) => {
+                    log::debug!("No active project for terminal monitoring: {e}");
+                    continue;
+                }
+            };
             let stuck_terminals = manager.get_all_terminal_activity().await;
             let mut currently_stuck = HashSet::new();
             
@@ -203,7 +213,7 @@ async fn start_terminal_monitoring(app: tauri::AppHandle) {
 async fn para_core_list_enriched_sessions() -> Result<Vec<para_core::EnrichedSession>, String> {
     log::debug!("Listing enriched sessions from para_core");
     
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     let manager = core.session_manager();
     
@@ -221,7 +231,7 @@ async fn para_core_list_enriched_sessions() -> Result<Vec<para_core::EnrichedSes
 
 #[tauri::command]
 async fn create_terminal(app: tauri::AppHandle, id: String, cwd: String) -> Result<String, String> {
-    let manager = get_terminal_manager().await;
+    let manager = get_terminal_manager().await?;
     manager.set_app_handle(app).await;
     manager.create_terminal(id.clone(), cwd).await?;
     Ok(id)
@@ -229,61 +239,64 @@ async fn create_terminal(app: tauri::AppHandle, id: String, cwd: String) -> Resu
 
 #[tauri::command]
 async fn write_terminal(id: String, data: String) -> Result<(), String> {
-    let manager = get_terminal_manager().await;
+    let manager = get_terminal_manager().await?;
     manager.write_terminal(id, data.into_bytes()).await
 }
 
 #[tauri::command]
 async fn resize_terminal(id: String, cols: u16, rows: u16) -> Result<(), String> {
-    let manager = get_terminal_manager().await;
+    let manager = get_terminal_manager().await?;
     manager.resize_terminal(id, cols, rows).await
 }
 
 #[tauri::command]
 async fn close_terminal(id: String) -> Result<(), String> {
-    let manager = get_terminal_manager().await;
+    let manager = get_terminal_manager().await?;
     manager.close_terminal(id).await
 }
 
 #[tauri::command]
 async fn terminal_exists(id: String) -> Result<bool, String> {
-    let manager = get_terminal_manager().await;
+    let manager = get_terminal_manager().await?;
     manager.terminal_exists(&id).await
 }
 
 #[tauri::command]
 async fn get_terminal_buffer(id: String) -> Result<String, String> {
-    let manager = get_terminal_manager().await;
+    let manager = get_terminal_manager().await?;
     manager.get_terminal_buffer(id).await
 }
 
 #[tauri::command]
 async fn get_terminal_activity_status(id: String) -> Result<(bool, u64), String> {
-    let manager = get_terminal_manager().await;
+    let manager = get_terminal_manager().await?;
     manager.get_terminal_activity_status(id).await
 }
 
 #[tauri::command]
 async fn get_all_terminal_activity() -> Result<Vec<(String, bool, u64)>, String> {
-    let manager = get_terminal_manager().await;
+    let manager = get_terminal_manager().await?;
     Ok(manager.get_all_terminal_activity().await)
 }
 
 #[tauri::command]
-fn get_current_directory() -> Result<String, String> {
-    // In dev mode, the current dir is src-tauri, so we need to go up one level
-    let current_dir = std::env::current_dir()
-        .map_err(|e| format!("Failed to get current directory: {e}"))?;
-    
-    // Check if we're in src-tauri directory (dev mode)
-    if current_dir.file_name().and_then(|n| n.to_str()) == Some("src-tauri") {
-        // Go up one level to get the project root
-        current_dir.parent()
-            .map(|p| p.to_string_lossy().to_string())
-            .ok_or_else(|| "Failed to get parent directory".to_string())
+async fn get_current_directory() -> Result<String, String> {
+    // Use the current active project path if available, otherwise fallback to current directory
+    let manager = get_project_manager().await;
+    if let Ok(project) = manager.current_project().await {
+        Ok(project.path.to_string_lossy().to_string())
     } else {
-        // We're already in the project root (production mode)
-        Ok(current_dir.to_string_lossy().to_string())
+        // Fallback for when no project is active (needed for Claude sessions)
+        let current_dir = std::env::current_dir()
+            .map_err(|e| format!("Failed to get current directory: {e}"))?;
+        
+        if current_dir.file_name().and_then(|n| n.to_str()) == Some("src-tauri") {
+            current_dir.parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .ok_or_else(|| "Failed to get parent directory".to_string())
+        } else {
+            Ok(current_dir.to_string_lossy().to_string())
+        }
     }
 }
 
@@ -297,7 +310,7 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
     let was_user_edited = user_edited_name.unwrap_or(false);
     let was_auto_generated = looks_docker_style && !was_user_edited;
     
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core_lock = core.lock().await;
     let manager = core_lock.session_manager();
     
@@ -338,7 +351,13 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
             
             // Get session info and database reference
             let (session_info, db_clone) = {
-                let core = get_para_core().await;
+                let core = match get_para_core().await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        log::warn!("Cannot get para_core for session '{session_name_clone}': {e}");
+                        return;
+                    }
+                };
                 let core = core.lock().await;
                 let manager = core.session_manager();
                 let session = match manager.get_session(&session_name_clone) {
@@ -387,7 +406,13 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
                     log::info!("Successfully generated display name '{display_name}' for session '{session_name_clone}'");
                     
                     // Re-acquire lock only to get the updated sessions list
-                    let core = get_para_core().await;
+                    let core = match get_para_core().await {
+                        Ok(c) => c,
+                        Err(e) => {
+                            log::warn!("Cannot get para_core for sessions refresh: {e}");
+                            return;
+                        }
+                    };
                     let core = core.lock().await;
                     let manager = core.session_manager();
                     if let Ok(sessions) = manager.list_enriched_sessions() {
@@ -417,7 +442,7 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
 
 #[tauri::command]
 async fn para_core_list_sessions() -> Result<Vec<para_core::Session>, String> {
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     let manager = core.session_manager();
     
@@ -427,7 +452,7 @@ async fn para_core_list_sessions() -> Result<Vec<para_core::Session>, String> {
 
 #[tauri::command]
 async fn para_core_get_session(name: String) -> Result<para_core::Session, String> {
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     let manager = core.session_manager();
     
@@ -439,7 +464,7 @@ async fn para_core_get_session(name: String) -> Result<para_core::Session, Strin
 async fn para_core_cancel_session(app: tauri::AppHandle, name: String) -> Result<(), String> {
     log::info!("Starting cancel session: {name}");
     
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     let manager = core.session_manager();
     
@@ -453,16 +478,17 @@ async fn para_core_cancel_session(app: tauri::AppHandle, name: String) -> Result
                 SessionRemovedPayload { session_name: name.clone() },
             );
             // Best-effort: close known session terminals to avoid orphaned PTYs
-            let manager = get_terminal_manager().await;
-            let ids = vec![
-                format!("session-{}-top", name),
-                format!("session-{}-bottom", name),
-                format!("session-{}-right", name),
-            ];
-            for id in ids {
-                if let Ok(true) = manager.terminal_exists(&id).await {
-                    if let Err(e) = manager.close_terminal(id.clone()).await {
-                        log::warn!("Failed to close terminal {id} on cancel: {e}");
+            if let Ok(manager) = get_terminal_manager().await {
+                let ids = vec![
+                    format!("session-{}-top", name),
+                    format!("session-{}-bottom", name),
+                    format!("session-{}-right", name),
+                ];
+                for id in ids {
+                    if let Ok(true) = manager.terminal_exists(&id).await {
+                        if let Err(e) = manager.close_terminal(id.clone()).await {
+                            log::warn!("Failed to close terminal {id} on cancel: {e}");
+                        }
                     }
                 }
             }
@@ -478,7 +504,7 @@ async fn para_core_cancel_session(app: tauri::AppHandle, name: String) -> Result
 
 #[tauri::command]
 async fn para_core_update_git_stats(session_id: String) -> Result<(), String> {
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     let manager = core.session_manager();
     
@@ -488,7 +514,7 @@ async fn para_core_update_git_stats(session_id: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn para_core_cleanup_orphaned_worktrees() -> Result<(), String> {
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     let manager = core.session_manager();
     
@@ -500,7 +526,7 @@ async fn para_core_cleanup_orphaned_worktrees() -> Result<(), String> {
 async fn para_core_start_claude(session_name: String) -> Result<String, String> {
     log::info!("Starting Claude for session: {session_name}");
     
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     let manager = core.session_manager();
     
@@ -517,7 +543,7 @@ async fn para_core_start_claude(session_name: String) -> Result<String, String> 
     
     // Create terminal with the appropriate agent
     let terminal_id = format!("session-{session_name}-top");
-    let terminal_manager = get_terminal_manager().await;
+    let terminal_manager = get_terminal_manager().await?;
     
     // Close existing terminal if it exists
     if terminal_manager.terminal_exists(&terminal_id).await? {
@@ -539,10 +565,10 @@ async fn para_core_start_claude(session_name: String) -> Result<String, String> 
 }
 
 #[tauri::command]
-async fn para_core_start_claude_orchestrator() -> Result<String, String> {
-    log::info!("Starting Claude for orchestrator");
+async fn para_core_start_claude_orchestrator(terminal_id: String) -> Result<String, String> {
+    log::info!("Starting Claude for orchestrator in terminal: {terminal_id}");
     
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     let manager = core.session_manager();
     
@@ -555,8 +581,7 @@ async fn para_core_start_claude_orchestrator() -> Result<String, String> {
     let (cwd, agent_name, agent_args) = parse_agent_command(&command)?;
     
     // Create terminal with the appropriate agent
-    let terminal_id = "orchestrator-top".to_string();
-    let terminal_manager = get_terminal_manager().await;
+    let terminal_manager = get_terminal_manager().await?;
     
     // Close existing terminal if it exists
     if terminal_manager.terminal_exists(&terminal_id).await? {
@@ -579,7 +604,7 @@ async fn para_core_start_claude_orchestrator() -> Result<String, String> {
 
 #[tauri::command]
 async fn para_core_set_skip_permissions(enabled: bool) -> Result<(), String> {
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     
     core.db.set_skip_permissions(enabled)
@@ -588,7 +613,7 @@ async fn para_core_set_skip_permissions(enabled: bool) -> Result<(), String> {
 
 #[tauri::command]
 async fn para_core_get_skip_permissions() -> Result<bool, String> {
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     
     core.db.get_skip_permissions()
@@ -597,7 +622,7 @@ async fn para_core_get_skip_permissions() -> Result<bool, String> {
 
 #[tauri::command]
 async fn para_core_set_agent_type(agent_type: String) -> Result<(), String> {
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     
     core.db.set_agent_type(&agent_type)
@@ -606,7 +631,7 @@ async fn para_core_set_agent_type(agent_type: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn para_core_get_agent_type() -> Result<String, String> {
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     
     core.db.get_agent_type()
@@ -639,7 +664,7 @@ async fn open_in_vscode(worktree_path: String) -> Result<(), String> {
 async fn para_core_mark_session_ready(name: String, auto_commit: bool) -> Result<bool, String> {
     log::info!("Marking session {name} as reviewed (auto_commit: {auto_commit})");
     
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     let manager = core.session_manager();
     
@@ -651,7 +676,7 @@ async fn para_core_mark_session_ready(name: String, auto_commit: bool) -> Result
 async fn para_core_unmark_session_ready(name: String) -> Result<(), String> {
     log::info!("Unmarking session {name} as reviewed");
     
-    let core = get_para_core().await;
+    let core = get_para_core().await?;
     let core = core.lock().await;
     let manager = core.session_manager();
     
@@ -668,6 +693,7 @@ fn main() {
     let _cleanup_guard = cleanup::TerminalCleanupGuard;
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             create_terminal,
             write_terminal,
@@ -702,7 +728,15 @@ fn main() {
             diff_commands::get_file_diff_from_main,
             diff_commands::get_current_branch_name,
             diff_commands::get_base_branch_name,
-            diff_commands::get_commit_comparison_info
+            diff_commands::get_commit_comparison_info,
+            get_recent_projects,
+            add_recent_project,
+            update_recent_project_timestamp,
+            remove_recent_project,
+            is_git_repository,
+            directory_exists,
+            initialize_project,
+            get_project_default_branch
         ])
         .setup(|app| {
             // Start activity tracking for para_core sessions
@@ -714,22 +748,28 @@ fn main() {
                 start_terminal_monitoring(monitor_handle).await;
             });
             tauri::async_runtime::spawn(async move {
-                let core = get_para_core().await;
-                let db = {
-                    let core_lock = core.lock().await;
-                    Arc::new(core_lock.db.clone())
-                };
-                para_core::activity::start_activity_tracking_with_app(db, app_handle);
+                match get_para_core().await {
+                    Ok(core) => {
+                        let db = {
+                            let core_lock = core.lock().await;
+                            Arc::new(core_lock.db.clone())
+                        };
+                        para_core::activity::start_activity_tracking_with_app(db, app_handle);
+                    }
+                    Err(e) => {
+                        log::debug!("No active project for activity tracking: {e}");
+                    }
+                }
             });
             
             Ok(())
         })
         .on_window_event(|_window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Cleanup terminals when window is closed
+                // Cleanup all project terminals when window is closed
                 tauri::async_runtime::block_on(async {
-                    let manager = get_terminal_manager().await;
-                    let _ = manager.close_all().await;
+                    let manager = get_project_manager().await;
+                    manager.cleanup_all().await;
                 });
             }
         })
@@ -737,12 +777,81 @@ fn main() {
         .expect("error while running tauri application");
 }
 
+#[tauri::command]
+fn get_recent_projects() -> Result<Vec<projects::RecentProject>, String> {
+    let history = projects::ProjectHistory::load()
+        .map_err(|e| format!("Failed to load project history: {e}"))?;
+    Ok(history.get_recent_projects())
+}
+
+#[tauri::command]
+fn add_recent_project(path: String) -> Result<(), String> {
+    let mut history = projects::ProjectHistory::load()
+        .map_err(|e| format!("Failed to load project history: {e}"))?;
+    history.add_project(&path)
+        .map_err(|e| format!("Failed to add project: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn update_recent_project_timestamp(path: String) -> Result<(), String> {
+    let mut history = projects::ProjectHistory::load()
+        .map_err(|e| format!("Failed to load project history: {e}"))?;
+    history.update_timestamp(&path)
+        .map_err(|e| format!("Failed to update project: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn remove_recent_project(path: String) -> Result<(), String> {
+    let mut history = projects::ProjectHistory::load()
+        .map_err(|e| format!("Failed to load project history: {e}"))?;
+    history.remove_project(&path)
+        .map_err(|e| format!("Failed to remove project: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn is_git_repository(path: String) -> Result<bool, String> {
+    Ok(projects::is_git_repository(std::path::Path::new(&path)))
+}
+
+#[tauri::command]
+fn directory_exists(path: String) -> Result<bool, String> {
+    Ok(projects::directory_exists(std::path::Path::new(&path)))
+}
+
+#[tauri::command]
+async fn initialize_project(path: String) -> Result<(), String> {
+    let path = std::path::PathBuf::from(path);
+    let manager = get_project_manager().await;
+    
+    // Switch to the project (creates it if it doesn't exist)
+    manager.switch_to_project(path)
+        .await
+        .map_err(|e| format!("Failed to initialize project: {e}"))?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_project_default_branch() -> Result<String, String> {
+    let manager = get_project_manager().await;
+    if let Ok(project) = manager.current_project().await {
+        crate::para_core::git::get_default_branch(&project.path)
+            .map_err(|e| format!("Failed to get default branch: {e}"))
+    } else {
+        // No active project, try current directory
+        let current_dir = std::env::current_dir()
+            .map_err(|e| format!("Failed to get current directory: {e}"))?;
+        crate::para_core::git::get_default_branch(&current_dir)
+            .map_err(|e| format!("Failed to get default branch: {e}"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
-    use tempfile::TempDir;
-    use serial_test::serial;
 
     #[test]
     fn test_parse_agent_command_claude_with_prompt() {
@@ -778,38 +887,5 @@ mod tests {
         assert!(res.is_err());
     }
 
-    #[test]
-    #[serial]
-    fn test_get_current_directory_from_src_tauri_returns_parent() {
-        let tmp = TempDir::new().unwrap();
-        let project_root = tmp.path();
-        let src_tauri = project_root.join("src-tauri");
-        std::fs::create_dir_all(&src_tauri).unwrap();
-
-        let prev = env::current_dir().unwrap();
-        env::set_current_dir(&src_tauri).unwrap();
-
-        let dir = get_current_directory().unwrap();
-        // canonicalize to handle /private prefix on macOS temp dirs
-        let exp = std::fs::canonicalize(project_root).unwrap();
-        let got = std::fs::canonicalize(dir).unwrap();
-        assert_eq!(got, exp);
-
-        env::set_current_dir(prev).unwrap();
-    }
-
-    #[test]
-    #[serial]
-    fn test_get_current_directory_from_non_src_tauri_returns_current() {
-        let tmp = TempDir::new().unwrap();
-        let prev = env::current_dir().unwrap();
-        env::set_current_dir(tmp.path()).unwrap();
-
-        let dir = get_current_directory().unwrap();
-        let exp = std::fs::canonicalize(tmp.path()).unwrap();
-        let got = std::fs::canonicalize(dir).unwrap();
-        assert_eq!(got, exp);
-
-        env::set_current_dir(prev).unwrap();
-    }
+    // Tests removed: get_current_directory now uses active project instead of current working directory
 }

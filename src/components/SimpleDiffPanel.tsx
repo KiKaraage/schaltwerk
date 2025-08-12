@@ -94,8 +94,8 @@ export function SimpleDiffPanel({ onFileSelect }: SimpleDiffPanelProps) {
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
-                    pre: ({ children, ...props }) => (
-                      <pre className="bg-slate-800 rounded p-2 overflow-x-auto" {...props}>
+                    pre: ({ children }) => (
+                      <pre className="bg-slate-800 rounded p-2 overflow-x-auto">
                         {children}
                       </pre>
                     ),
@@ -111,65 +111,64 @@ export function SimpleDiffPanel({ onFileSelect }: SimpleDiffPanelProps) {
                         </code>
                       )
                     },
-                  ul: ({ children, ...props }) => (
-                    <ul className="list-disc list-inside space-y-1" {...props}>
+                  ul: ({ children }) => (
+                    <ul className="list-disc list-inside space-y-1">
                       {children}
                     </ul>
                   ),
-                  ol: ({ children, ...props }) => (
-                    <ol className="list-decimal list-inside space-y-1" {...props}>
+                  ol: ({ children }) => (
+                    <ol className="list-decimal list-inside space-y-1">
                       {children}
                     </ol>
                   ),
-                  h1: ({ children, ...props }) => (
-                    <h1 className="text-lg font-bold mb-2" {...props}>
+                  h1: ({ children }) => (
+                    <h1 className="text-lg font-bold mb-2">
                       {children}
                     </h1>
                   ),
-                  h2: ({ children, ...props }) => (
-                    <h2 className="text-base font-bold mb-2" {...props}>
+                  h2: ({ children }) => (
+                    <h2 className="text-base font-bold mb-2">
                       {children}
                     </h2>
                   ),
-                  h3: ({ children, ...props }) => (
-                    <h3 className="text-sm font-bold mb-1" {...props}>
+                  h3: ({ children }) => (
+                    <h3 className="text-sm font-bold mb-1">
                       {children}
                     </h3>
                   ),
-                  p: ({ children, ...props }) => (
-                    <p className="mb-2" {...props}>
+                  p: ({ children }) => (
+                    <p className="mb-2">
                       {children}
                     </p>
                   ),
-                  a: ({ children, href, ...props }) => (
+                  a: ({ children, href }) => (
                     <a
                       href={href}
                       className="text-blue-400 hover:text-blue-300 underline"
                       target="_blank"
                       rel="noopener noreferrer"
-                      {...props}
                     >
                       {children}
                     </a>
                   ),
-                  blockquote: ({ children, ...props }) => (
-                    <blockquote className="border-l-2 border-slate-600 pl-3 italic text-slate-400" {...props}>
+                  blockquote: ({ children }) => (
+                    <blockquote className="border-l-2 border-slate-600 pl-3 italic text-slate-400">
                       {children}
                     </blockquote>
                   ),
                   hr: () => <hr className="border-slate-700 my-3" />,
-                  table: ({ children, ...props }) => (
-                    <table className="border-collapse border border-slate-700" {...props}>
+                  table: ({ children }) => (
+                    <table className="border-collapse border border-slate-700">
                       {children}
                     </table>
                   ),
-                  th: ({ children, ...props }) => (
-                    <th className="border border-slate-700 px-2 py-1 bg-slate-800" {...props}>
+                  th: ({ children }) => (
+                    <th className="border border-slate-700 px-2 py-1 bg-slate-800">
                       {children}
                     </th>
                   ),
-                  td: ({ children, ...props }) => (
-                    <td className="border border-slate-700 px-2 py-1" {...props}>
+                  td: ({ children }) => (
+                    <td className="border border-slate-700 px-2 py-1">
                       {children}
                     </td>
                   )

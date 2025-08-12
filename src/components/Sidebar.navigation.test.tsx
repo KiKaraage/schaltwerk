@@ -3,6 +3,7 @@ import { render, waitFor } from '@testing-library/react'
 import { Sidebar } from './Sidebar'
 import { SelectionProvider } from '../contexts/SelectionContext'
 import { FocusProvider } from '../contexts/FocusContext'
+import { ProjectProvider } from '../contexts/ProjectContext'
 
 // Do NOT mock useKeyboardShortcuts here; we want real keyboard behavior
 
@@ -25,11 +26,13 @@ const mockUnlisten = vi.fn()
 
 function createTestWrapper() {
   return ({ children }: { children: React.ReactNode }) => (
-    <SelectionProvider>
-      <FocusProvider>
-        {children}
-      </FocusProvider>
-    </SelectionProvider>
+    <ProjectProvider>
+      <SelectionProvider>
+        <FocusProvider>
+          {children}
+        </FocusProvider>
+      </SelectionProvider>
+    </ProjectProvider>
   )
 }
 

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Sidebar } from './Sidebar'
 import { SelectionProvider } from '../contexts/SelectionContext'
 import { FocusProvider } from '../contexts/FocusContext'
+import { ProjectProvider } from '../contexts/ProjectContext'
 import { invoke } from '@tauri-apps/api/core'
 
 vi.mock('@tauri-apps/api/core')
@@ -61,6 +62,19 @@ const createSession = (id: string, lastModified?: string, createdAt?: string, re
 })
 
 describe('Sidebar sorting algorithms comprehensive tests', () => {
+  // Helper function to wrap component with all required providers
+  const renderWithProviders = (component: React.ReactElement) => {
+    return render(
+      <ProjectProvider>
+        <SelectionProvider>
+          <FocusProvider>
+            {component}
+          </FocusProvider>
+        </SelectionProvider>
+      </ProjectProvider>
+    )
+  }
+  
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
@@ -82,13 +96,7 @@ describe('Sidebar sorting algorithms comprehensive tests', () => {
       throw new Error(`Unexpected command: ${cmd}`)
     })
 
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {
@@ -125,13 +133,7 @@ describe('Sidebar sorting algorithms comprehensive tests', () => {
       throw new Error(`Unexpected command: ${cmd}`)
     })
 
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {
@@ -176,13 +178,7 @@ describe('Sidebar sorting algorithms comprehensive tests', () => {
       throw new Error(`Unexpected command: ${cmd}`)
     })
 
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {
@@ -229,13 +225,7 @@ describe('Sidebar sorting algorithms comprehensive tests', () => {
       throw new Error(`Unexpected command: ${cmd}`)
     })
 
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {
@@ -293,13 +283,7 @@ describe('Sidebar sorting algorithms comprehensive tests', () => {
       throw new Error(`Unexpected command: ${cmd}`)
     })
 
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {

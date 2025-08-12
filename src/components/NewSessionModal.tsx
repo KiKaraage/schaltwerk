@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react'
 import { useClaudeSession } from '../hooks/useClaudeSession'
 import { generateDockerStyleName } from '../utils/dockerNames'
+import { invoke } from '@tauri-apps/api/core'
 
 interface Props {
     open: boolean
@@ -17,7 +18,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [name, setName] = useState(() => generateDockerStyleName())
     const [, setWasEdited] = useState(false)
     const [prompt, setPrompt] = useState('')
-    const [baseBranch, setBaseBranch] = useState('main')
+    const [baseBranch, setBaseBranch] = useState('')
     const [skipPermissions, setSkipPermissions] = useState(false)
     const [agentType, setAgentType] = useState<'claude' | 'cursor'>('claude')
     const [validationError, setValidationError] = useState('')
@@ -115,6 +116,15 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             setPrompt('')
             setValidationError('')
             
+            // Fetch the default branch for the current project
+            invoke<string>('get_project_default_branch')
+                .then(branch => setBaseBranch(branch))
+                .catch(err => {
+                    console.warn('Failed to get default branch:', err)
+                    // Fallback to empty string - user will need to enter it manually
+                    setBaseBranch('')
+                })
+            
             getSkipPermissions().then(setSkipPermissions)
             getAgentType().then(type => setAgentType(type as 'claude' | 'cursor'))
             
@@ -184,8 +194,13 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                     <div className="grid grid-cols-3 gap-3">
                         <div>
                             <label className="block text-sm text-slate-300 mb-1">Base branch</label>
-                            <input value={baseBranch} onChange={e => setBaseBranch(e.target.value)} className="w-full bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700" />
-                            <p className="text-xs text-slate-400 mt-1">--branch from which to create the worktree</p>
+                            <input 
+                                value={baseBranch} 
+                                onChange={e => setBaseBranch(e.target.value)} 
+                                className="w-full bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700" 
+                                placeholder="e.g. main, master, develop"
+                            />
+                            <p className="text-xs text-slate-400 mt-1">Branch from which to create the worktree</p>
                         </div>
                         <div>
                             <label className="block text-sm text-slate-300 mb-1">Agent</label>

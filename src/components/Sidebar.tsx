@@ -64,7 +64,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
-    const { selection, setSelection, clearTerminalTracking } = useSelection()
+    const { selection, setSelection, clearTerminalTracking, terminals } = useSelection()
     const { setFocusForSession, setCurrentFocus } = useFocus()
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
     const [filterMode, setFilterMode] = useState<'all' | 'unreviewed' | 'reviewed'>(() => {
@@ -337,7 +337,6 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     useEffect(() => {
         const setupRefreshListener = async () => {
             const unlisten = await listen<EnrichedSession[]>('schaltwerk:sessions-refreshed', (event) => {
-                console.log('Sessions refreshed event received, updating session list')
                 setSessions(event.payload.map(s => ({
                     ...s,
                     info: {
@@ -669,9 +668,18 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 open={switchOrchestratorModal}
                 onClose={() => setSwitchOrchestratorModal(false)}
                 onSwitch={async (agentType) => {
+                    // Get current orchestrator terminal IDs from the selection context
+                    const orchestratorTerminals = [terminals.top, terminals.bottom]
+                    // Also try to close any 'right' terminal if it exists
+                    const allTerminals = [...orchestratorTerminals]
+                    if (terminals.top) {
+                        // Generate the right terminal ID based on the same pattern
+                        const rightId = terminals.top.replace('-top', '-right')
+                        allTerminals.push(rightId)
+                    }
+                    
                     // First close existing orchestrator terminals
-                    const orchestratorTerminals = ['orchestrator-top', 'orchestrator-bottom', 'orchestrator-right']
-                    for (const terminalId of orchestratorTerminals) {
+                    for (const terminalId of allTerminals) {
                         try {
                             const exists = await invoke<boolean>('terminal_exists', { id: terminalId })
                             if (exists) {
@@ -683,10 +691,10 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                     }
                     
                     // Clear terminal tracking so they can be recreated
-                    clearTerminalTracking(orchestratorTerminals)
+                    clearTerminalTracking(allTerminals)
                     
                     // Also clear the Terminal component's global started tracking
-                    clearTerminalStartedTracking(orchestratorTerminals)
+                    clearTerminalStartedTracking(allTerminals)
                     
                     // Update the agent type preference
                     await invoke('para_core_set_agent_type', { agentType })

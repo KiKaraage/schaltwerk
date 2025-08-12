@@ -56,7 +56,6 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
     }, [hydrated]);
 
     useEffect(() => {
-        console.log(`[Terminal ${terminalId}] Mounting/re-mounting terminal component`);
         mountedRef.current = true;
         let cancelled = false;
         if (!termRef.current) {
@@ -191,7 +190,6 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
         // Hydrate from buffer
         const hydrateTerminal = async () => {
             try {
-                console.log(`[Terminal ${terminalId}] Fetching buffer for hydration`);
                 const snapshot = await invoke<string>('get_terminal_buffer', { id: terminalId });
                 
                 if (snapshot) {
@@ -274,7 +272,6 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
         // Cleanup - dispose UI but keep terminal process running
         // Terminal processes will be cleaned up when the app exits
         return () => {
-            console.log(`[Terminal ${terminalId}] Unmounting terminal component`);
             mountedRef.current = false;
             cancelled = true;
             if (resizeTimeout) clearTimeout(resizeTimeout);
@@ -312,7 +309,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             }
             startingTerminals.current.set(terminalId, true);
             try {
-                if (isOrchestrator || terminalId === 'orchestrator-top') {
+                if (isOrchestrator || (terminalId.includes('orchestrator') && terminalId.endsWith('-top'))) {
                     const exists = await invoke<boolean>('terminal_exists', { id: terminalId });
                     if (!exists) {
                         const attempts = (startAttempts.current.get(terminalId) || 0) + 1;
@@ -322,16 +319,13 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
                             setTimeout(start, 150);
                             return;
                         }
-                        console.warn(`[Terminal ${terminalId}] Terminal not ready after retries; skipping auto-start.`);
                         startingTerminals.current.set(terminalId, false);
                         return;
                     }
-                    console.log('[Terminal orchestrator-top] Auto-starting Claude');
                     // Mark as started BEFORE invoking to prevent overlaps
                     startedGlobal.add(terminalId);
                     try {
-                        await invoke('para_core_start_claude_orchestrator');
-                        console.log(`[Terminal ${terminalId}] Claude started successfully`);
+                        await invoke('para_core_start_claude_orchestrator', { terminalId });
                     } catch (e) {
                         // Roll back start flags on failure to allow retry
                         startedGlobal.delete(terminalId);
@@ -342,12 +336,10 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
                 } else {
                     const expectedId = sessionName ? `session-${sessionName}-top` : null;
                     if (!sessionName) {
-                        console.warn(`[Terminal ${terminalId}] Missing sessionName prop; cannot start Claude reliably.`);
                         startingTerminals.current.set(terminalId, false);
                         return;
                     }
                     if (expectedId !== terminalId) {
-                        console.warn(`[Terminal ${terminalId}] Terminal ID mismatch for session ${sessionName}. Expected ${expectedId}, got ${terminalId}. Skipping auto-start.`);
                         startingTerminals.current.set(terminalId, false);
                         return;
                     }
@@ -360,16 +352,13 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
                             setTimeout(start, 150);
                             return;
                         }
-                        console.warn(`[Terminal ${terminalId}] Terminal not ready after retries; skipping auto-start.`);
                         startingTerminals.current.set(terminalId, false);
                         return;
                     }
-                    console.log(`[Terminal ${terminalId}] Auto-starting Claude for session: ${sessionName}`);
                     // Mark as started BEFORE invoking to prevent overlaps
                     startedGlobal.add(terminalId);
                     try {
                         await invoke('para_core_start_claude', { sessionName });
-                        console.log(`[Terminal ${terminalId}] Claude started successfully for session ${sessionName}`);
                     } catch (e) {
                         // Roll back start flags on failure to allow retry
                         startedGlobal.delete(terminalId);

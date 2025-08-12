@@ -8,8 +8,10 @@ import { NewSessionModal } from './components/NewSessionModal'
 import { CancelConfirmation } from './components/CancelConfirmation'
 import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from './contexts/SelectionContext'
+import { useProject } from './contexts/ProjectContext'
 import { OpenInSplitButton } from './components/OpenInSplitButton'
-import { VscGear } from 'react-icons/vsc'
+import { VscGear, VscHome } from 'react-icons/vsc'
+import { HomeScreen } from './components/HomeScreen'
 // FocusProvider moved to root in main.tsx
 
 export interface SessionActionEvent {
@@ -22,15 +24,39 @@ export interface SessionActionEvent {
 }
 
 
+// Helper function to get the basename of a path (last segment)
+function getBasename(path: string): string {
+  return path.split(/[/\\]/).pop() || path
+}
+
 export default function App() {
   const { selection, setSelection } = useSelection()
+  const { projectPath, setProjectPath } = useProject()
   const [newSessionOpen, setNewSessionOpen] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [currentSession, setCurrentSession] = useState<{ id: string; name: string; displayName: string; branch: string; hasUncommittedChanges: boolean } | null>(null)
   const [selectedDiffFile, setSelectedDiffFile] = useState<string | null>(null)
   const [isDiffViewerOpen, setIsDiffViewerOpen] = useState(false)
+  const [showHome, setShowHome] = useState(true)
   
+  useEffect(() => {
+    const checkCurrentProject = async () => {
+      try {
+        const currentDir = await invoke<string>('get_current_directory')
+        const isGitRepo = await invoke<boolean>('is_git_repository', { path: currentDir })
+        if (isGitRepo) {
+          setProjectPath(currentDir)
+          setShowHome(false)
+          // SelectionContext will automatically update orchestrator when projectPath changes
+        }
+      } catch (err) {
+        console.error('Failed to check current project:', err)
+      }
+    }
+    checkCurrentProject()
+  }, [])
+
   useEffect(() => {
     const handleSessionAction = (event: CustomEvent<SessionActionEvent>) => {
       const { action, sessionId, sessionName, sessionDisplayName, branch, hasUncommittedChanges = false } = event.detail
@@ -155,11 +181,51 @@ export default function App() {
       alert(`Failed to create session: ${error}`)
     }
   }
+
+  const handleOpenProject = async (path: string) => {
+    try {
+      await invoke('initialize_project', { path })
+      await invoke('add_recent_project', { path })
+      setProjectPath(path)
+      setShowHome(false)
+      // SelectionContext will automatically update orchestrator when projectPath changes
+    } catch (error) {
+      console.error('Failed to open project:', error)
+      alert(`Failed to open project: ${error}`)
+    }
+  }
+
+  const handleGoHome = () => {
+    setShowHome(true)
+  }
+  
+  if (showHome) {
+    return <HomeScreen onOpenProject={handleOpenProject} />
+  }
   
   return (
     <>
       {/* Global top bar */}
-      <div className="absolute top-0 right-0 left-0 h-9 flex items-center justify-end px-3 gap-2 z-20 pointer-events-none">
+      <div className="absolute top-0 right-0 left-0 h-9 flex items-center justify-between px-3 z-20 pointer-events-none">
+        <div className="flex items-center gap-2 pointer-events-auto">
+          <button
+            onClick={handleGoHome}
+            className="h-7 w-7 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 border border-slate-700/60"
+            title="Home"
+            aria-label="Home"
+          >
+            <VscHome className="text-[15px]" />
+          </button>
+          {projectPath && (
+            <div className="flex items-center gap-1 text-xs bg-slate-800/40 border border-slate-700/60 rounded-lg px-2 py-1">
+              <span className="text-slate-400 font-medium">{getBasename(projectPath)}</span>
+              <span className="text-slate-600">•</span>
+              <span className="text-slate-500 max-w-[200px] truncate" title={projectPath}>
+                {projectPath}
+              </span>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-2 pointer-events-auto">
           <OpenInSplitButton resolvePath={async () => {
             if (selection.kind === 'session') {

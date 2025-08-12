@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { useProject } from './ProjectContext'
 
 export interface Selection {
     kind: 'session' | 'orchestrator'
@@ -23,12 +24,14 @@ interface SelectionContextType {
 const SelectionContext = createContext<SelectionContextType | null>(null)
 
 export function SelectionProvider({ children }: { children: React.ReactNode }) {
+    const { projectPath } = useProject()
     const [selection, setSelectionState] = useState<Selection>({ kind: 'orchestrator' })
     const [terminals, setTerminals] = useState<TerminalSet>({
-        top: 'orchestrator-top',
-        bottom: 'orchestrator-bottom'
+        top: 'orchestrator-default-top',
+        bottom: 'orchestrator-default-bottom'
     })
     const [isReady, setIsReady] = useState(false)
+    const previousProjectPath = useRef<string | null>(null)
     
     // Track which terminals we've created to avoid duplicates
     const terminalsCreated = useRef(new Set<string>())
@@ -36,12 +39,34 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     
     // Get terminal IDs for a selection
     const getTerminalIds = useCallback((sel: Selection): TerminalSet => {
-        const base = sel.kind === 'orchestrator' ? 'orchestrator' : `session-${sel.payload}`
-        return {
-            top: `${base}-top`,
-            bottom: `${base}-bottom`
+        if (sel.kind === 'orchestrator') {
+            // Make orchestrator terminals project-specific by using project path hash
+            // Use a simple hash of the full path to ensure uniqueness
+            let projectId = 'default'
+            if (projectPath) {
+                // Get just the last directory name and combine with a hash for uniqueness
+                const dirName = projectPath.split(/[/\\]/).pop() || 'unknown'
+                // Simple hash: sum of char codes
+                let hash = 0
+                for (let i = 0; i < projectPath.length; i++) {
+                    hash = ((hash << 5) - hash) + projectPath.charCodeAt(i)
+                    hash = hash & hash // Convert to 32bit integer
+                }
+                projectId = `${dirName}-${Math.abs(hash).toString(16).slice(0, 6)}`
+            }
+            const base = `orchestrator-${projectId}`
+            return {
+                top: `${base}-top`,
+                bottom: `${base}-bottom`
+            }
+        } else {
+            const base = `session-${sel.payload}`
+            return {
+                top: `${base}-top`,
+                bottom: `${base}-bottom`
+            }
         }
-    }, [])
+    }, [projectPath])
     
     // Create a single terminal with deduplication
     const createTerminal = useCallback(async (id: string, cwd: string) => {
@@ -61,7 +86,6 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             try {
                 const exists = await invoke<boolean>('terminal_exists', { id })
                 if (!exists) {
-                    console.log(`[SelectionContext] Creating terminal: ${id}`)
                     await invoke('create_terminal', { id, cwd })
                 }
                 terminalsCreated.current.add(id)
@@ -85,10 +109,11 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     const ensureTerminals = useCallback(async (sel: Selection): Promise<TerminalSet> => {
         const ids = getTerminalIds(sel)
         
+        
         // Determine working directory
         let cwd: string
         if (sel.kind === 'orchestrator') {
-            cwd = await invoke<string>('get_current_directory')
+            cwd = projectPath || await invoke<string>('get_current_directory')
         } else if (sel.worktreePath) {
             cwd = sel.worktreePath
         } else {
@@ -115,7 +140,6 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     
     // Clear terminal tracking for specific terminals
     const clearTerminalTracking = useCallback((terminalIds: string[]) => {
-        console.log('[SelectionContext] Clearing terminal tracking for:', terminalIds)
         terminalIds.forEach(id => {
             terminalsCreated.current.delete(id)
             creationLock.current.delete(id)
@@ -124,11 +148,9 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     
     // Set selection atomically
     const setSelection = useCallback(async (newSelection: Selection, forceRecreate = false) => {
-        console.log('[SelectionContext] Changing selection to:', newSelection, 'forceRecreate:', forceRecreate)
         
         // Check if we're actually changing selection (but allow initial setup or force recreate)
         if (!forceRecreate && isReady && selection.kind === newSelection.kind && selection.payload === newSelection.payload) {
-            console.log('[SelectionContext] Selection unchanged, skipping')
             return
         }
         
@@ -158,7 +180,6 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             // Mark as reviewed
             setIsReady(true)
 
-            console.log('[SelectionContext] Selection change complete')
         } catch (error) {
             console.error('[SelectionContext] Failed to set selection:', error)
             // Stay on current selection if we fail
@@ -166,10 +187,25 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
         }
     }, [ensureTerminals, getTerminalIds, clearTerminalTracking])
     
+    // Watch for project path changes and update orchestrator terminals when project changes
+    useEffect(() => {
+        // Skip initial mount and when projectPath hasn't actually changed
+        if (previousProjectPath.current === projectPath) {
+            return
+        }
+        
+        // If we had a previous project and now have a new one, force orchestrator update
+        if (previousProjectPath.current !== null && projectPath !== null && selection.kind === 'orchestrator') {
+            // Force recreate orchestrator terminals with new project path
+            setSelection({ kind: 'orchestrator' }, true)
+        }
+        
+        previousProjectPath.current = projectPath
+    }, [projectPath, selection.kind, setSelection])
+    
     // Initialize on mount
     useEffect(() => {
         const initialize = async () => {
-            console.log('[SelectionContext] Initializing...')
             
             // Try to restore from localStorage
             const stored = localStorage.getItem('schaltwerk-selection')

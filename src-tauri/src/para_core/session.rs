@@ -33,6 +33,7 @@ pub struct SessionManager {
 
 impl SessionManager {
     pub fn new(db: Database, repo_path: PathBuf) -> Self {
+        log::info!("Creating SessionManager with repo path: {}", repo_path.display());
         Self { db, repo_path }
     }
     
@@ -55,6 +56,8 @@ impl SessionManager {
     }
     
     pub fn create_session_with_auto_flag(&self, name: &str, prompt: Option<&str>, base_branch: Option<&str>, was_auto_generated: bool) -> Result<Session> {
+        log::info!("Creating session '{}' in repository: {}", name, self.repo_path.display());
+        
         // Serialize session creation per repository to avoid git worktree races
         let repo_lock = Self::get_repo_lock(&self.repo_path);
         let _guard = repo_lock.lock().unwrap();
@@ -69,9 +72,21 @@ impl SessionManager {
             .join("worktrees")
             .join(name);
         
-        let parent_branch = base_branch
-            .map(String::from)
-            .unwrap_or_else(|| git::get_current_branch(&self.repo_path).unwrap_or_else(|_| "main".to_string()));
+        let parent_branch = if let Some(base) = base_branch {
+            base.to_string()
+        } else {
+            log::info!("No base branch specified, detecting default branch for session creation");
+            match git::get_default_branch(&self.repo_path) {
+                Ok(default) => {
+                    log::info!("Using detected default branch: {default}");
+                    default
+                }
+                Err(e) => {
+                    log::error!("Failed to detect default branch: {e}");
+                    return Err(anyhow!("Failed to detect default branch: {}. Please ensure the repository has at least one branch (e.g., 'main' or 'master')", e));
+                }
+            }
+        };
         let repo_name = self.repo_path
             .file_name()
             .unwrap()
@@ -103,12 +118,13 @@ impl SessionManager {
             was_auto_generated,
         };
         
-        // Create worktree with new branch from specified base
-        let create_result = if let Some(base) = base_branch {
-            git::create_worktree_from_base(&self.repo_path, &branch, &worktree_path, base)
-        } else {
-            git::create_worktree(&self.repo_path, &branch, &worktree_path)
-        };
+        // Always create worktree from the parent branch (either specified or detected)
+        let create_result = git::create_worktree_from_base(
+            &self.repo_path, 
+            &branch, 
+            &worktree_path, 
+            &parent_branch
+        );
         
         if let Err(e) = create_result {
             return Err(anyhow!("Failed to create worktree: {}", e));

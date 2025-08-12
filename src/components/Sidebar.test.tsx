@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { Sidebar } from './Sidebar'
 import { SelectionProvider } from '../contexts/SelectionContext'
 import { FocusProvider } from '../contexts/FocusContext'
+import { ProjectProvider } from '../contexts/ProjectContext'
 
 // Mock dependencies
 vi.mock('@tauri-apps/api/core', () => ({
@@ -151,11 +152,13 @@ export const sessionReducers = {
 
 function createTestWrapper() {
   return ({ children }: { children: React.ReactNode }) => (
-    <SelectionProvider>
-      <FocusProvider>
-        {children}
-      </FocusProvider>
-    </SelectionProvider>
+    <ProjectProvider>
+      <SelectionProvider>
+        <FocusProvider>
+          {children}
+        </FocusProvider>
+      </SelectionProvider>
+    </ProjectProvider>
   )
 }
 

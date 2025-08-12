@@ -6,17 +6,20 @@ import App from './App'
 import { SelectionProvider } from './contexts/SelectionContext'
 import { FocusProvider } from './contexts/FocusContext'
 import { ReviewProvider } from './contexts/ReviewContext'
+import { ProjectProvider } from './contexts/ProjectContext'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <SelectionProvider>
-      <FocusProvider>
-        <ReviewProvider>
-          <div className="h-screen w-screen">
-            <App />
-          </div>
-        </ReviewProvider>
-      </FocusProvider>
-    </SelectionProvider>
+    <ProjectProvider>
+      <SelectionProvider>
+        <FocusProvider>
+          <ReviewProvider>
+            <div className="h-screen w-screen">
+              <App />
+            </div>
+          </ReviewProvider>
+        </FocusProvider>
+      </SelectionProvider>
+    </ProjectProvider>
   </React.StrictMode>,
 )

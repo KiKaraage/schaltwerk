@@ -26,6 +26,17 @@ impl ParaCore {
     pub fn new(db_path: Option<PathBuf>) -> Result<Self> {
         let repo_path = git::discover_repository()?;
         let db = Database::new(db_path)?;
+        log::warn!("Using ParaCore::new() - should use new_with_repo_path() instead");
+        
+        Ok(Self {
+            db,
+            repo_path,
+        })
+    }
+    
+    pub fn new_with_repo_path(db_path: Option<PathBuf>, repo_path: PathBuf) -> Result<Self> {
+        log::info!("Creating ParaCore with explicit repo path: {}", repo_path.display());
+        let db = Database::new(db_path)?;
         
         Ok(Self {
             db,

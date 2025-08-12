@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { ReactNode } from 'react'
 import { SelectionProvider, useSelection } from './SelectionContext'
+import { ProjectProvider } from './ProjectContext'
 
 // Mock Tauri API
 vi.mock('@tauri-apps/api/core', () => ({
@@ -13,7 +14,9 @@ const mockInvoke = vi.mocked(invoke)
 
 // Test wrapper component
 const wrapper = ({ children }: { children: ReactNode }) => (
-  <SelectionProvider>{children}</SelectionProvider>
+  <ProjectProvider>
+    <SelectionProvider>{children}</SelectionProvider>
+  </ProjectProvider>
 )
 
 describe('SelectionContext', () => {
@@ -56,8 +59,8 @@ describe('SelectionContext', () => {
       // Initial state should be orchestrator with correct terminal IDs
       expect(result.current.selection.kind).toBe('orchestrator')
       expect(result.current.terminals).toEqual({
-        top: 'orchestrator-top',
-        bottom: 'orchestrator-bottom'
+        top: 'orchestrator-default-top',
+        bottom: 'orchestrator-default-bottom'
       })
     })
 
@@ -115,11 +118,11 @@ describe('SelectionContext', () => {
       await waitFor(() => {
         expect(mockInvoke).toHaveBeenCalledWith('get_current_directory')
         expect(mockInvoke).toHaveBeenCalledWith('create_terminal', {
-          id: 'orchestrator-top',
+          id: 'orchestrator-default-top',
           cwd: '/test/cwd'
         })
         expect(mockInvoke).toHaveBeenCalledWith('create_terminal', {
-          id: 'orchestrator-bottom',
+          id: 'orchestrator-default-bottom',
           cwd: '/test/cwd'
         })
       })

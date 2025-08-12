@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Sidebar } from './Sidebar'
 import { SelectionProvider } from '../contexts/SelectionContext'
 import { FocusProvider } from '../contexts/FocusContext'
+import { ProjectProvider } from '../contexts/ProjectContext'
 import { invoke } from '@tauri-apps/api/core'
 
 vi.mock('@tauri-apps/api/core')
@@ -64,6 +65,19 @@ describe('Sidebar sort mode persistence', () => {
   let mockLocalStorage: { [key: string]: string }
   let localStorageMock: Storage
 
+  // Helper function to wrap component with all required providers
+  const renderWithProviders = (component: React.ReactElement) => {
+    return render(
+      <ProjectProvider>
+        <SelectionProvider>
+          <FocusProvider>
+            {component}
+          </FocusProvider>
+        </SelectionProvider>
+      </ProjectProvider>
+    )
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     
@@ -110,13 +124,7 @@ describe('Sidebar sort mode persistence', () => {
   })
 
   it('should default to name sorting when no localStorage value exists', async () => {
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {
@@ -144,13 +152,7 @@ describe('Sidebar sort mode persistence', () => {
     // Pre-populate localStorage with 'created' mode
     mockLocalStorage['schaltwerk:sessions:sortMode'] = 'created'
 
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {
@@ -176,13 +178,7 @@ describe('Sidebar sort mode persistence', () => {
   })
 
   it('should persist sort mode changes to localStorage', async () => {
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {
@@ -220,13 +216,7 @@ describe('Sidebar sort mode persistence', () => {
     // Test that invalid localStorage values are handled gracefully
     mockLocalStorage['schaltwerk:sessions:sortMode'] = 'invalid-sort-mode'
 
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {
@@ -254,13 +244,7 @@ describe('Sidebar sort mode persistence', () => {
   it('should handle localStorage errors gracefully during saving', async () => {
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {
@@ -297,13 +281,7 @@ describe('Sidebar sort mode persistence', () => {
     // Pre-populate localStorage with invalid value
     mockLocalStorage['schaltwerk:sessions:sortMode'] = 'invalid-mode'
 
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {
@@ -329,13 +307,7 @@ describe('Sidebar sort mode persistence', () => {
 
   it('should persist sort mode across component remounts', async () => {
     // First render - change to 'last-edited' mode
-    const { unmount } = render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    const { unmount } = renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {
@@ -362,13 +334,7 @@ describe('Sidebar sort mode persistence', () => {
     unmount()
 
     // Remount component - should restore last-edited mode
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {
@@ -397,13 +363,7 @@ describe('Sidebar sort mode persistence', () => {
     // Start with empty localStorage to test default fallback
     mockLocalStorage = {}
 
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const sessionButtons = screen.getAllByRole('button').filter(btn => {
@@ -436,13 +396,7 @@ describe('Sidebar sort mode persistence', () => {
       // Set up localStorage with the mode
       mockLocalStorage['schaltwerk:sessions:sortMode'] = mode
 
-      const { unmount } = render(
-        <SelectionProvider>
-          <FocusProvider>
-            <Sidebar />
-          </FocusProvider>
-        </SelectionProvider>
-      )
+      const { unmount } = renderWithProviders(<Sidebar />)
 
       await waitFor(() => {
         const sessionButtons = screen.getAllByRole('button').filter(btn => {

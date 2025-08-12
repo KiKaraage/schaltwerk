@@ -113,6 +113,10 @@ impl TerminalManager {
         Ok(())
     }
     
+    pub async fn cleanup_all(&self) -> Result<(), String> {
+        self.close_all().await
+    }
+    
     async fn start_event_bridge(&self, id: String) {
         // Only start if we're using LocalPtyAdapter which already emits events
         // This is a placeholder for future remote adapters that might need explicit bridging

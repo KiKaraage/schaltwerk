@@ -2,6 +2,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react'
 import { DiffViewerWithReview } from './DiffViewerWithReview'
 import { SelectionProvider } from '../contexts/SelectionContext'
 import { ReviewProvider } from '../contexts/ReviewContext'
+import { ProjectProvider } from '../contexts/ProjectContext'
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(async (cmd: string) => {
@@ -22,9 +23,11 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
-    <SelectionProvider>
-      <ReviewProvider>{children}</ReviewProvider>
-    </SelectionProvider>
+    <ProjectProvider>
+      <SelectionProvider>
+        <ReviewProvider>{children}</ReviewProvider>
+      </SelectionProvider>
+    </ProjectProvider>
   )
 }
 

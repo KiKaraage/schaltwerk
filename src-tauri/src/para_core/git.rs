@@ -52,6 +52,97 @@ pub fn get_current_branch(repo_path: &Path) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+pub fn get_default_branch(repo_path: &Path) -> Result<String> {
+    log::info!("Getting default branch for repo: {}", repo_path.display());
+    
+    // Try to get the default branch from remote origin
+    let output = Command::new("git")
+        .args([
+            "-C", repo_path.to_str().unwrap(),
+            "symbolic-ref", "refs/remotes/origin/HEAD"
+        ])
+        .output();
+    
+    if let Ok(output) = output {
+        if output.status.success() {
+            let full_ref = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            log::debug!("Found remote origin HEAD: {full_ref}");
+            // Extract branch name from "refs/remotes/origin/main" -> "main"
+            if let Some(branch) = full_ref.strip_prefix("refs/remotes/origin/") {
+                log::info!("Using default branch from remote: {branch}");
+                return Ok(branch.to_string());
+            }
+        } else {
+            log::debug!("Remote origin HEAD not set, trying to set it up");
+            // Try to set up the remote HEAD
+            let setup_output = Command::new("git")
+                .args([
+                    "-C", repo_path.to_str().unwrap(),
+                    "remote", "set-head", "origin", "--auto"
+                ])
+                .output();
+            
+            if let Ok(setup_output) = setup_output {
+                if setup_output.status.success() {
+                    log::info!("Successfully set up remote HEAD, retrying");
+                    // Try again after setting up
+                    if let Ok(retry_output) = Command::new("git")
+                        .args([
+                            "-C", repo_path.to_str().unwrap(),
+                            "symbolic-ref", "refs/remotes/origin/HEAD"
+                        ])
+                        .output() 
+                    {
+                        if retry_output.status.success() {
+                            let full_ref = String::from_utf8_lossy(&retry_output.stdout).trim().to_string();
+                            if let Some(branch) = full_ref.strip_prefix("refs/remotes/origin/") {
+                                log::info!("Using default branch from remote after setup: {branch}");
+                                return Ok(branch.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Fallback: try to get current branch
+    if let Ok(current) = get_current_branch(repo_path) {
+        log::info!("Using current branch as default: {current}");
+        return Ok(current);
+    }
+    
+    // Last resort: check which branches exist and pick a common default
+    let output = Command::new("git")
+        .args([
+            "-C", repo_path.to_str().unwrap(),
+            "branch", "--list", "--format=%(refname:short)"
+        ])
+        .output()?;
+    
+    if output.status.success() {
+        let branches = String::from_utf8_lossy(&output.stdout);
+        let branch_names: Vec<&str> = branches.lines().collect();
+        log::debug!("Available branches: {branch_names:?}");
+        
+        // Check for common default branch names in priority order
+        for default_name in &["main", "master", "develop", "dev"] {
+            if branch_names.contains(default_name) {
+                log::info!("Using common default branch: {default_name}");
+                return Ok(default_name.to_string());
+            }
+        }
+        
+        // If no common defaults found, use the first available branch
+        if let Some(first_branch) = branch_names.first() {
+            log::info!("Using first available branch: {first_branch}");
+            return Ok(first_branch.to_string());
+        }
+    }
+    
+    log::error!("No branches found in repository: {}", repo_path.display());
+    Err(anyhow!("No branches found in repository"))
+}
 
 pub fn delete_branch(repo_path: &Path, branch_name: &str) -> Result<()> {
     let output = Command::new("git")
@@ -69,46 +160,6 @@ pub fn delete_branch(repo_path: &Path, branch_name: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn create_worktree_with_new_branch(repo_path: &Path, branch: &str, worktree_path: &Path) -> Result<()> {
-    if let Some(parent) = worktree_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    
-    // First check if branch already exists and delete it if it does
-    let branch_check = Command::new("git")
-        .args([
-            "-C", repo_path.to_str().unwrap(),
-            "show-ref", "--verify", "--quiet", &format!("refs/heads/{branch}")
-        ])
-        .output();
-    
-    if branch_check.is_ok() && branch_check.unwrap().status.success() {
-        // Branch exists, delete it first
-        let _ = delete_branch(repo_path, branch);
-    }
-    
-    // Create worktree with new branch based on current HEAD
-    let output = Command::new("git")
-        .args([
-            "-C", repo_path.to_str().unwrap(),
-            "worktree", "add",
-            "-b", branch,
-            worktree_path.to_str().unwrap()
-        ])
-        .output()?;
-    
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(anyhow!("Failed to create worktree: {}", stderr));
-    }
-    
-    Ok(())
-}
-
-// Keep the old function for compatibility
-pub fn create_worktree(repo_path: &Path, branch: &str, worktree_path: &Path) -> Result<()> {
-    create_worktree_with_new_branch(repo_path, branch, worktree_path)
-}
 
 pub fn create_worktree_from_base(
     repo_path: &Path,
@@ -739,8 +790,9 @@ mod performance_tests {
             .output()
             .unwrap();
         
-        // Create worktree
-        create_worktree_with_new_branch(&repo_path, "test-branch", &worktree_path).unwrap();
+        // Create worktree from current branch (master)
+        let current_branch = get_current_branch(&repo_path).unwrap();
+        create_worktree_from_base(&repo_path, "test-branch", &worktree_path, &current_branch).unwrap();
         
         // Add more files in the worktree
         for i in num_files/2..num_files {
@@ -776,17 +828,18 @@ mod performance_tests {
     
     #[test]
     fn test_git_stats_performance_with_many_files() {
-        let (_temp, _repo_path, worktree_path) = setup_test_repo_with_many_files(100);
+        let (_temp, repo_path, worktree_path) = setup_test_repo_with_many_files(100);
+        let current_branch = get_current_branch(&repo_path).unwrap();
         
         // Test old version
         let start = Instant::now();
-        let stats = calculate_git_stats(&worktree_path, "main").unwrap();
+        let stats = calculate_git_stats(&worktree_path, &current_branch).unwrap();
         let old_duration = start.elapsed();
         println!("Old git stats calculation with 100 files took: {old_duration:?}");
         
         // Test new fast version
         let start = Instant::now();
-        let fast_stats = calculate_git_stats_fast(&worktree_path, "main").unwrap();
+        let fast_stats = calculate_git_stats_fast(&worktree_path, &current_branch).unwrap();
         let fast_duration = start.elapsed();
         println!("Fast git stats calculation with 100 files took: {fast_duration:?}");
         
@@ -797,12 +850,13 @@ mod performance_tests {
     
     #[test]
     fn test_git_stats_performance_repeated_calls() {
-        let (_temp, _repo_path, worktree_path) = setup_test_repo_with_many_files(50);
+        let (_temp, repo_path, worktree_path) = setup_test_repo_with_many_files(50);
+        let current_branch = get_current_branch(&repo_path).unwrap();
         
         // Test old version
         let start = Instant::now();
         for _ in 0..5 {
-            let _ = calculate_git_stats(&worktree_path, "main").unwrap();
+            let _ = calculate_git_stats(&worktree_path, &current_branch).unwrap();
         }
         let old_duration = start.elapsed();
         println!("5 repeated old git stats calculations took: {old_duration:?}");
@@ -810,7 +864,7 @@ mod performance_tests {
         // Test new fast version
         let start = Instant::now();
         for _ in 0..5 {
-            let _ = calculate_git_stats_fast(&worktree_path, "main").unwrap();
+            let _ = calculate_git_stats_fast(&worktree_path, &current_branch).unwrap();
         }
         let fast_duration = start.elapsed();
         println!("5 repeated fast git stats calculations took: {fast_duration:?}");
@@ -859,11 +913,12 @@ mod performance_tests {
         
         // Create worktree with no changes
         let worktree_path = temp_dir.path().join(".para/worktrees/test");
-        create_worktree_with_new_branch(&repo_path, "test-branch", &worktree_path).unwrap();
+        let current_branch = get_current_branch(&repo_path).unwrap();
+        create_worktree_from_base(&repo_path, "test-branch", &worktree_path, &current_branch).unwrap();
         
         // Test that fast version is very quick when no changes
         let start = Instant::now();
-        let stats = calculate_git_stats_fast(&worktree_path, "main").unwrap();
+        let stats = calculate_git_stats_fast(&worktree_path, &current_branch).unwrap();
         let duration = start.elapsed();
         
         println!("Fast git stats with no changes took: {duration:?}");

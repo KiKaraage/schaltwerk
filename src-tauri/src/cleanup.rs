@@ -1,14 +1,12 @@
-use log::{error, info};
+use log::info;
 
 /// Cleanup all running terminals
 pub async fn cleanup_all_terminals() {
     info!("Cleaning up all terminals...");
     
-    // Use the terminal manager to close all terminals
-    if let Some(manager) = crate::TERMINAL_MANAGER.get() {
-        if let Err(e) = manager.close_all().await {
-            error!("Failed to close all terminals: {e}");
-        }
+    // Use the project manager to clean up all projects
+    if let Some(manager) = crate::PROJECT_MANAGER.get() {
+        manager.cleanup_all().await;
     }
     
     info!("Terminal cleanup complete");

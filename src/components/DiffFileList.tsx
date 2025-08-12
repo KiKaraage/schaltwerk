@@ -50,10 +50,18 @@ export function DiffFileList({ onFileSelect }: DiffFileListProps) {
   // Path resolver used by top bar now; no local button anymore
   
   useEffect(() => {
-    loadChangedFiles()
-    const interval = setInterval(loadChangedFiles, 3000)
-    return () => clearInterval(interval)
-  }, [loadChangedFiles])
+    // Only load and poll for changes if we have a session
+    // Orchestrator mode doesn't need to show diffs
+    if (sessionName) {
+      loadChangedFiles()
+      const interval = setInterval(loadChangedFiles, 3000)
+      return () => clearInterval(interval)
+    } else {
+      // Clear files when in orchestrator mode
+      setFiles([])
+      setBranchInfo(null)
+    }
+  }, [loadChangedFiles, sessionName])
   
   const handleFileClick = (file: ChangedFile) => {
     setSelectedFile(file.path)
@@ -89,7 +97,14 @@ export function DiffFileList({ onFileSelect }: DiffFileListProps) {
         </div>
       </div>
       
-      {files.length > 0 ? (
+      {sessionName === null ? (
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="text-center text-slate-500">
+            <div className="text-sm">No session selected</div>
+            <div className="text-xs mt-1">Select a session to view changes</div>
+          </div>
+        </div>
+      ) : files.length > 0 ? (
         <div className="flex-1 overflow-y-auto">
           <div className="p-2">
             {files.map(file => (

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
+import { OptimizedDiffViewer } from './OptimizedDiffViewer'
 import { useSelection } from '../contexts/SelectionContext'
 import { useReview } from '../contexts/ReviewContext'
 import { VscClose, VscChevronLeft, VscFile, VscDiffAdded, VscDiffModified, VscDiffRemoved, VscComment, VscSend, VscCheck } from 'react-icons/vsc'
@@ -627,30 +627,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     return languageMap[ext || '']
   }, [selectedFile])
 
-  const renderSyntaxHighlight = (code: string) => {
-    if (!highlightEnabled) {
-      return (
-        <code className="hljs block font-mono text-[12px] leading-[1.3] whitespace-pre">{code}</code>
-      )
-    }
-    let html: string
-    try {
-      if (language && hljs.getLanguage(language)) {
-        html = hljs.highlight(code, { language, ignoreIllegals: true }).value
-      } else {
-        const auto = hljs.highlightAuto(code)
-        html = auto.value
-      }
-    } catch {
-      html = code
-    }
-    return (
-      <code
-        className="hljs block font-mono text-[12px] leading-[1.3] whitespace-pre"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    )
-  }
 
   const fileComments = selectedFile ? getCommentsForFile(selectedFile) : []
   
@@ -842,49 +818,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                       onLineSelect={handleLineSelect}
                       leftTitle={`${branchInfo?.baseBranch || 'base'} (${branchInfo?.baseCommit || 'base'})`}
                       rightTitle={`${branchInfo?.currentBranch || 'current'} (${branchInfo?.headCommit || 'HEAD'})`}
-                      renderContent={renderSyntaxHighlight}
-                      showDiffOnly={false}
-                      hideLineNumbers={false}
-                      useDarkTheme={true}
-                      styles={{
-                        variables: {
-                          dark: {
-                            diffViewerBackground: 'transparent',
-                            diffViewerColor: '#cbd5e1',
-                            gutterBackground: 'transparent',
-                            gutterBackgroundDark: 'transparent',
-                            codeFoldBackground: 'transparent',
-                            codeFoldGutterBackground: 'transparent',
-                            emptyLineBackground: 'transparent',
-                            highlightBackground: '#334155',
-                            highlightGutterBackground: '#475569',
-                            addedBackground: 'rgba(34, 197, 94, 0.18)',
-                            addedColor: '#cbd5e1',
-                            removedBackground: 'rgba(239, 68, 68, 0.18)',
-                            removedColor: '#cbd5e1',
-                            wordAddedBackground: 'rgba(34, 197, 94, 0.32)',
-                            wordRemovedBackground: 'rgba(239, 68, 68, 0.32)',
-                            addedGutterBackground: 'rgba(34, 197, 94, 0.24)',
-                            removedGutterBackground: 'rgba(239, 68, 68, 0.24)',
-                            gutterColor: '#64748b',
-                            addedGutterColor: '#cbd5e1',
-                            removedGutterColor: '#cbd5e1',
-                            codeFoldContentColor: '#64748b',
-                            diffViewerTitleBackground: 'transparent',
-                            diffViewerTitleColor: '#cbd5e1',
-                            diffViewerTitleBorderColor: '#334155',
-                          }
-                        },
-                        diffAdded: { background: 'rgba(34, 197, 94, 0.18)' },
-                        diffRemoved: { background: 'rgba(239, 68, 68, 0.18)' },
-                        diffContainer: { background: 'transparent' },
-                        line: {
-                          fontFamily: 'SF Mono, Monaco, Consolas, monospace',
-                          fontSize: '12px',
-                          lineHeight: '1.3',
-                          whiteSpace: 'pre'
-                        }
-                      }}
                     />
 
                 {/* Selection overlay (visual only, above diff) */}
@@ -930,7 +863,6 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                       >
                         <button
                           onClick={() => {
-                            console.log('Add Comment clicked')
                             setShowCommentForm(true)
                           }}
                           className="px-4 py-2 bg-blue-600/90 hover:bg-blue-600 rounded-lg text-sm transition-colors flex items-center gap-2 shadow-xl text-white"

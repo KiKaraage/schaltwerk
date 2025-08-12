@@ -12,11 +12,6 @@ export function TerminalGrid() {
     const claudeTerminalRef = useRef<TerminalHandle>(null)
     const regularTerminalRef = useRef<TerminalHandle>(null)
     
-    console.log('[TerminalGrid] Current state:', {
-        selection,
-        terminals,
-        isOrchestrator: selection.kind === 'orchestrator'
-    })
 
     const getSessionKey = () => {
         return selection.kind === 'orchestrator' ? 'orchestrator' : selection.payload || 'unknown'
@@ -25,7 +20,6 @@ export function TerminalGrid() {
     // Listen for terminal reset events
     useEffect(() => {
         const handleTerminalReset = () => {
-            console.log('[TerminalGrid] Terminal reset event received')
             setTerminalKey(prev => prev + 1)
         }
         
@@ -40,16 +34,13 @@ export function TerminalGrid() {
         const sessionKey = getSessionKey()
         const focusArea = getFocusForSession(sessionKey)
         
-        console.log('[TerminalGrid] Session changed, focusing:', { sessionKey, focusArea })
         
         // Focus the appropriate terminal after a short delay to ensure it's rendered
         setTimeout(() => {
             if (focusArea === 'claude' && claudeTerminalRef.current) {
                 claudeTerminalRef.current.focus()
-                console.log('[TerminalGrid] Focused Claude terminal')
             } else if (focusArea === 'terminal' && regularTerminalRef.current) {
                 regularTerminalRef.current.focus()
-                console.log('[TerminalGrid] Focused regular terminal')
             }
             // TODO: Add diff focus handling when we implement it
         }, 150)
@@ -66,7 +57,6 @@ export function TerminalGrid() {
     }, [currentFocus, selection])
 
     const handleClaudeSessionClick = async () => {
-        console.log('[TerminalGrid] Claude session tab clicked', selection)
         const sessionKey = getSessionKey()
         setFocusForSession(sessionKey, 'claude')
         

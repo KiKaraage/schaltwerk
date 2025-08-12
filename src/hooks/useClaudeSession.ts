@@ -4,21 +4,19 @@ import { invoke } from '@tauri-apps/api/core'
 interface ClaudeSessionOptions {
     sessionName?: string
     isOrchestrator?: boolean
+    terminalId?: string
 }
 
 export function useClaudeSession() {
     const startClaude = useCallback(async (options: ClaudeSessionOptions = {}) => {
-        console.log('[useClaudeSession] startClaude called with options:', options)
         try {
             if (options.isOrchestrator) {
-                console.log('[useClaudeSession] Invoking para_core_start_claude_orchestrator')
-                await invoke('para_core_start_claude_orchestrator')
-                console.log('[useClaudeSession] Successfully started Claude for orchestrator')
+                await invoke('para_core_start_claude_orchestrator', { 
+                    terminalId: options.terminalId || 'orchestrator-default-top' 
+                })
                 return { success: true }
             } else if (options.sessionName) {
-                console.log('[useClaudeSession] Invoking para_core_start_claude for session:', options.sessionName)
                 await invoke('para_core_start_claude', { sessionName: options.sessionName })
-                console.log('[useClaudeSession] Successfully started Claude for session:', options.sessionName)
                 return { success: true }
             } else {
                 console.error('[useClaudeSession] Invalid Claude session options: must specify either isOrchestrator or sessionName')

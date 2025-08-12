@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Sidebar } from './Sidebar'
 import { SelectionProvider } from '../contexts/SelectionContext'
 import { FocusProvider } from '../contexts/FocusContext'
+import { ProjectProvider } from '../contexts/ProjectContext'
 import { invoke } from '@tauri-apps/api/core'
 
 vi.mock('@tauri-apps/api/core')
@@ -61,6 +62,19 @@ const createSession = (id: string, lastModified?: string, createdAt?: string, re
 })
 
 describe('Sidebar sorting functionality', () => {
+  // Helper function to wrap component with all required providers
+  const renderWithProviders = (component: React.ReactElement) => {
+    return render(
+      <ProjectProvider>
+        <SelectionProvider>
+          <FocusProvider>
+            {component}
+          </FocusProvider>
+        </SelectionProvider>
+      </ProjectProvider>
+    )
+  }
+  
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
@@ -92,13 +106,7 @@ describe('Sidebar sorting functionality', () => {
       throw new Error(`Unexpected command: ${cmd}`)
     })
 
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       // Check that sessions are loaded by looking for session buttons
@@ -194,13 +202,7 @@ describe('Sidebar sorting functionality', () => {
       throw new Error(`Unexpected command: ${cmd}`)
     })
 
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       // Check that sessions are loaded by looking for session buttons
@@ -261,13 +263,7 @@ describe('Sidebar sorting functionality', () => {
       throw new Error(`Unexpected command: ${cmd}`)
     })
 
-    const { unmount } = render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    const { unmount } = renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       // Check that sessions are loaded by looking for session buttons
@@ -294,13 +290,7 @@ describe('Sidebar sorting functionality', () => {
     // Unmount and remount - should restore last-edited mode
     unmount()
     
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       const newSortButton = screen.getByTitle(/^Sort:/i)
@@ -334,13 +324,7 @@ describe('Sidebar sorting functionality', () => {
       throw new Error(`Unexpected command: ${cmd}`)
     })
 
-    render(
-      <SelectionProvider>
-        <FocusProvider>
-          <Sidebar />
-        </FocusProvider>
-      </SelectionProvider>
-    )
+    renderWithProviders(<Sidebar />)
 
     await waitFor(() => {
       // Check that sessions are loaded by looking for session buttons
