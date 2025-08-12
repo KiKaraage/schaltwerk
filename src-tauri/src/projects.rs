@@ -121,6 +121,9 @@ mod tests {
         let projects = hist.get_recent_projects();
         assert_eq!(projects.len(), 2);
 
+        // Add a small delay to ensure timestamp difference
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        
         // Update timestamp and ensure order changes (most recent first)
         hist.update_timestamp("/a/b/c").unwrap();
         let recent = hist.get_recent_projects();

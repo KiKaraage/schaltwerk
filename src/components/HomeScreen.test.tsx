@@ -1,12 +1,13 @@
-import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HomeScreen } from './HomeScreen'
 
+import { vi } from 'vitest'
+
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }))
 
-const invoke = (await import('@tauri-apps/api/core')).invoke as unknown as vi.Mock
+const invoke = (await import('@tauri-apps/api/core')).invoke as unknown as ReturnType<typeof vi.fn>
 const dialog = await import('@tauri-apps/plugin-dialog')
 
 describe('HomeScreen', () => {
@@ -14,13 +15,13 @@ describe('HomeScreen', () => {
 
   beforeEach(() => {
     invoke.mockReset()
-    ;(dialog.open as vi.Mock).mockReset()
+    ;(dialog.open as ReturnType<typeof vi.fn>).mockReset()
   })
 
   function setup(overrides: Partial<Record<string, any>> = {}) {
     const onOpenProject = vi.fn()
     // Defaults - set BEFORE render so initial effect uses mocks
-    invoke.mockImplementation(async (cmd: string, args?: any) => {
+    invoke.mockImplementation(async (cmd: string, _args?: any) => {
       switch (cmd) {
         case 'get_recent_projects':
           return overrides.get_recent_projects ?? []
@@ -76,7 +77,7 @@ describe('HomeScreen', () => {
 
   it('open button triggers directory picker and navigates on valid git repo', async () => {
     const { onOpenProject } = setup()
-    ;(dialog.open as vi.Mock).mockResolvedValue('/some/repo')
+    ;(dialog.open as ReturnType<typeof vi.fn>).mockResolvedValue('/some/repo')
 
     const openBtn = screen.getByRole('button', { name: /open git repository/i })
     await user.click(openBtn)
@@ -90,7 +91,7 @@ describe('HomeScreen', () => {
 
   it('shows error when selected directory is not a git repo', async () => {
     setup({ is_git_repository: false })
-    ;(dialog.open as vi.Mock).mockResolvedValue('/not/repo')
+    ;(dialog.open as ReturnType<typeof vi.fn>).mockResolvedValue('/not/repo')
 
     await user.click(screen.getByRole('button', { name: /open git repository/i }))
 
@@ -101,7 +102,7 @@ describe('HomeScreen', () => {
 
   it('keyboard: pressing Enter on focused open button opens dialog', async () => {
     setup()
-    ;(dialog.open as vi.Mock).mockResolvedValue('/enter/repo')
+    ;(dialog.open as ReturnType<typeof vi.fn>).mockResolvedValue('/enter/repo')
 
     const btn = screen.getByRole('button', { name: /open git repository/i })
     btn.focus()

@@ -1,10 +1,10 @@
-import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { vi } from 'vitest'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 
-const invoke = (await import('@tauri-apps/api/core')).invoke as unknown as vi.Mock
+const invoke = (await import('@tauri-apps/api/core')).invoke as unknown as ReturnType<typeof vi.fn>
 
 // Mutable selection used by mocked hook
 let currentSelection: any = { kind: 'orchestrator' }

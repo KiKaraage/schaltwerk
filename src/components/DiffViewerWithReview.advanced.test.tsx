@@ -37,7 +37,7 @@ const invokeMock = vi.fn(async (cmd: string, _args?: any) => {
 })
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: (...args: any[]) => invokeMock(...args),
+  invoke: (cmd: string, ...args: any[]) => invokeMock(cmd, ...args),
 }))
 
 function Wrapper({ children }: { children: React.ReactNode }) {

@@ -292,11 +292,7 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
                     </div>
                   )}
                 </div>
-<<<<<<< Updated upstream
                 <div className="flex items-center gap-2 flex-shrink-0">
-=======
-                <div className="flex items-center gap-2">
->>>>>>> Stashed changes
                   <div className="flex items-center gap-1 mr-2">
                     <span className="text-xs text-slate-400">View:</span>
                     <button
