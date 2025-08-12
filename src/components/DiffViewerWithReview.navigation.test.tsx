@@ -32,27 +32,20 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe('DiffViewerWithReview keyboard navigation', () => {
-  it('Cmd/Ctrl+ArrowDown/ArrowUp navigates files safely (no crash)', async () => {
+  it('Escape key closes the modal', async () => {
+    const onClose = vi.fn()
     render(
       <Wrapper>
-        <DiffViewerWithReview filePath={null} isOpen={true} onClose={() => {}} />
+        <DiffViewerWithReview filePath="src/test.ts" isOpen={true} onClose={onClose} />
       </Wrapper>
     )
 
-    // Simulate keyboard navigation with modifier
-    const isMac = navigator.platform.toUpperCase().includes('MAC')
-
+    // Simulate pressing Escape
     await act(async () => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', [isMac ? 'metaKey' : 'ctrlKey']: true }))
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', [isMac ? 'metaKey' : 'ctrlKey']: true }))
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', [isMac ? 'metaKey' : 'ctrlKey']: true }))
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     })
 
-    // No assertions about specific file being loaded; we assert no throw and basic presence
-    // by ensuring the component kept rendering (no crash).
-    // Presence of the counter text is a stable indicator of the diff viewer header.
-    // We avoid querying exact text to keep it locale-agnostic.
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    expect(document.querySelector('.flex-1')).toBeTruthy()
+    // Verify onClose was called
+    expect(onClose).toHaveBeenCalled()
   })
 })

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
 import { DiffViewerWithReview } from './DiffViewerWithReview'
 import { SelectionProvider } from '../contexts/SelectionContext'
 import { ReviewProvider } from '../contexts/ReviewContext'
@@ -32,23 +32,17 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe('DiffViewerWithReview', () => {
-  it('loads files, allows selecting file, adding and finishing a review', async () => {
+  it('loads diff for provided file path and allows adding review comments', async () => {
     const onClose = vi.fn()
-    // Start with session selected by default SelectionProvider
+    // Pass a specific file path to open
     render(
       <Wrapper>
-        <DiffViewerWithReview filePath={null} isOpen={true} onClose={onClose} />
+        <DiffViewerWithReview filePath="src/a.ts" isOpen={true} onClose={onClose} />
       </Wrapper>
     )
 
-    // Wait for files list
-    expect(await screen.findByText('Changed Files')).toBeInTheDocument()
-
-    // Click first file, ensure diff viewer mounts content area
-    const fileItem = await screen.findByText('a.ts')
-    act(() => {
-      fireEvent.click(fileItem)
-    })
+    // Wait for the file path to be displayed
+    expect(await screen.findByText('src/a.ts')).toBeInTheDocument()
 
     // Simulate opening comment form via keyboard shortcut: Cmd/Ctrl+Enter
     const isMac = navigator.platform.toUpperCase().includes('MAC')
