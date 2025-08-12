@@ -627,6 +627,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     return languageMap[ext || '']
   }, [selectedFile])
 
+  // (no local renderSyntaxHighlight; using OptimizedDiffViewer instead)
   const fileComments = selectedFile ? getCommentsForFile(selectedFile) : []
   
   return (
@@ -810,15 +811,15 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                 {/* Hidden line measure element */}
                 <div ref={measureLineRef} style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', lineHeight: '1.3', fontSize: 12, whiteSpace: 'pre' }}>X</div>
 
-                    <OptimizedDiffViewer
-                      oldContent={mainContent}
-                      newContent={worktreeContent}
-                      language={language}
-                      viewMode={splitView ? 'split' : 'unified'}
-                      onLineSelect={handleLineSelect}
-                      leftTitle={`${branchInfo?.baseBranch || 'base'} (${branchInfo?.baseCommit || 'base'})`}
-                      rightTitle={`${branchInfo?.currentBranch || 'current'} (${branchInfo?.headCommit || 'HEAD'})`}
-                    />
+                <OptimizedDiffViewer
+                  oldContent={mainContent}
+                  newContent={worktreeContent}
+                  language={language}
+                  viewMode={splitView ? 'split' : 'unified'}
+                  onLineSelect={handleLineSelect}
+                  leftTitle={`${branchInfo?.baseBranch || 'base'} (${branchInfo?.baseCommit || 'base'})`}
+                  rightTitle={`${branchInfo?.currentBranch || 'current'} (${branchInfo?.headCommit || 'HEAD'})`}
+                />
 
                 {/* Selection overlay (visual only, above diff) */}
                 <div
