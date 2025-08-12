@@ -627,7 +627,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
     return languageMap[ext || '']
   }, [selectedFile])
 
-  // (no local renderSyntaxHighlight; using OptimizedDiffViewer instead)
+  // No longer used; highlighting handled by OptimizedDiffViewer + HighlightedCode
   const fileComments = selectedFile ? getCommentsForFile(selectedFile) : []
   
   return (
