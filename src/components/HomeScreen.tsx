@@ -17,7 +17,7 @@ interface HomeScreenProps {
 export function HomeScreen({ onOpenProject }: HomeScreenProps) {
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [animPaused, setAnimPaused] = useState(false)
+  
 
   useEffect(() => {
     loadRecentProjects()
@@ -113,17 +113,7 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
       <div className="max-w-4xl w-full">
         <div className="mb-12 text-center">
           <div className="inline-flex items-center gap-3">
-            <AsciiBuilderLogo colorClassName="text-cyan-400" paused={animPaused} />
-            <button
-              type="button"
-              onClick={() => setAnimPaused((p) => !p)}
-              aria-pressed={animPaused}
-              tabIndex={-1}
-              className="h-8 px-3 inline-flex items-center justify-center rounded-md text-xs font-medium bg-slate-800/60 hover:bg-slate-700/60 text-slate-200 border border-slate-700/60"
-              title={animPaused ? 'Play animation' : 'Pause animation'}
-            >
-              {animPaused ? 'Play' : 'Pause'}
-            </button>
+            <AsciiBuilderLogo colorClassName="text-cyan-400" />
           </div>
           <p className="text-slate-400 mt-4 text-sm">
             Visual interface for managing agentic CLI sessions
