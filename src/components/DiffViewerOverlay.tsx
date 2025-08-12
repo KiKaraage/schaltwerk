@@ -215,14 +215,15 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
         onClick={onClose}
       />
       
-      {/* Slide-out panel from right */}
+      {/* Centered modal popup */}
       <div 
         className={clsx(
-          "fixed inset-y-0 right-0 w-[94vw] z-50 bg-slate-950 shadow-2xl flex",
-          "transition-transform duration-300 ease-in-out",
-          isOpen ? "translate-x-0" : "translate-x-full"
+          "fixed inset-0 z-50 flex items-center justify-center p-2",
+          "transition-all duration-300 ease-in-out",
+          isOpen ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
         )}
       >
+        <div className="w-[96vw] max-w-[1800px] h-[92vh] bg-slate-950 shadow-2xl rounded-lg flex overflow-hidden">
         {/* File List Sidebar */}
         <div className="w-72 border-r border-slate-800 flex flex-col bg-slate-900/30">
           <div className="px-3 py-3 border-b border-slate-800">
@@ -283,15 +284,15 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
           {selectedFile && (
             <>
               <div className="flex items-center justify-between px-4 py-3 bg-slate-900/50 border-b border-slate-800">
-                <div>
-                  <div className="text-sm font-mono">{selectedFile}</div>
+                <div className="min-w-0 flex-1 mr-4">
+                  <div className="text-sm font-mono truncate">{selectedFile}</div>
                   {branchInfo && (
-                    <div className="text-xs text-slate-500 mt-0.5">
+                    <div className="text-xs text-slate-500 mt-0.5 truncate">
                       Comparing {branchInfo.currentBranch} → {branchInfo.baseBranch} ({branchInfo.baseCommit}..{branchInfo.headCommit})
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <div className="flex items-center gap-1 mr-2">
                     <span className="text-xs text-slate-400">View:</span>
                     <button
@@ -385,6 +386,7 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
               </div>
             </>
           )}
+        </div>
         </div>
       </div>
     </>

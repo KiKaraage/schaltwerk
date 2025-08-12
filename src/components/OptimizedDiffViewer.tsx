@@ -210,10 +210,52 @@ export function OptimizedDiffViewer({
   const [visibleRange, setVisibleRange] = useState({ start: 0, end: CHUNK_SIZE })
   const [selection, setSelection] = useState<LineSelection | null>(null)
   const [isSelecting, setIsSelecting] = useState(false)
+  const [leftPanelWidth, setLeftPanelWidth] = useState(50) // percentage
+  const [isDragging, setIsDragging] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const dividerRef = useRef<HTMLDivElement>(null)
   
   const actualViewMode = viewMode || internalViewMode
+  
+  // Drag handlers for resizable divider
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }, [])
+
+  const handleDividerMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging || !containerRef.current) return
+    
+    const containerRect = containerRef.current.getBoundingClientRect()
+    const containerWidth = containerRect.width
+    const mouseX = e.clientX - containerRect.left
+    
+    // Calculate percentage, bounded between 20% and 80%
+    const percentage = Math.max(20, Math.min(80, (mouseX / containerWidth) * 100))
+    setLeftPanelWidth(percentage)
+  }, [isDragging])
+
+  const handleDividerMouseUp = useCallback(() => {
+    setIsDragging(false)
+  }, [])
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleDividerMouseMove)
+      document.addEventListener('mouseup', handleDividerMouseUp)
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      
+      return () => {
+        document.removeEventListener('mousemove', handleDividerMouseMove)
+        document.removeEventListener('mouseup', handleDividerMouseUp)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+  }, [isDragging, handleDividerMouseMove, handleDividerMouseUp])
+
   
   const oldLines = useMemo(() => oldContent.split('\n'), [oldContent])
   const newLines = useMemo(() => newContent.split('\n'), [newContent])
@@ -291,7 +333,7 @@ export function OptimizedDiffViewer({
     setSelection(null)
   }, [actualViewMode, onViewModeChange])
   
-  const handleMouseDown = useCallback((e: React.MouseEvent, side: 'old' | 'new', lineNum: number) => {
+  const handleLineMouseDown = useCallback((e: React.MouseEvent, side: 'old' | 'new', lineNum: number) => {
     const isTextSelection = window.getSelection()?.toString()
     if (isTextSelection) return
     
@@ -305,13 +347,13 @@ export function OptimizedDiffViewer({
     setSelection({ side, startLine: lineNum, endLine: lineNum })
   }, [])
   
-  const handleMouseMove = useCallback((_e: React.MouseEvent, side: 'old' | 'new', lineNum: number) => {
+  const handleLineMouseMove = useCallback((_e: React.MouseEvent, side: 'old' | 'new', lineNum: number) => {
     if (!isSelecting || !selection || selection.side !== side) return
     
     setSelection(prev => prev ? { ...prev, endLine: lineNum } : null)
   }, [isSelecting, selection])
   
-  const handleMouseUp = useCallback(() => {
+  const handleLineMouseUp = useCallback(() => {
     if (isSelecting && selection && onLineSelect) {
       const startIdx = Math.min(selection.startLine - 1, selection.endLine - 1)
       const endIdx = Math.max(selection.startLine - 1, selection.endLine - 1)
@@ -327,13 +369,15 @@ export function OptimizedDiffViewer({
     }
     setIsSelecting(false)
   }, [isSelecting, selection, onLineSelect, oldLines, newLines])
-  
+
+  // Global mouse up for line selection
   useEffect(() => {
     if (isSelecting) {
-      document.addEventListener('mouseup', handleMouseUp)
-      return () => document.removeEventListener('mouseup', handleMouseUp)
+      document.addEventListener('mouseup', handleLineMouseUp)
+      return () => document.removeEventListener('mouseup', handleLineMouseUp)
     }
-  }, [isSelecting, handleMouseUp])
+  }, [isSelecting, handleLineMouseUp])
+  
   
   const isLineSelected = useCallback((side: 'old' | 'new', lineNum: number) => {
     if (!selection || selection.side !== side) return false
@@ -370,8 +414,8 @@ export function OptimizedDiffViewer({
                     "flex h-[20px] relative",
                     isLineSelected(line.oldLineNumber ? 'old' : 'new', line.oldLineNumber || line.newLineNumber || 0) && "bg-blue-900/30"
                   )}
-                  onMouseDown={(e) => handleMouseDown(e, line.oldLineNumber ? 'old' : 'new', line.oldLineNumber || line.newLineNumber || 0)}
-                  onMouseMove={(e) => handleMouseMove(e, line.oldLineNumber ? 'old' : 'new', line.oldLineNumber || line.newLineNumber || 0)}
+                  onMouseDown={(e) => handleLineMouseDown(e, line.oldLineNumber ? 'old' : 'new', line.oldLineNumber || line.newLineNumber || 0)}
+                  onMouseMove={(e) => handleLineMouseMove(e, line.oldLineNumber ? 'old' : 'new', line.oldLineNumber || line.newLineNumber || 0)}
                 >
                   {(line.type === 'added' || line.type === 'removed') && (
                     <div 
@@ -392,17 +436,19 @@ export function OptimizedDiffViewer({
                     {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ''}
                   </div>
                   <div className="flex-1 px-2 overflow-x-auto relative z-10 select-text">
-                    <HighlightedLine
-                      content={line.content}
-                      highlightedHtml={
-                        line.oldLineNumber && highlightedOldLines
-                          ? highlightedOldLines[line.oldLineNumber - 1]
-                          : line.newLineNumber && highlightedNewLines
-                          ? highlightedNewLines[line.newLineNumber - 1]
-                          : null
-                      }
-                      isVisible={isVisible}
-                    />
+                    <div className="min-w-max">
+                      <HighlightedLine
+                        content={line.content}
+                        highlightedHtml={
+                          line.oldLineNumber && highlightedOldLines
+                            ? highlightedOldLines[line.oldLineNumber - 1]
+                            : line.newLineNumber && highlightedNewLines
+                            ? highlightedNewLines[line.newLineNumber - 1]
+                            : null
+                        }
+                        isVisible={isVisible}
+                      />
+                    </div>
                   </div>
                 </div>
               )
@@ -419,11 +465,11 @@ export function OptimizedDiffViewer({
     return (
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-auto bg-slate-950 custom-scrollbar"
+        className="flex-1 overflow-hidden bg-slate-950 custom-scrollbar"
         style={{ position: 'relative' }}
       >
-        <div className="flex" style={{ minHeight: `${maxLines * 20}px` }}>
-          <div className="flex-1 border-r border-slate-800">
+        <div className="flex w-full h-full relative" style={{ minHeight: `${maxLines * 20}px` }}>
+          <div className="overflow-x-auto" style={{ width: `${leftPanelWidth}%`, flexShrink: 0 }}>
             <div className="sticky top-0 bg-slate-900 border-b border-slate-800 px-3 py-1 text-xs font-medium">
               {leftTitle}
             </div>
@@ -442,8 +488,8 @@ export function OptimizedDiffViewer({
                       "flex h-[20px] relative",
                       isLineSelected('old', lineNum) && "bg-blue-900/30"
                     )}
-                    onMouseDown={(e) => lineNum && handleMouseDown(e, 'old', lineNum)}
-                    onMouseMove={(e) => lineNum && handleMouseMove(e, 'old', lineNum)}
+                    onMouseDown={(e) => lineNum && handleLineMouseDown(e, 'old', lineNum)}
+                    onMouseMove={(e) => lineNum && handleLineMouseMove(e, 'old', lineNum)}
                   >
                     {row.type === 'removed' && (
                       <div className="absolute inset-0 bg-red-950/30 pointer-events-none" />
@@ -451,12 +497,14 @@ export function OptimizedDiffViewer({
                     <div className="w-12 px-2 text-xs text-slate-500 font-mono relative z-10">
                       {lineNum || ''}
                     </div>
-                    <div className="flex-1 px-2 overflow-x-auto relative z-10 select-text">
-                      <HighlightedLine
-                        content={row.oldLine ?? ''}
-                        highlightedHtml={row.oldLineNumber && highlightedOldLines ? highlightedOldLines[row.oldLineNumber - 1] : null}
-                        isVisible={isVisible}
-                      />
+                    <div className="flex-1 px-2 relative z-10 select-text overflow-x-auto">
+                      <div className="min-w-max">
+                        <HighlightedLine
+                          content={row.oldLine ?? ''}
+                          highlightedHtml={row.oldLineNumber && highlightedOldLines ? highlightedOldLines[row.oldLineNumber - 1] : null}
+                          isVisible={isVisible}
+                        />
+                      </div>
                     </div>
                   </div>
                 )
@@ -464,7 +512,19 @@ export function OptimizedDiffViewer({
             </div>
           </div>
           
-          <div className="flex-1">
+          
+          {/* Draggable divider */}
+          <div 
+            ref={dividerRef}
+            className={clsx(
+              "absolute top-0 bottom-0 w-1 bg-slate-600 hover:bg-slate-500 cursor-col-resize z-10",
+              isDragging && "bg-blue-500"
+            )}
+            style={{ left: `${leftPanelWidth}%`, transform: 'translateX(-50%)' }}
+            onMouseDown={handleDividerMouseDown}
+          />
+          
+          <div className="overflow-x-auto" style={{ width: `${100 - leftPanelWidth}%`, flexShrink: 0 }}>
             <div className="sticky top-0 bg-slate-900 border-b border-slate-800 px-3 py-1 text-xs font-medium">
               {rightTitle}
             </div>
@@ -483,8 +543,8 @@ export function OptimizedDiffViewer({
                       "flex h-[20px] relative",
                       isLineSelected('new', lineNum) && "bg-blue-900/30"
                     )}
-                    onMouseDown={(e) => lineNum && handleMouseDown(e, 'new', lineNum)}
-                    onMouseMove={(e) => lineNum && handleMouseMove(e, 'new', lineNum)}
+                    onMouseDown={(e) => lineNum && handleLineMouseDown(e, 'new', lineNum)}
+                    onMouseMove={(e) => lineNum && handleLineMouseMove(e, 'new', lineNum)}
                   >
                     {row.type === 'added' && (
                       <div className="absolute inset-0 bg-green-950/30 pointer-events-none" />
@@ -492,12 +552,14 @@ export function OptimizedDiffViewer({
                     <div className="w-12 px-2 text-xs text-slate-500 font-mono relative z-10">
                       {lineNum || ''}
                     </div>
-                    <div className="flex-1 px-2 overflow-x-auto relative z-10 select-text">
-                      <HighlightedLine
-                        content={row.newLine ?? ''}
-                        highlightedHtml={row.newLineNumber && highlightedNewLines ? highlightedNewLines[row.newLineNumber - 1] : null}
-                        isVisible={isVisible}
-                      />
+                    <div className="flex-1 px-2 relative z-10 select-text overflow-x-auto">
+                      <div className="min-w-max">
+                        <HighlightedLine
+                          content={row.newLine ?? ''}
+                          highlightedHtml={row.newLineNumber && highlightedNewLines ? highlightedNewLines[row.newLineNumber - 1] : null}
+                          isVisible={isVisible}
+                        />
+                      </div>
                     </div>
                   </div>
                 )
@@ -510,7 +572,7 @@ export function OptimizedDiffViewer({
   }
   
   return (
-    <div ref={containerRef} className="flex flex-col h-full">
+    <div ref={containerRef} className="flex flex-col h-full w-full overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-800">
         <div className="text-xs text-slate-400">
           {maxLines} lines • {actualViewMode === 'split' ? 'Split View' : 'Unified View'}
