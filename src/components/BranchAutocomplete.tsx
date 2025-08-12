@@ -213,15 +213,12 @@ export function BranchAutocomplete({
             )}
             
             {value && !branches.includes(value) && (
-                <div className="absolute z-50 w-full mt-1 bg-red-900/20 border border-red-600/50 rounded-md shadow-lg p-3">
-                    <div className="text-red-400 text-sm flex items-start gap-2">
-                        <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="absolute z-50 w-full mt-1 bg-slate-900 border border-red-500/50 rounded-md shadow-lg p-2.5">
+                    <div className="text-red-400 text-sm flex items-center gap-2">
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
-                        <div>
-                            <div className="font-semibold">Branch does not exist</div>
-                            <div className="text-xs mt-1">The branch "{value}" was not found in the repository. Please select an existing branch from the list.</div>
-                        </div>
+                        <span>Branch "{value}" not found. Please select from the list.</span>
                     </div>
                 </div>
             )}
