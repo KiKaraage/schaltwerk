@@ -56,7 +56,7 @@ describe('NewSessionModal', () => {
   it('initializes and can create a session', async () => {
     const { onCreate } = openModal()
 
-    expect(screen.getByText('Start new Schaltwerk session')).toBeInTheDocument()
+    expect(screen.getByText('Start new task')).toBeInTheDocument()
     // The input is not explicitly associated with the label, select by placeholder/value
     const nameInput = screen.getByPlaceholderText('eager_cosmos') as HTMLInputElement
     expect(nameInput).toBeInTheDocument()
@@ -67,7 +67,7 @@ describe('NewSessionModal', () => {
     expect(screen.getByLabelText('Force flag')).toBeInTheDocument()
 
     // Create should submit with current name value
-    fireEvent.click(screen.getByTitle('Create session (Cmd+Enter)'))
+    fireEvent.click(screen.getByTitle('Create task (Cmd+Enter)'))
 
     await waitFor(() => {
       expect(onCreate).toHaveBeenCalled()
@@ -120,7 +120,7 @@ describe('NewSessionModal', () => {
     })
     
     // Test 1: Submit without any interaction - userEditedName should be false
-    const createBtn = screen.getByTitle('Create session (Cmd+Enter)')
+    const createBtn = screen.getByTitle('Create task (Cmd+Enter)')
     fireEvent.click(createBtn)
     
     await waitFor(() => expect(onCreate).toHaveBeenCalled())
@@ -139,7 +139,7 @@ describe('NewSessionModal', () => {
     render(<NewSessionModal open={true} onClose={vi.fn()} onCreate={onCreate} />)
     
     await waitFor(() => {
-      const createBtn = screen.getByTitle('Create session (Cmd+Enter)')
+      const createBtn = screen.getByTitle('Create task (Cmd+Enter)')
       expect(createBtn).toBeTruthy()
     })
     
@@ -152,21 +152,21 @@ describe('NewSessionModal', () => {
     const { onCreate } = openModal()
     const nameInput = await screen.findByPlaceholderText('eager_cosmos')
     fireEvent.change(nameInput, { target: { value: 'bad/name' } })
-    fireEvent.click(screen.getByTitle('Create session (Cmd+Enter)'))
+    fireEvent.click(screen.getByTitle('Create task (Cmd+Enter)'))
     expect(onCreate).not.toHaveBeenCalled()
-    expect(await screen.findByText('Session name can only contain letters, numbers, hyphens, and underscores')).toBeInTheDocument()
+    expect(await screen.findByText('Task name can only contain letters, numbers, hyphens, and underscores')).toBeInTheDocument()
     // User types again -> error clears
     fireEvent.change(nameInput, { target: { value: 'good_name' } })
-    await waitFor(() => expect(screen.queryByText('Session name can only contain letters, numbers, hyphens, and underscores')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Task name can only contain letters, numbers, hyphens, and underscores')).toBeNull())
   })
 
   it('validates max length of 100 characters', async () => {
     const { onCreate } = openModal()
     const nameInput = await screen.findByPlaceholderText('eager_cosmos')
     fireEvent.change(nameInput, { target: { value: 'a'.repeat(101) } })
-    fireEvent.click(screen.getByTitle('Create session (Cmd+Enter)'))
+    fireEvent.click(screen.getByTitle('Create task (Cmd+Enter)'))
     expect(onCreate).not.toHaveBeenCalled()
-    expect(await screen.findByText('Session name must be 100 characters or less')).toBeInTheDocument()
+    expect(await screen.findByText('Task name must be 100 characters or less')).toBeInTheDocument()
   })
 
   it('replaces spaces with underscores in the final name', async () => {
@@ -174,7 +174,7 @@ describe('NewSessionModal', () => {
     render(<NewSessionModal open={true} onClose={vi.fn()} onCreate={onCreate} />)
     const input = await screen.findByPlaceholderText('eager_cosmos')
     fireEvent.change(input, { target: { value: 'My New Session' } })
-    fireEvent.click(screen.getByTitle('Create session (Cmd+Enter)'))
+    fireEvent.click(screen.getByTitle('Create task (Cmd+Enter)'))
     await waitFor(() => expect(onCreate).toHaveBeenCalled())
     const payload = onCreate.mock.calls[0][0]
     expect(payload.name).toBe('My_New_Session')
@@ -186,7 +186,7 @@ describe('NewSessionModal', () => {
     const input = await screen.findByPlaceholderText('eager_cosmos')
     // Clear to disable the button
     fireEvent.change(input, { target: { value: '' } })
-    const button = screen.getByTitle('Create session (Cmd+Enter)') as HTMLButtonElement
+    const button = screen.getByTitle('Create task (Cmd+Enter)') as HTMLButtonElement
     expect(button.disabled).toBe(true)
     // Keyboard shortcut bypasses disabled button logic
     const evt = new KeyboardEvent('keydown', { key: 'Enter', metaKey: true })
@@ -202,7 +202,7 @@ describe('NewSessionModal', () => {
     render(<NewSessionModal open={true} onClose={vi.fn()} onCreate={onCreate} />)
     const input = await screen.findByPlaceholderText('eager_cosmos')
     input.focus()
-    fireEvent.click(screen.getByTitle('Create session (Cmd+Enter)'))
+    fireEvent.click(screen.getByTitle('Create task (Cmd+Enter)'))
     await waitFor(() => expect(onCreate).toHaveBeenCalled())
     expect(onCreate.mock.calls[0][0].userEditedName).toBe(true)
   })
@@ -271,11 +271,11 @@ describe('NewSessionModal', () => {
     
     // Wait for branches to load and button to be available
     await waitFor(() => {
-      const btn = screen.queryByTitle('Create session (Cmd+Enter)')
+      const btn = screen.queryByTitle('Create task (Cmd+Enter)')
       expect(btn).toBeTruthy()
     })
     
-    const btn = screen.getByTitle('Create session (Cmd+Enter)') as HTMLButtonElement
+    const btn = screen.getByTitle('Create task (Cmd+Enter)') as HTMLButtonElement
     
     // Initially button should be enabled (has name and branches loaded)
     expect(btn.disabled).toBe(false)

@@ -1252,19 +1252,29 @@ async fn set_project_default_base_branch(branch: Option<String>) -> Result<(), S
 }
 
 #[tauri::command]
-async fn para_core_create_draft_session(name: String, draft_content: String) -> Result<para_core::Session, String> {
+async fn para_core_create_draft_session(app: tauri::AppHandle, name: String, draft_content: String) -> Result<para_core::Session, String> {
     log::info!("Creating draft session: {name}");
     
     let core = get_para_core().await?;
     let core_lock = core.lock().await;
     let manager = core_lock.session_manager();
     
-    manager.create_draft_session(&name, &draft_content)
-        .map_err(|e| format!("Failed to create draft session: {e}"))
+    let session = manager.create_draft_session(&name, &draft_content)
+        .map_err(|e| format!("Failed to create draft session: {e}"))?;
+    
+    // Emit sessions-refreshed event after creating draft
+    if let Ok(sessions) = manager.list_enriched_sessions() {
+        log::info!("Emitting sessions-refreshed event after creating draft session");
+        if let Err(e) = app.emit("schaltwerk:sessions-refreshed", &sessions) {
+            log::warn!("Could not emit sessions refreshed: {e}");
+        }
+    }
+    
+    Ok(session)
 }
 
 #[tauri::command]
-async fn para_core_start_draft_session(name: String, base_branch: Option<String>) -> Result<(), String> {
+async fn para_core_start_draft_session(app: tauri::AppHandle, name: String, base_branch: Option<String>) -> Result<(), String> {
     log::info!("Starting draft session: {name}");
     
     let core = get_para_core().await?;
@@ -1272,7 +1282,17 @@ async fn para_core_start_draft_session(name: String, base_branch: Option<String>
     let manager = core_lock.session_manager();
     
     manager.start_draft_session(&name, base_branch.as_deref())
-        .map_err(|e| format!("Failed to start draft session: {e}"))
+        .map_err(|e| format!("Failed to start draft session: {e}"))?;
+    
+    // Emit sessions-refreshed event after starting draft
+    if let Ok(sessions) = manager.list_enriched_sessions() {
+        log::info!("Emitting sessions-refreshed event after starting draft session");
+        if let Err(e) = app.emit("schaltwerk:sessions-refreshed", &sessions) {
+            log::warn!("Could not emit sessions refreshed: {e}");
+        }
+    }
+    
+    Ok(())
 }
 
 #[tauri::command]

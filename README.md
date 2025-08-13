@@ -18,6 +18,11 @@ npm install
 npm run tauri dev
 ```
 
+### MCP Server Setup (for Claude Code integration)
+```bash
+just mcp-setup
+```
+
 ### Building
 ```bash
 npm run build

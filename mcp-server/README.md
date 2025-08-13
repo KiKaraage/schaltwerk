@@ -11,7 +11,26 @@ This is the Model Context Protocol (MCP) server for Schaltwerk, enabling AI assi
 
 ## Installation
 
-### 1. Install Dependencies
+### Quick Setup (Recommended)
+
+From the para-ui repository root:
+
+```bash
+just mcp-setup
+```
+
+This command will:
+1. Install dependencies
+2. Build the MCP server
+3. Display the exact registration command with the correct path
+
+Then follow the displayed instructions to register with Claude Code.
+
+### Manual Installation
+
+If you prefer to set up manually:
+
+#### 1. Build the MCP Server
 
 ```bash
 cd mcp-server
@@ -19,16 +38,16 @@ npm install
 npm run build
 ```
 
-### 2. Configure Claude Code (CLI)
+#### 2. Configure Claude Code (CLI)
 
 Since the orchestrator runs Claude Code CLI (not Claude Desktop), configure it using one of these methods:
 
-#### Option 1: CLI Command (Recommended)
+##### Option 1: CLI Command (Recommended)
 ```bash
 claude mcp add --transport stdio --scope project schaltwerk node /path/to/para-ui/mcp-server/build/schaltwerk-mcp-server.js
 ```
 
-#### Option 2: Manual Configuration
+##### Option 2: Manual Configuration
 Add to `.claude.json` in your project root:
 
 ```json

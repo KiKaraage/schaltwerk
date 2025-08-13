@@ -727,6 +727,19 @@ impl Database {
         
         Ok(())
     }
+    
+    pub fn update_session_initial_prompt(&self, id: &str, prompt: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        
+        conn.execute(
+            "UPDATE sessions
+             SET initial_prompt = ?1, updated_at = ?2
+             WHERE id = ?3",
+            params![prompt, Utc::now().timestamp(), id],
+        )?;
+        
+        Ok(())
+    }
 }
 
 #[cfg(test)]

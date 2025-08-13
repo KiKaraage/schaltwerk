@@ -283,9 +283,9 @@ export default function App() {
             <button 
               onClick={() => setNewSessionOpen(true)} 
               className="w-full bg-slate-800/60 hover:bg-slate-700/60 text-sm px-3 py-1.5 rounded group flex items-center justify-between"
-              title="Start new session (⌘N)"
+              title="Start new task (⌘N)"
             >
-              <span>Start new session</span>
+              <span>Start new task</span>
               <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">⌘N</span>
             </button>
           </div>

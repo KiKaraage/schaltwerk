@@ -20,7 +20,7 @@ interface Props {
 export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [name, setName] = useState(() => generateDockerStyleName())
     const [, setWasEdited] = useState(false)
-    const [prompt, setPrompt] = useState('')
+    const [taskContent, setTaskContent] = useState('')
     const [baseBranch, setBaseBranch] = useState('')
     const [branches, setBranches] = useState<string[]>([])
     const [loadingBranches, setLoadingBranches] = useState(false)
@@ -30,7 +30,6 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [validationError, setValidationError] = useState('')
     const [creating, setCreating] = useState(false)
     const [createAsDraft, setCreateAsDraft] = useState(false)
-    const [draftContent, setDraftContent] = useState('')
     const { getSkipPermissions, setSkipPermissions: saveSkipPermissions, getAgentType, setAgentType: saveAgentType } = useClaudeSession()
     const nameInputRef = useRef<HTMLInputElement>(null)
     const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -50,13 +49,13 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
 
     const validateSessionName = useCallback((sessionName: string): string | null => {
         if (!sessionName.trim()) {
-            return 'Session name is required'
+            return 'Task name is required'
         }
         if (sessionName.length > 100) {
-            return 'Session name must be 100 characters or less'
+            return 'Task name must be 100 characters or less'
         }
         if (!/^[a-zA-Z0-9_\- ]+$/.test(sessionName)) {
-            return 'Session name can only contain letters, numbers, hyphens, and underscores'
+            return 'Task name can only contain letters, numbers, hyphens, and underscores'
         }
         return null
     }, [])
@@ -98,9 +97,9 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             return
         }
         
-        // Validate draft content if creating as draft
-        if (createAsDraft && !draftContent.trim()) {
-            setValidationError('Please enter draft content')
+        // Validate task content if creating as draft
+        if (createAsDraft && !taskContent.trim()) {
+            setValidationError('Please enter task content')
             return
         }
         
@@ -120,19 +119,19 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             
             await Promise.resolve(onCreate({
                 name: finalName,
-                prompt: prompt || undefined,
+                prompt: createAsDraft ? undefined : (taskContent || undefined),
                 baseBranch,
                 // If user touched the input, treat name as manually edited
                 userEditedName: !!userEdited,
                 isDraft: createAsDraft,
-                draftContent: createAsDraft ? draftContent : undefined,
+                draftContent: createAsDraft ? taskContent : undefined,
             }))
             // On success the parent will close the modal; no need to reset creating here
         } catch (_e) {
             // Parent handles showing the error; re-enable to allow retry
             setCreating(false)
         }
-    }, [creating, name, prompt, baseBranch, onCreate, validateSessionName, createAsDraft, draftContent, branches])
+    }, [creating, name, taskContent, baseBranch, onCreate, validateSessionName, createAsDraft, branches])
 
     // Keep ref in sync immediately on render to avoid stale closures in tests
     createRef.current = handleCreate
@@ -146,10 +145,9 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             setName(gen)
             setWasEdited(false)
             wasEditedRef.current = false
-            setPrompt('')
+            setTaskContent('')
             setValidationError('')
             setCreateAsDraft(false)
-            setDraftContent('')
             
             // Fetch available branches and the project-specific default branch
             setLoadingBranches(true)
@@ -204,10 +202,10 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     return (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
             <div className="w-[720px] max-w-[95vw] bg-slate-900 border border-slate-700 rounded-xl shadow-xl overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-800 text-slate-200 font-medium">Start new Schaltwerk session</div>
+                <div className="px-4 py-3 border-b border-slate-800 text-slate-200 font-medium">Start new task</div>
                 <div className="p-4 space-y-4">
                     <div>
-                        <label className="block text-sm text-slate-300 mb-1">Session name</label>
+                        <label className="block text-sm text-slate-300 mb-1">Task name</label>
                         <input 
                             ref={nameInputRef}
                             value={name} 
@@ -241,42 +239,36 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                         <label htmlFor="createAsDraft" className="text-sm text-slate-300">Create as draft (no agent will start)</label>
                     </div>
 
-                    {createAsDraft ? (
-                        <div>
-                            <label className="block text-sm text-slate-300 mb-1">Draft content</label>
-                            <textarea 
-                                ref={promptTextareaRef}
-                                value={draftContent} 
-                                onChange={e => {
-                                    setDraftContent(e.target.value)
-                                    // Clear validation error when user starts typing
-                                    if (validationError) {
-                                        setValidationError('')
-                                    }
-                                }} 
-                                className="w-full h-40 bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700 font-mono text-sm" 
-                                placeholder="Enter task description in markdown..." 
-                            />
-                            <p className="text-xs text-slate-400 mt-1">
-                                <svg className="inline-block w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                </svg>
-                                Draft sessions are saved for later. You can start them when ready.
-                            </p>
-                        </div>
-                    ) : (
-                        <div>
-                            <label className="block text-sm text-slate-300 mb-1">Initial prompt (optional)</label>
-                            <textarea 
-                                ref={promptTextareaRef}
-                                value={prompt} 
-                                onChange={e => setPrompt(e.target.value)} 
-                                className="w-full h-28 bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700" 
-                                placeholder="Describe the task for the Claude session" 
-                            />
-                            <p className="text-xs text-slate-400 mt-1">Equivalent to: schaltwerk start &lt;name&gt; -p "&lt;prompt&gt;"</p>
-                        </div>
-                    )}
+                    <div>
+                        <label className="block text-sm text-slate-300 mb-1">
+                            {createAsDraft ? 'Task content' : 'Initial prompt (optional)'}
+                        </label>
+                        <textarea 
+                            ref={promptTextareaRef}
+                            value={taskContent} 
+                            onChange={e => {
+                                setTaskContent(e.target.value)
+                                // Clear validation error when user starts typing
+                                if (validationError) {
+                                    setValidationError('')
+                                }
+                            }} 
+                            className="w-full h-32 bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700 font-mono text-sm" 
+                            placeholder={createAsDraft ? "Enter task description in markdown..." : "Describe the task for the Claude session"} 
+                        />
+                        <p className="text-xs text-slate-400 mt-1">
+                            {createAsDraft ? (
+                                <>
+                                    <svg className="inline-block w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                    </svg>
+                                    Draft tasks are saved for later. You can start them when ready.
+                                </>
+                            ) : (
+                                <>Equivalent to: schaltwerk start &lt;name&gt; -p "&lt;prompt&gt;"</>
+                            )}
+                        </p>
+                    </div>
 
                     <div className="grid grid-cols-3 gap-3">
                         <div>
@@ -346,9 +338,9 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                     </button>
                     <button 
                         onClick={handleCreate} 
-                        disabled={!name.trim() || !baseBranch || !isValidBranch || creating || (createAsDraft && !draftContent.trim())}
+                        disabled={!name.trim() || !baseBranch || !isValidBranch || creating || (createAsDraft && !taskContent.trim())}
                         className={`px-3 py-1.5 ${createAsDraft ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'} disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-white group relative inline-flex items-center gap-2`}
-                        title={!isValidBranch ? "Please select a valid branch" : createAsDraft ? "Create draft (Cmd+Enter)" : "Create session (Cmd+Enter)"}
+                        title={!isValidBranch ? "Please select a valid branch" : createAsDraft ? "Create draft (Cmd+Enter)" : "Create task (Cmd+Enter)"}
                     >
                         {creating && (
                             <span

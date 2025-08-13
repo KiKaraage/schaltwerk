@@ -573,6 +573,11 @@ impl SessionManager {
         
         self.db.update_session_state(&session.id, SessionState::Running)?;
         
+        // Copy draft_content to initial_prompt so Claude/Cursor can use it
+        if let Some(draft_content) = session.draft_content {
+            self.db.update_session_initial_prompt(&session.id, &draft_content)?;
+        }
+        
         let global_agent = self.db.get_agent_type().unwrap_or_else(|_| "claude".to_string());
         let global_skip = self.db.get_skip_permissions().unwrap_or(false);
         let _ = self.db.set_session_original_settings(&session.id, &global_agent, global_skip);

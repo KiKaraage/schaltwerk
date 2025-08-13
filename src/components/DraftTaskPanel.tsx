@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { VscEdit, VscPlay, VscTrash, VscSave, VscClose, VscAdd } from 'react-icons/vsc'
@@ -10,6 +11,7 @@ interface DraftSession {
   name: string
   created_at: string
   initial_prompt?: string
+  draft_content?: string
   state: 'draft'
 }
 
@@ -26,6 +28,7 @@ export function DraftTaskPanel({ onSessionStart }: DraftTaskPanelProps) {
   const [saving, setSaving] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [starting, setStarting] = useState<string | null>(null)
 
   const fetchDrafts = useCallback(async () => {
     try {
@@ -44,10 +47,26 @@ export function DraftTaskPanel({ onSessionStart }: DraftTaskPanelProps) {
   useEffect(() => {
     fetchDrafts()
   }, [fetchDrafts])
+  
+  // Listen for sessions-refreshed events from backend
+  useEffect(() => {
+    const setupListener = async () => {
+      const unlisten = await listen('schaltwerk:sessions-refreshed', () => {
+        fetchDrafts()
+      })
+      
+      return unlisten
+    }
+    
+    const cleanupPromise = setupListener()
+    return () => {
+      cleanupPromise.then(fn => fn())
+    }
+  }, [fetchDrafts])
 
   const handleEdit = (draft: DraftSession) => {
     setEditingDraft(draft.name)
-    setEditContent(draft.initial_prompt || '')
+    setEditContent(draft.draft_content || draft.initial_prompt || '')
   }
 
   const handleCancelEdit = () => {
@@ -77,15 +96,25 @@ export function DraftTaskPanel({ onSessionStart }: DraftTaskPanelProps) {
 
   const handleStart = async (sessionName: string) => {
     try {
+      setStarting(sessionName)
+      setError(null)
+      
+      // Start the draft session (creates worktree, updates state to Running)
       await invoke('para_core_start_draft_session', { 
         name: sessionName,
         baseBranch: null 
       })
+      
+      // Start Claude/Cursor in the session
+      await invoke('para_core_start_claude', { sessionName })
+      
       onSessionStart?.(sessionName)
       await fetchDrafts()
     } catch (err) {
       console.error('[DraftTaskPanel] Failed to start session:', err)
-      setError('Failed to start session')
+      setError(`Failed to start session: ${err}`)
+    } finally {
+      setStarting(null)
     }
   }
 
@@ -225,7 +254,7 @@ export function DraftTaskPanel({ onSessionStart }: DraftTaskPanelProps) {
                 </div>
                 
                 <div className="mb-3">
-                  {draft.initial_prompt ? (
+                  {(draft.draft_content || draft.initial_prompt) ? (
                     <div className="text-xs text-slate-300 bg-slate-900/50 rounded p-2 max-h-20 overflow-hidden">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
@@ -246,7 +275,7 @@ export function DraftTaskPanel({ onSessionStart }: DraftTaskPanelProps) {
                           h3: ({ children }) => <h3 className="font-bold">{children}</h3>,
                         }}
                       >
-                        {getPreview(draft.initial_prompt)}
+                        {getPreview(draft.draft_content || draft.initial_prompt)}
                       </ReactMarkdown>
                     </div>
                   ) : (
@@ -257,11 +286,12 @@ export function DraftTaskPanel({ onSessionStart }: DraftTaskPanelProps) {
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleStart(draft.name)}
-                    className="px-2 py-1 text-xs rounded bg-green-700 hover:bg-green-600 text-white flex items-center gap-1"
+                    disabled={starting === draft.name}
+                    className="px-2 py-1 text-xs rounded bg-green-700 hover:bg-green-600 text-white flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Start this task"
                   >
                     <VscPlay />
-                    Start
+                    {starting === draft.name ? 'Starting...' : 'Start'}
                   </button>
                   <button
                     onClick={() => handleEdit(draft)}

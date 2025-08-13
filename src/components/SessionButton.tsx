@@ -45,6 +45,7 @@ interface SessionButtonProps {
     onMarkReady: (sessionId: string, hasUncommitted: boolean) => void
     onUnmarkReady: (sessionId: string) => void
     onCancel: (sessionId: string, hasUncommitted: boolean) => void
+    onRunDraft?: (sessionId: string) => void
 }
 
 function getSessionStateColor(state?: string): 'green' | 'violet' | 'amber' | 'gray' {
@@ -67,7 +68,8 @@ export const SessionButton = memo<SessionButtonProps>(({
     onSelect,
     onMarkReady,
     onUnmarkReady,
-    onCancel
+    onCancel,
+    onRunDraft
 }) => {
     const s = session.info
     const color = getSessionStateColor(s.session_state)
@@ -86,10 +88,7 @@ export const SessionButton = memo<SessionButtonProps>(({
                         s.session_state === 'active' ? 'running' : 
                         'draft'
     
-    // Get state icon
-    const stateIcon = sessionState === 'draft' ? '📝' :
-                     sessionState === 'running' ? '🚀' :
-                     sessionState === 'reviewed' ? '✅' : ''
+    // State icon removed - no longer using emojis
 
     // Get background color based on state
     const getStateBackground = () => {
@@ -120,7 +119,6 @@ export const SessionButton = memo<SessionButtonProps>(({
             <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                     <div className="font-medium text-slate-100 truncate">
-                        {stateIcon && <span className="mr-1.5">{stateIcon}</span>}
                         {sessionName}
                         {isReadyToMerge && (
                             <span className="ml-2 text-xs text-green-400">
@@ -156,39 +154,56 @@ export const SessionButton = memo<SessionButtonProps>(({
                 </div>
             </div>
             <div className="-mt-4 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity whitespace-nowrap">
-                {!isReadyToMerge ? (
+                {sessionState === 'draft' ? (
                     <button 
                         onClick={(e) => {
                             e.stopPropagation()
-                            onMarkReady(s.session_id, s.has_uncommitted_changes || false)
+                            if (onRunDraft) {
+                                onRunDraft(s.session_id)
+                            }
                         }}
                         className="text-[11px] px-2 py-0.5 rounded bg-green-800/60 hover:bg-green-700/60"
-                        title="Mark as reviewed (⌘R)"
+                        title="Run task"
                     >
-                        Mark Reviewed
+                        Run
                     </button>
                 ) : (
-                    <button 
-                        onClick={async (e) => {
-                            e.stopPropagation()
-                            onUnmarkReady(s.session_id)
-                        }}
-                        className="text-[11px] px-2 py-0.5 rounded bg-slate-700/60 hover:bg-slate-600/60"
-                        title="Unmark as reviewed"
-                    >
-                        Unmark
-                    </button>
+                    <>
+                        {!isReadyToMerge ? (
+                            <button 
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    onMarkReady(s.session_id, s.has_uncommitted_changes || false)
+                                }}
+                                className="text-[11px] px-2 py-0.5 rounded bg-green-800/60 hover:bg-green-700/60"
+                                title="Mark as reviewed (⌘R)"
+                            >
+                                Mark Reviewed
+                            </button>
+                        ) : (
+                            <button 
+                                onClick={async (e) => {
+                                    e.stopPropagation()
+                                    onUnmarkReady(s.session_id)
+                                }}
+                                className="text-[11px] px-2 py-0.5 rounded bg-slate-700/60 hover:bg-slate-600/60"
+                                title="Unmark as reviewed"
+                            >
+                                Unmark
+                            </button>
+                        )}
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                onCancel(s.session_id, s.has_uncommitted_changes || false)
+                            }}
+                            className="text-[11px] px-2 py-0.5 rounded bg-red-800/60 hover:bg-red-700/60"
+                                title="Cancel session (⌘D, ⇧⌘D to force)"
+                        >
+                            Cancel
+                        </button>
+                    </>
                 )}
-                <button 
-                    onClick={(e) => {
-                        e.stopPropagation()
-                        onCancel(s.session_id, s.has_uncommitted_changes || false)
-                    }}
-                    className="text-[11px] px-2 py-0.5 rounded bg-red-800/60 hover:bg-red-700/60"
-                        title="Cancel session (⌘D, ⇧⌘D to force)"
-                >
-                    Cancel
-                </button>
             </div>
             <div className="mt-1 text-[12px] text-slate-400 truncate">{task}</div>
             {progressPercent > 0 && (

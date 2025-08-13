@@ -606,13 +606,13 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
 
             <div className="px-3 py-2 border-t border-b border-slate-800 text-sm text-slate-300 flex flex-col gap-2">
                 <div className="flex items-center gap-2">
-                    <span className="text-xs flex-shrink-0">Sessions {sessions.length > 0 && <span className="text-slate-500">({sessions.length})</span>}</span>
+                    <span className="text-xs flex-shrink-0">Tasks {sessions.length > 0 && <span className="text-slate-500">({sessions.length})</span>}</span>
                     <div className="flex items-center gap-0.5 ml-auto flex-wrap">
                         <button
                             className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
                                 filterMode === 'all' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
                             onClick={() => setFilterMode('all')}
-                            title="Show all sessions"
+                            title="Show all tasks"
                         >
                             All
                             <span className="text-slate-400">({sessions.length})</span>
@@ -621,27 +621,27 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                             className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
                                 filterMode === 'draft' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
                             onClick={() => setFilterMode('draft')}
-                            title="Show draft sessions"
+                            title="Show draft tasks"
                         >
-                            📝 Drafts
+                            Drafts
                             <span className="text-slate-400">({sessions.filter(s => !s.info.ready_to_merge && s.info.session_state !== 'active').length})</span>
                         </button>
                         <button
                             className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
                                 filterMode === 'running' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
                             onClick={() => setFilterMode('running')}
-                            title="Show running sessions"
+                            title="Show running tasks"
                         >
-                            🚀 Running
+                            Running
                             <span className="text-slate-400">({sessions.filter(s => !s.info.ready_to_merge && s.info.session_state === 'active').length})</span>
                         </button>
                         <button
                             className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
                                 filterMode === 'reviewed' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
                             onClick={() => setFilterMode('reviewed')}
-                            title="Show reviewed sessions"
+                            title="Show reviewed tasks"
                         >
-                            ✅ Reviewed
+                            Reviewed
                             <span className="text-slate-400">({sessions.filter(s => !!s.info.ready_to_merge).length})</span>
                         </button>
                         <button
@@ -668,9 +668,9 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             </div>
             <div className="flex-1 overflow-y-auto px-2 pt-2">
                 {loading ? (
-                    <div className="text-center text-slate-500 py-4">Loading sessions...</div>
+                    <div className="text-center text-slate-500 py-4">Loading tasks...</div>
                 ) : sortedSessions.length === 0 ? (
-                    <div className="text-center text-slate-500 py-4">No active sessions</div>
+                    <div className="text-center text-slate-500 py-4">No active tasks</div>
                 ) : (
                     sortedSessions.map((session, i) => {
                         const isSelected = selection.kind === 'session' && selection.payload === session.info.session_id
@@ -713,6 +713,27 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                                             hasUncommittedChanges: hasUncommitted
                                         }
                                     }))
+                                }}
+                                onRunDraft={async (sessionId) => {
+                                    try {
+                                        // Start the draft session
+                                        await invoke('para_core_start_draft_session', { 
+                                            name: sessionId,
+                                            baseBranch: null 
+                                        })
+                                        
+                                        // Start Claude/Cursor in the session
+                                        await invoke('para_core_start_claude', { sessionName: sessionId })
+                                        
+                                        // Refresh the sessions list
+                                        const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
+                                        setSessions(result)
+                                        
+                                        // Select the now-running session
+                                        await handleSelectSession(i)
+                                    } catch (err) {
+                                        console.error('Failed to run draft session:', err)
+                                    }
                                 }}
                             />
                         )

@@ -121,9 +121,45 @@ Never consider a task complete unless `npm run test` passes without errors.
 3. **Cleanup**: All processes killed via cleanup module on app exit
 
 ### Event System
-- `schaltwerk:selection`: Emitted when user selects different session
-- `terminal-output-{id}`: Terminal output events from backend
-- Components listen and react to maintain synchronization
+
+#### Architecture Pattern
+The app uses **Tauri events** for backend-to-frontend communication. NEVER use DOM events (`window.addEventListener`) for inter-component communication - always emit events from the backend.
+
+#### Key Tauri Events
+- `schaltwerk:sessions-refreshed`: Backend emits with full session list when sessions change (create/delete/state change)
+- `schaltwerk:session-removed`: Backend emits when a session is deleted
+- `schaltwerk:selection`: Frontend selection changes
+- `terminal-output-{id}`: Terminal output streaming from backend
+
+#### Implementation Pattern
+When session state changes in backend:
+1. Backend command performs the operation
+2. Backend emits `app.emit("schaltwerk:sessions-refreshed", sessions)`
+3. Frontend components listen via `listen()` from `@tauri-apps/api/event`
+4. Components refresh their state when event received
+
+Example backend:
+```rust
+#[tauri::command]
+async fn para_core_start_draft_session(app: tauri::AppHandle, name: String) -> Result<(), String> {
+    // ... perform operation ...
+    if let Ok(sessions) = manager.list_enriched_sessions() {
+        app.emit("schaltwerk:sessions-refreshed", &sessions)?;
+    }
+    Ok(())
+}
+```
+
+Example frontend:
+```typescript
+import { listen } from '@tauri-apps/api/event'
+
+useEffect(() => {
+    const unlisten = await listen('schaltwerk:sessions-refreshed', (event) => {
+        setSessions(event.payload)
+    })
+    return () => { unlisten() }
+}, [])
 
 ### Known Issues
 - Terminal resize events need debouncing to prevent flicker

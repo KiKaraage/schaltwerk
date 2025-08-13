@@ -96,7 +96,7 @@ describe('Sidebar filter functionality and persistence', () => {
     })
 
     // Click Drafts
-    fireEvent.click(screen.getByRole('button', { name: /📝 Drafts/ }))
+    fireEvent.click(screen.getByTitle('Show draft tasks'))
 
     await waitFor(() => {
       const drafts = screen.getAllByRole('button').filter(b => (b.textContent || '').includes('para/'))
@@ -107,7 +107,7 @@ describe('Sidebar filter functionality and persistence', () => {
     })
 
     // Click Reviewed
-    fireEvent.click(screen.getByRole('button', { name: /✅ Reviewed/ }))
+    fireEvent.click(screen.getByTitle('Show reviewed tasks'))
 
     await waitFor(() => {
       const reviewed = screen.getAllByRole('button').filter(b => (b.textContent || '').includes('para/'))
@@ -137,7 +137,7 @@ describe('Sidebar filter functionality and persistence', () => {
       expect(all).toHaveLength(4)
     })
 
-    fireEvent.click(screen.getByRole('button', { name: /✅ Reviewed/ }))
+    fireEvent.click(screen.getByTitle('Show reviewed tasks'))
 
     await waitFor(() => {
       expect(localStorage.getItem('schaltwerk:sessions:filterMode')).toBe('reviewed')
