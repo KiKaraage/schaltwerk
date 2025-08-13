@@ -166,8 +166,8 @@ async fn start_terminal_monitoring(app: tauri::AppHandle) {
             
             let manager = match get_terminal_manager().await {
                 Ok(m) => m,
-                Err(e) => {
-                    log::debug!("No active project for terminal monitoring: {e}");
+                Err(_) => {
+                    // Skip monitoring when no active project - this is normal during startup
                     continue;
                 }
             };
