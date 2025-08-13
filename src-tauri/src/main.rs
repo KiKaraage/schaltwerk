@@ -35,7 +35,7 @@ type MessageQueue = Arc<Mutex<HashMap<String, Vec<QueuedMessage>>>>;
 static QUEUED_MESSAGES: OnceCell<MessageQueue> = OnceCell::const_new();
 
 fn parse_agent_command(command: &str) -> Result<(String, String, Vec<String>), String> {
-    // Command format: "cd /path/to/worktree && {claude|cursor-agent} [args]"
+    // Command format: "cd /path/to/worktree && {claude|cursor-agent|opencode} [args]"
     let parts: Vec<&str> = command.split(" && ").collect();
     if parts.len() != 2 {
         return Err(format!("Invalid command format: {command}"));
@@ -54,8 +54,10 @@ fn parse_agent_command(command: &str) -> Result<(String, String, Vec<String>), S
         "claude"
     } else if agent_part.starts_with("cursor-agent") {
         "cursor-agent"
+    } else if agent_part.starts_with("/Users/marius.wichtner/.opencode/bin/opencode") {
+        "/Users/marius.wichtner/.opencode/bin/opencode"
     } else {
-        return Err(format!("Second part doesn't start with 'claude' or 'cursor-agent': {command}"));
+        return Err(format!("Second part doesn't start with 'claude', 'cursor-agent', or 'opencode': {command}"));
     };
     
     // Split the agent command into arguments, handling quoted strings
@@ -892,6 +894,10 @@ async fn para_core_start_claude(session_name: String) -> Result<String, String> 
     
     // Create new terminal with the agent directly
     log::info!("Creating terminal with {agent_name} directly: {terminal_id}");
+    
+    // Keep a copy for comparison before moving
+    let is_opencode = agent_name == "/Users/marius.wichtner/.opencode/bin/opencode";
+    
     terminal_manager.create_terminal_with_app(
         terminal_id.clone(),
         cwd,
@@ -899,6 +905,30 @@ async fn para_core_start_claude(session_name: String) -> Result<String, String> 
         agent_args,
         vec![],
     ).await?;
+    
+    // For TUI applications like OpenCode, ensure proper initial sizing
+    // OpenCode needs extra time to initialize and respond to resize signals
+    if is_opencode {
+        // Spawn a background task to handle delayed resizing
+        // This prevents blocking the main thread
+        let terminal_manager_clone = terminal_manager.clone();
+        let terminal_id_clone = terminal_id.clone();
+        tokio::spawn(async move {
+            // Wait for OpenCode to fully initialize its TUI
+            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            
+            // Send resize to ensure proper initial layout
+            let _ = terminal_manager_clone.resize_terminal(terminal_id_clone.clone(), 136, 48).await;
+            
+            // Wait a bit longer then send final resize
+            tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+            let _ = terminal_manager_clone.resize_terminal(terminal_id_clone.clone(), 136, 48).await;
+            
+            // One final resize after frontend has settled
+            tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+            let _ = terminal_manager_clone.resize_terminal(terminal_id_clone, 136, 48).await;
+        });
+    }
     
     log::info!("Successfully started Claude in terminal: {terminal_id}");
     Ok(command)
@@ -930,6 +960,10 @@ async fn para_core_start_claude_orchestrator(terminal_id: String) -> Result<Stri
     
     // Create new terminal with the agent directly
     log::info!("Creating terminal with {agent_name} directly: {terminal_id}");
+    
+    // Keep a copy for comparison before moving
+    let is_opencode = agent_name == "/Users/marius.wichtner/.opencode/bin/opencode";
+    
     terminal_manager.create_terminal_with_app(
         terminal_id.clone(),
         cwd,
@@ -937,6 +971,30 @@ async fn para_core_start_claude_orchestrator(terminal_id: String) -> Result<Stri
         agent_args,
         vec![],
     ).await?;
+    
+    // For TUI applications like OpenCode, ensure proper initial sizing
+    // OpenCode needs extra time to initialize and respond to resize signals
+    if is_opencode {
+        // Spawn a background task to handle delayed resizing
+        // This prevents blocking the main thread
+        let terminal_manager_clone = terminal_manager.clone();
+        let terminal_id_clone = terminal_id.clone();
+        tokio::spawn(async move {
+            // Wait for OpenCode to fully initialize its TUI
+            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            
+            // Send resize to ensure proper initial layout
+            let _ = terminal_manager_clone.resize_terminal(terminal_id_clone.clone(), 136, 48).await;
+            
+            // Wait a bit longer then send final resize
+            tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+            let _ = terminal_manager_clone.resize_terminal(terminal_id_clone.clone(), 136, 48).await;
+            
+            // One final resize after frontend has settled
+            tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+            let _ = terminal_manager_clone.resize_terminal(terminal_id_clone, 136, 48).await;
+        });
+    }
     
     log::info!("Successfully started Claude in terminal: {terminal_id}");
     Ok(command)
@@ -1373,6 +1431,24 @@ mod tests {
         let cmd = "echo hi";
         let res = parse_agent_command(cmd);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_parse_agent_command_opencode_with_prompt() {
+        let cmd = r#"cd /tmp/work && /Users/marius.wichtner/.opencode/bin/opencode --prompt "hello world""#;
+        let (cwd, agent, args) = parse_agent_command(cmd).unwrap();
+        assert_eq!(cwd, "/tmp/work");
+        assert_eq!(agent, "/Users/marius.wichtner/.opencode/bin/opencode");
+        assert_eq!(args, vec!["--prompt", "hello world"]);
+    }
+
+    #[test]
+    fn test_parse_agent_command_opencode_continue() {
+        let cmd = r#"cd /repo && /Users/marius.wichtner/.opencode/bin/opencode --continue"#;
+        let (cwd, agent, args) = parse_agent_command(cmd).unwrap();
+        assert_eq!(cwd, "/repo");
+        assert_eq!(agent, "/Users/marius.wichtner/.opencode/bin/opencode");
+        assert_eq!(args, vec!["--continue"]);
     }
 
     // Tests removed: get_current_directory now uses active project instead of current working directory

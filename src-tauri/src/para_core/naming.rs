@@ -227,6 +227,71 @@ Respond with just the short kebab-case name:"#
         return Ok(None);
     }
 
+    // Handle OpenCode name generation
+    if agent_type == "opencode" {
+        log::info!("Attempting to generate name with opencode");
+        
+        // OpenCode uses the `run` command with a specific model and prompt
+        let timeout_duration = Duration::from_secs(20);
+        let opencode_future = Command::new("/Users/marius.wichtner/.opencode/bin/opencode")
+            .args(["run", "--model", "openrouter/openai/gpt-4o-mini", &prompt_plain])
+            .current_dir(worktree_path)
+            .env("NO_COLOR", "1")
+            .env("CLICOLOR", "0")
+            .env("OPENCODE_NO_INTERACTIVE", "1") // Ensure non-interactive mode
+            .output();
+        
+        let output = match timeout(timeout_duration, opencode_future).await {
+            Ok(Ok(output)) => {
+                log::debug!("opencode executed successfully");
+                output
+            },
+            Ok(Err(e)) => {
+                log::warn!("Failed to execute opencode: {e}");
+                return Ok(None);
+            },
+            Err(_) => {
+                log::warn!("OpenCode timed out after 15 seconds");
+                return Ok(None);
+            },
+        };
+        
+        if output.status.success() {
+            let stdout = ansi_strip(&String::from_utf8_lossy(&output.stdout));
+            log::debug!("opencode stdout: {stdout}");
+            
+            // OpenCode returns plain text, so we look for a kebab-case name in the output
+            // Split by newlines and find the first line that looks like a kebab-case name
+            let candidate = stdout
+                .lines()
+                .map(|line| line.trim())
+                .filter(|line| !line.is_empty())
+                .filter(|line| !line.contains(' ')) // No spaces
+                .filter(|line| line.chars().all(|c| c.is_ascii_lowercase() || c == '-' || c.is_ascii_digit()))
+                .filter(|line| line.len() <= 30) // Reasonable length
+                .find(|_| true) // Get first match
+                .map(|s| s.to_string());
+            
+            if let Some(result) = candidate {
+                log::info!("opencode returned name candidate: {result}");
+                let name = sanitize_name(&result);
+                log::info!("Sanitized name: {name}");
+                
+                if !name.is_empty() {
+                    db.update_session_display_name(session_id, &name)?;
+                    log::info!("Updated database with display_name '{name}' for session_id '{session_id}'");
+                    return Ok(Some(name));
+                }
+            } else {
+                log::warn!("opencode produced no usable output for naming");
+            }
+        } else {
+            log::warn!("opencode returned non-zero exit status");
+        }
+        
+        return Ok(None);
+    }
+    
     // Use Claude only if claude was selected (not as a fallback)
     if agent_type != "claude" {
         log::info!("Agent type is '{agent_type}', not generating name with claude");
@@ -324,5 +389,29 @@ mod tests {
         assert_eq!(args[3], "-m");
         assert_eq!(args[4], "gpt-5");
         assert_eq!(args[5], prompt);
+    }
+
+    #[test]
+    fn test_sanitize_name() {
+        assert_eq!(sanitize_name("Hello World!"), "hello-world");
+        assert_eq!(sanitize_name("implement-user-auth"), "implement-user-auth");
+        assert_eq!(sanitize_name("build-todo-app"), "build-todo-app");
+        assert_eq!(sanitize_name("API Docs & Tests"), "api-docs-tests");
+        assert_eq!(sanitize_name("--multiple--hyphens--"), "multiple-hyphens");
+        
+        // Test length limit
+        let long_name = "this-is-a-very-long-name-that-exceeds-thirty-characters";
+        assert!(sanitize_name(long_name).len() <= 30);
+    }
+
+    #[test]
+    fn test_truncate_prompt() {
+        let short_prompt = "Short task";
+        assert_eq!(truncate_prompt(short_prompt), "Short task");
+        
+        let long_prompt = "This is a very long prompt that contains multiple lines\nSecond line here\nThird line\nFourth line\nFifth line should be truncated";
+        let result = truncate_prompt(long_prompt);
+        assert!(result.lines().count() <= 4);
+        assert!(result.len() <= 400);
     }
 }

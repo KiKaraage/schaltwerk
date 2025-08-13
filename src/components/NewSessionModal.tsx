@@ -3,6 +3,7 @@ import { useClaudeSession } from '../hooks/useClaudeSession'
 import { generateDockerStyleName } from '../utils/dockerNames'
 import { invoke } from '@tauri-apps/api/core'
 import { BranchAutocomplete } from './BranchAutocomplete'
+import { ModelSelector } from './ModelSelector'
 
 interface Props {
     open: boolean
@@ -26,7 +27,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [loadingBranches, setLoadingBranches] = useState(false)
     const [isValidBranch, setIsValidBranch] = useState(true)
     const [skipPermissions, setSkipPermissions] = useState(false)
-    const [agentType, setAgentType] = useState<'claude' | 'cursor'>('claude')
+    const [agentType, setAgentType] = useState<'claude' | 'cursor' | 'opencode'>('claude')
     const [validationError, setValidationError] = useState('')
     const [creating, setCreating] = useState(false)
     const [createAsDraft, setCreateAsDraft] = useState(false)
@@ -42,7 +43,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
         await saveSkipPermissions(checked)
     }
 
-    const handleAgentTypeChange = async (type: 'claude' | 'cursor') => {
+    const handleAgentTypeChange = async (type: 'claude' | 'cursor' | 'opencode') => {
         setAgentType(type)
         await saveAgentType(type)
     }
@@ -170,7 +171,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                 .finally(() => setLoadingBranches(false))
             
             getSkipPermissions().then(setSkipPermissions)
-            getAgentType().then(type => setAgentType(type as 'claude' | 'cursor'))
+            getAgentType().then(type => setAgentType(type as 'claude' | 'cursor' | 'opencode'))
             
             // Focus the prompt textarea when modal opens
             setTimeout(() => {
@@ -299,30 +300,21 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                         </div>
                         {!createAsDraft && (
                         <div>
-                            <label className="block text-sm text-slate-300 mb-1">Agent</label>
-                            <div className="flex gap-2">
-                                <button 
-                                    type="button" 
-                                    onClick={() => handleAgentTypeChange('claude')} 
-                                    className={`px-3 py-1.5 text-sm rounded border ${agentType === 'claude' ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-300'}`}
-                                >
-                                    Claude
-                                </button>
-                                <button 
-                                    type="button" 
-                                    onClick={() => handleAgentTypeChange('cursor')} 
-                                    className={`px-3 py-1.5 text-sm rounded border ${agentType === 'cursor' ? 'bg-purple-600 border-purple-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-300'}`}
-                                >
-                                    Cursor
-                                </button>
-                            </div>
-                            <p className="text-xs text-slate-400 mt-1">AI agent to use for this session</p>
+                            <label className="block text-sm text-slate-300 mb-2">Agent</label>
+                            <ModelSelector
+                                value={agentType}
+                                onChange={handleAgentTypeChange}
+                                disabled={false}
+                            />
+                            <p className="text-xs text-slate-400 mt-2">AI agent to use for this session</p>
                         </div>
                         )}
-                        {!createAsDraft && (
+                        {!createAsDraft && agentType !== 'opencode' && (
                             <div className="flex items-center gap-2">
                                 <input id="skipPerms" type="checkbox" checked={skipPermissions} onChange={e => handleSkipPermissionsChange(e.target.checked)} />
-                                <label htmlFor="skipPerms" className="text-sm text-slate-300">{agentType === 'cursor' ? 'Force flag' : 'Skip permissions'}</label>
+                                <label htmlFor="skipPerms" className="text-sm text-slate-300">
+                                    {agentType === 'cursor' ? 'Force flag' : 'Skip permissions'}
+                                </label>
                             </div>
                         )}
                     </div>

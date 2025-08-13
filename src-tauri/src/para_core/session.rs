@@ -402,6 +402,24 @@ impl SessionManager {
                     skip_permissions,
                 )
             }
+            "opencode" => {
+                let session_id = crate::para_core::opencode::find_opencode_session(&session.worktree_path);
+                let prompt_to_use = if session_id.is_none() && !has_session_been_prompted(&session.worktree_path) {
+                    session.initial_prompt.as_ref().map(|p| {
+                        mark_session_prompted(&session.worktree_path);
+                        p.as_str()
+                    })
+                } else {
+                    None
+                };
+                
+                crate::para_core::opencode::build_opencode_command(
+                    &session.worktree_path,
+                    session_id.as_deref(),
+                    prompt_to_use,
+                    skip_permissions,
+                )
+            }
             _ => {
                 let session_id = crate::para_core::claude::find_claude_session(&session.worktree_path);
                 let prompt_to_use = if session_id.is_none() && !has_session_been_prompted(&session.worktree_path) {
@@ -433,6 +451,15 @@ impl SessionManager {
             "cursor" => {
                 let session_id = crate::para_core::cursor::find_cursor_session(&self.repo_path);
                 crate::para_core::cursor::build_cursor_command(
+                    &self.repo_path,
+                    session_id.as_deref(),
+                    None,
+                    skip_permissions,
+                )
+            }
+            "opencode" => {
+                let session_id = crate::para_core::opencode::find_opencode_session(&self.repo_path);
+                crate::para_core::opencode::build_opencode_command(
                     &self.repo_path,
                     session_id.as_deref(),
                     None,

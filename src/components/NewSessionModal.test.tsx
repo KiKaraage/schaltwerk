@@ -63,7 +63,7 @@ describe('NewSessionModal', () => {
     expect(nameInput.value).toBe('eager_cosmos')
 
     // wait until agent type fetched sets Cursor active and Force flag label shows
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Cursor' })).toHaveClass('bg-purple-600'))
+    await waitFor(() => expect(screen.getByRole('button', { name: /Cursor/i })).toBeInTheDocument())
     expect(screen.getByLabelText('Force flag')).toBeInTheDocument()
 
     // Create should submit with current name value
@@ -84,17 +84,42 @@ describe('NewSessionModal', () => {
     openModal()
     // wait for skip permissions to load from backend (true)
     await waitFor(() => expect(screen.getByLabelText('Force flag')).toBeInTheDocument())
-    // switch to Claude -> label text changes
-    fireEvent.click(screen.getByRole('button', { name: 'Claude' }))
+    
+    // Open dropdown and switch to Claude
+    const dropdown = screen.getByRole('button', { name: /Cursor/i })
+    fireEvent.click(dropdown)
+    
+    // Wait for dropdown to open and find Claude option by looking for all buttons
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button')
+      const claudeOption = buttons.find(btn => btn.textContent?.includes('Claude') && !btn.textContent?.includes('Cursor'))
+      expect(claudeOption).toBeDefined()
+      if (claudeOption) fireEvent.click(claudeOption)
+    })
+    
+    // Now check for Skip permissions checkbox
+    await waitFor(() => expect(screen.getByLabelText('Skip permissions')).toBeInTheDocument())
     const checkbox = screen.getByLabelText('Skip permissions') as HTMLInputElement
-    await waitFor(() => expect(checkbox.checked).toBe(true))
+    expect(checkbox.checked).toBe(true)
     fireEvent.click(checkbox)
     await waitFor(() => expect(checkbox.checked).toBe(false))
+    
     // Ensure persistence handlers were called
     expect(mockSetAgentType).toHaveBeenCalledWith('claude')
     expect(mockSetSkipPermissions).toHaveBeenCalledWith(false)
-    // Switch back to Cursor, value should persist (still unchecked)
-    fireEvent.click(screen.getByRole('button', { name: 'Cursor' }))
+    
+    // Open dropdown and switch back to Cursor
+    const dropdownClaude = screen.getByRole('button', { name: /Claude/i })
+    fireEvent.click(dropdownClaude)
+    
+    // Find Cursor option
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button')
+      const cursorOption = buttons.find(btn => btn.textContent === 'Cursor')
+      expect(cursorOption).toBeDefined()
+      if (cursorOption) fireEvent.click(cursorOption)
+    })
+    
     await waitFor(() => expect(screen.getByLabelText('Force flag')).toBeInTheDocument())
     const forceCheckbox = screen.getByLabelText('Force flag') as HTMLInputElement
     expect(forceCheckbox.checked).toBe(false)

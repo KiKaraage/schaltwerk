@@ -5,11 +5,11 @@ import { useClaudeSession } from '../hooks/useClaudeSession'
 interface Props {
     open: boolean
     onClose: () => void
-    onSwitch: (agentType: 'claude' | 'cursor') => void | Promise<void>
+    onSwitch: (agentType: 'claude' | 'cursor' | 'opencode') => void | Promise<void>
 }
 
 export function SwitchOrchestratorModal({ open, onClose, onSwitch }: Props) {
-    const [agentType, setAgentType] = useState<'claude' | 'cursor'>('claude')
+    const [agentType, setAgentType] = useState<'claude' | 'cursor' | 'opencode'>('claude')
     const [switching, setSwitching] = useState(false)
     const { getAgentType } = useClaudeSession()
     const switchRef = useRef<() => void>(() => {})
@@ -31,7 +31,7 @@ export function SwitchOrchestratorModal({ open, onClose, onSwitch }: Props) {
     useEffect(() => {
         if (open) {
             setSwitching(false)
-            getAgentType().then(type => setAgentType(type as 'claude' | 'cursor'))
+            getAgentType().then(type => setAgentType(type as 'claude' | 'cursor' | 'opencode'))
         }
     }, [open, getAgentType])
     

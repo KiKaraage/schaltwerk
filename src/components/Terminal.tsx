@@ -151,6 +151,36 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
 
         // Send initial size to backend immediately
         invoke('resize_terminal', { id: terminalId, cols: initialCols, rows: initialRows }).catch(console.error);
+        
+        // For OpenCode terminals, send additional resize events to ensure proper TUI layout
+        // But delay them longer to avoid conflicts with the mounting process
+        if (terminalId.includes('session-') && !terminalId.includes('orchestrator')) {
+            setTimeout(() => {
+                if (terminal.current && termRef.current) {
+                    try {
+                        fitAddon.current.fit();
+                        const { cols, rows } = terminal.current;
+                        // Only send if we got reasonable dimensions
+                        if (cols > 80 && rows > 24) {
+                            invoke('resize_terminal', { id: terminalId, cols, rows }).catch(console.error);
+                        }
+                    } catch (e) {
+                        console.warn('OpenCode resize failed:', e);
+                    }
+                }
+            }, 1500);
+            setTimeout(() => {
+                if (terminal.current && termRef.current) {
+                    try {
+                        fitAddon.current.fit();
+                        const { cols, rows } = terminal.current;
+                        invoke('resize_terminal', { id: terminalId, cols, rows }).catch(console.error);
+                    } catch (e) {
+                        console.warn('OpenCode resize failed:', e);
+                    }
+                }
+            }, 3000);
+        }
 
         // Flush queued writes once per frame
         const flushQueuedWrites = () => {
@@ -251,6 +281,17 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             
             // Only send resize if dimensions actually changed
             if (cols !== lastSize.current.cols || rows !== lastSize.current.rows) {
+                // For OpenCode session terminals, prevent downgrading to small sizes
+                // unless it's a legitimate resize (like window resize)
+                const isSessionTerminal = terminalId.includes('session-') && !terminalId.includes('orchestrator');
+                const isDowngrading = (cols < lastSize.current.cols || rows < lastSize.current.rows);
+                const isTooSmall = cols < 100 || rows < 30;
+                
+                if (isSessionTerminal && isDowngrading && isTooSmall) {
+                    console.log(`[Terminal ${terminalId}] Ignoring small resize: ${cols}x${rows} (was ${lastSize.current.cols}x${lastSize.current.rows})`);
+                    return;
+                }
+                
                 lastSize.current = { cols, rows };
                 invoke('resize_terminal', { id: terminalId, cols, rows }).catch(console.error);
             }

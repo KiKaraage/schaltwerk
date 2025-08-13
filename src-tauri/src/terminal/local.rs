@@ -58,6 +58,15 @@ impl LocalPtyAdapter {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         
+        // Set initial terminal size for TUI applications
+        // These will be updated by resize commands but help with initial rendering
+        cmd.env("LINES", "48");
+        cmd.env("COLUMNS", "136");
+        
+        // Ensure proper terminal behavior for TUI applications
+        cmd.env("FORCE_COLOR", "1");
+        cmd.env("TERM_PROGRAM", "schaltwerk");
+        
         if let Ok(home) = std::env::var("HOME") {
             cmd.env("HOME", home);
         }
@@ -249,10 +258,12 @@ impl TerminalBackend for LocalPtyAdapter {
         info!("Creating terminal: id={id}, cwd={}", params.cwd);
         
         let pty_system = NativePtySystem::default();
+        // Use larger initial size to better accommodate TUI applications like OpenCode
+        // This will be properly resized by the frontend after creation
         let pair = pty_system
             .openpty(PtySize {
-                rows: 24,
-                cols: 80,
+                rows: 48,
+                cols: 136,
                 pixel_width: 0,
                 pixel_height: 0,
             })
