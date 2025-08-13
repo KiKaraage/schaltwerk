@@ -12,7 +12,7 @@ mod tests;
 
 pub use database::Database;
 pub use session::SessionManager;
-pub use types::{Session, EnrichedSession};
+pub use types::{Session, SessionState, EnrichedSession};
 
 use std::path::PathBuf;
 use anyhow::Result;

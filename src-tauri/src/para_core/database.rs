@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use anyhow::Result;
 use chrono::{DateTime, Utc, TimeZone};
-use crate::para_core::types::{Session, SessionStatus, GitStats};
+use crate::para_core::types::{Session, SessionStatus, SessionState, GitStats};
 
 #[derive(Clone)]
 pub struct Database {
@@ -173,6 +173,16 @@ impl Database {
             "ALTER TABLE sessions ADD COLUMN was_auto_generated BOOLEAN DEFAULT FALSE",
             [],
         );
+        // Add draft_content column if it doesn't exist (migration)
+        let _ = conn.execute(
+            "ALTER TABLE sessions ADD COLUMN draft_content TEXT",
+            [],
+        );
+        // Add session_state column if it doesn't exist (migration), default to 'running' for backward compatibility
+        let _ = conn.execute(
+            "ALTER TABLE sessions ADD COLUMN session_state TEXT DEFAULT 'running'",
+            [],
+        );
         
         Ok(())
     }
@@ -185,8 +195,9 @@ impl Database {
                 id, name, display_name, repository_path, repository_name,
                 branch, parent_branch, worktree_path,
                 status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
-                original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated,
+                draft_content, session_state
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
             params![
                 session.id,
                 session.name,
@@ -206,6 +217,8 @@ impl Database {
                 session.original_skip_permissions,
                 session.pending_name_generation,
                 session.was_auto_generated,
+                session.draft_content,
+                session.session_state.as_str(),
             ],
         )?;
         
@@ -219,7 +232,8 @@ impl Database {
             "SELECT id, name, display_name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
                     status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
-                    original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
+                    original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated,
+                    draft_content, session_state
              FROM sessions
              WHERE repository_path = ?1 AND name = ?2"
         )?;
@@ -247,6 +261,10 @@ impl Database {
                     original_skip_permissions: row.get(15).ok(),
                     pending_name_generation: row.get(16).unwrap_or(false),
                     was_auto_generated: row.get(17).unwrap_or(false),
+                    draft_content: row.get(18).ok(),
+                    session_state: row.get::<_, String>(19).ok()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(SessionState::Running),
                 })
             }
         )?;
@@ -261,7 +279,8 @@ impl Database {
             "SELECT id, name, display_name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
                     status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
-                    original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
+                    original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated,
+                    draft_content, session_state
              FROM sessions
              WHERE id = ?1"
         )?;
@@ -289,6 +308,10 @@ impl Database {
                     original_skip_permissions: row.get(15).ok(),
                     pending_name_generation: row.get(16).unwrap_or(false),
                     was_auto_generated: row.get(17).unwrap_or(false),
+                    draft_content: row.get(18).ok(),
+                    session_state: row.get::<_, String>(19).ok()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(SessionState::Running),
                 })
             }
         )?;
@@ -303,7 +326,8 @@ impl Database {
             "SELECT id, name, display_name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
                     status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
-                    original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
+                    original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated,
+                    draft_content, session_state
              FROM sessions
              WHERE repository_path = ?1
              ORDER BY ready_to_merge ASC, COALESCE(last_activity, updated_at) DESC"
@@ -332,6 +356,10 @@ impl Database {
                     original_skip_permissions: row.get(15).ok(),
                     pending_name_generation: row.get(16).unwrap_or(false),
                     was_auto_generated: row.get(17).unwrap_or(false),
+                    draft_content: row.get(18).ok(),
+                    session_state: row.get::<_, String>(19).ok()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(SessionState::Running),
                 })
             }
         )?
@@ -347,7 +375,8 @@ impl Database {
             "SELECT id, name, display_name, repository_path, repository_name,
                     branch, parent_branch, worktree_path,
                     status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
-                    original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
+                    original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated,
+                    draft_content, session_state
              FROM sessions
              WHERE status = 'active'
              ORDER BY ready_to_merge ASC, COALESCE(last_activity, updated_at) DESC"
@@ -376,6 +405,10 @@ impl Database {
                     original_skip_permissions: row.get(15).ok(),
                     pending_name_generation: row.get(16).unwrap_or(false),
                     was_auto_generated: row.get(17).unwrap_or(false),
+                    draft_content: row.get(18).ok(),
+                    session_state: row.get::<_, String>(19).ok()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(SessionState::Running),
                 })
             }
         )?
@@ -617,6 +650,81 @@ impl Database {
             "UPDATE sessions SET original_agent_type = ?1, original_skip_permissions = ?2 WHERE id = ?3",
             params![agent_type, skip_permissions, session_id],
         )?;
+        Ok(())
+    }
+
+    pub fn list_sessions_by_state(&self, repo_path: &Path, state: SessionState) -> Result<Vec<Session>> {
+        let conn = self.conn.lock().unwrap();
+        
+        let mut stmt = conn.prepare(
+            "SELECT id, name, display_name, repository_path, repository_name,
+                    branch, parent_branch, worktree_path,
+                    status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
+                    original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated,
+                    draft_content, session_state
+             FROM sessions
+             WHERE repository_path = ?1 AND session_state = ?2
+             ORDER BY ready_to_merge ASC, COALESCE(last_activity, updated_at) DESC"
+        )?;
+        
+        let sessions = stmt.query_map(
+            params![repo_path.to_string_lossy(), state.as_str()],
+            |row| {
+                Ok(Session {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    display_name: row.get(2).ok(),
+                    repository_path: PathBuf::from(row.get::<_, String>(3)?),
+                    repository_name: row.get(4)?,
+                    branch: row.get(5)?,
+                    parent_branch: row.get(6)?,
+                    worktree_path: PathBuf::from(row.get::<_, String>(7)?),
+                    status: row.get::<_, String>(8)?.parse().unwrap_or(SessionStatus::Active),
+                    created_at: Utc.timestamp_opt(row.get(9)?, 0).unwrap(),
+                    updated_at: Utc.timestamp_opt(row.get(10)?, 0).unwrap(),
+                    last_activity: row.get::<_, Option<i64>>(11)?
+                        .and_then(|ts| Utc.timestamp_opt(ts, 0).single()),
+                    initial_prompt: row.get(12)?,
+                    ready_to_merge: row.get(13).unwrap_or(false),
+                    original_agent_type: row.get(14).ok(),
+                    original_skip_permissions: row.get(15).ok(),
+                    pending_name_generation: row.get(16).unwrap_or(false),
+                    was_auto_generated: row.get(17).unwrap_or(false),
+                    draft_content: row.get(18).ok(),
+                    session_state: row.get::<_, String>(19).ok()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(SessionState::Running),
+                })
+            }
+        )?
+        .collect::<SqlResult<Vec<_>>>()?;
+        
+        Ok(sessions)
+    }
+
+    pub fn update_session_state(&self, id: &str, state: SessionState) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        
+        conn.execute(
+            "UPDATE sessions
+             SET session_state = ?1, updated_at = ?2
+             WHERE id = ?3",
+            params![state.as_str(), Utc::now().timestamp(), id],
+        )?;
+        
+        Ok(())
+    }
+
+    pub fn update_draft_content(&self, id: &str, content: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        
+        conn.execute(
+            "UPDATE sessions
+             SET draft_content = ?1, updated_at = ?2
+             WHERE id = ?3",
+            params![content, Utc::now().timestamp(), id],
+        )?;
+        
         Ok(())
     }
 }

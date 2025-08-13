@@ -7,7 +7,7 @@ use chrono::Utc;
 use crate::para_core::{
     database::Database,
     git,
-    types::{Session, SessionStatus, SessionInfo, SessionStatusType, SessionType, EnrichedSession, DiffStats},
+    types::{Session, SessionStatus, SessionState, SessionInfo, SessionStatusType, SessionType, EnrichedSession, DiffStats},
 };
 
 // Track which sessions have already had their initial prompt sent
@@ -166,6 +166,8 @@ impl SessionManager {
             // regardless of whether a prompt was provided. The generator uses a default prompt.
             pending_name_generation: was_auto_generated,
             was_auto_generated,
+            draft_content: None,
+            session_state: SessionState::Running,
         };
         
         // Always create worktree from the parent branch (either specified or detected)
@@ -355,6 +357,8 @@ impl SessionManager {
                 is_blocked: None,
                 diff_stats: diff_stats.clone(),
                 ready_to_merge: session.ready_to_merge,
+                draft_content: session.draft_content.clone(),
+                session_state: session.session_state.clone(),
             };
             
             let terminals = vec![
@@ -475,6 +479,130 @@ impl SessionManager {
         Ok(())
     }
 
+    pub fn create_draft_session(&self, name: &str, draft_content: &str) -> Result<Session> {
+        log::info!("Creating draft session '{}' in repository: {}", name, self.repo_path.display());
+        
+        let repo_lock = Self::get_repo_lock(&self.repo_path);
+        let _guard = repo_lock.lock().unwrap();
+        
+        if !git::is_valid_session_name(name) {
+            return Err(anyhow!("Invalid session name: use only letters, numbers, hyphens, and underscores"));
+        }
+        
+        let (unique_name, branch, worktree_path) = self.find_unique_session_paths(name)?;
+        
+        let session_id = Uuid::new_v4().to_string();
+        let repo_name = self.repo_path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        
+        let now = Utc::now();
+        
+        let session = Session {
+            id: session_id.clone(),
+            name: unique_name.clone(),
+            display_name: None,
+            repository_path: self.repo_path.clone(),
+            repository_name: repo_name,
+            branch: branch.clone(),
+            parent_branch: "main".to_string(),
+            worktree_path: worktree_path.clone(),
+            status: SessionStatus::Active,
+            created_at: now,
+            updated_at: now,
+            last_activity: None,
+            initial_prompt: None,
+            ready_to_merge: false,
+            original_agent_type: None,
+            original_skip_permissions: None,
+            pending_name_generation: false,
+            was_auto_generated: false,
+            draft_content: Some(draft_content.to_string()),
+            session_state: SessionState::Draft,
+        };
+        
+        if let Err(e) = self.db.create_session(&session) {
+            return Err(anyhow!("Failed to save draft session to database: {}", e));
+        }
+        
+        Ok(session)
+    }
+
+    pub fn start_draft_session(&self, session_name: &str, base_branch: Option<&str>) -> Result<()> {
+        log::info!("Starting draft session '{}' in repository: {}", session_name, self.repo_path.display());
+        
+        let repo_lock = Self::get_repo_lock(&self.repo_path);
+        let _guard = repo_lock.lock().unwrap();
+        
+        let session = self.db.get_session_by_name(&self.repo_path, session_name)?;
+        
+        if session.session_state != SessionState::Draft {
+            return Err(anyhow!("Session '{}' is not in draft state", session_name));
+        }
+        
+        let parent_branch = if let Some(base) = base_branch {
+            base.to_string()
+        } else {
+            log::info!("No base branch specified, detecting default branch for session startup");
+            match git::get_default_branch(&self.repo_path) {
+                Ok(default) => {
+                    log::info!("Using detected default branch: {default}");
+                    default
+                }
+                Err(e) => {
+                    log::error!("Failed to detect default branch: {e}");
+                    return Err(anyhow!("Failed to detect default branch: {}. Please ensure the repository has at least one branch (e.g., 'main' or 'master')", e));
+                }
+            }
+        };
+        
+        self.cleanup_existing_worktree(&session.worktree_path)?;
+        
+        let create_result = git::create_worktree_from_base(
+            &self.repo_path, 
+            &session.branch, 
+            &session.worktree_path, 
+            &parent_branch
+        );
+        
+        if let Err(e) = create_result {
+            return Err(anyhow!("Failed to create worktree: {}", e));
+        }
+        
+        self.db.update_session_state(&session.id, SessionState::Running)?;
+        
+        let global_agent = self.db.get_agent_type().unwrap_or_else(|_| "claude".to_string());
+        let global_skip = self.db.get_skip_permissions().unwrap_or(false);
+        let _ = self.db.set_session_original_settings(&session.id, &global_agent, global_skip);
+        
+        let mut git_stats = git::calculate_git_stats_fast(&session.worktree_path, &parent_branch)?;
+        git_stats.session_id = session.id.clone();
+        self.db.save_git_stats(&git_stats)?;
+        
+        Ok(())
+    }
+
+    pub fn update_session_state(&self, session_name: &str, state: SessionState) -> Result<()> {
+        let session = self.db.get_session_by_name(&self.repo_path, session_name)?;
+        self.db.update_session_state(&session.id, state)?;
+        Ok(())
+    }
+
+    pub fn update_draft_content(&self, session_name: &str, content: &str) -> Result<()> {
+        let session = self.db.get_session_by_name(&self.repo_path, session_name)?;
+        self.db.update_draft_content(&session.id, content)?;
+        Ok(())
+    }
+
+    pub fn list_sessions_by_state(&self, state: SessionState) -> Result<Vec<Session>> {
+        let sessions = self.db.list_sessions_by_state(&self.repo_path, state)?;
+        Ok(sessions.into_iter()
+            .filter(|session| session.status != SessionStatus::Cancelled)
+            .collect())
+    }
+
     #[cfg(test)]
     pub fn db_ref(&self) -> &Database {
         &self.db
@@ -517,6 +645,8 @@ mod session_tests {
             original_skip_permissions: None,
             pending_name_generation: false,
             was_auto_generated: false,
+            draft_content: None,
+            session_state: SessionState::Running,
         };
         
         manager.db.create_session(&session).unwrap();
@@ -578,6 +708,8 @@ mod session_tests {
             original_skip_permissions: None,
             pending_name_generation: false,
             was_auto_generated: false,
+            draft_content: None,
+            session_state: SessionState::Running,
         };
         
         manager.db.create_session(&session_no_prompt).unwrap();
@@ -657,6 +789,8 @@ mod session_tests {
             original_skip_permissions: None,
             pending_name_generation: false,
             was_auto_generated: false,
+            draft_content: None,
+            session_state: SessionState::Running,
         };
         
         manager.db.create_session(&session).unwrap();

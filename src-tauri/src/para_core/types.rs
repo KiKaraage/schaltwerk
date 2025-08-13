@@ -34,6 +34,10 @@ pub struct Session {
     pub pending_name_generation: bool,
     // True if the session name was auto-generated (e.g., docker-style names)
     pub was_auto_generated: bool,
+    // Content for draft tasks (markdown format)
+    pub draft_content: Option<String>,
+    // Current session state (Draft, Running, Reviewed)
+    pub session_state: SessionState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -41,6 +45,14 @@ pub struct Session {
 pub enum SessionStatus {
     Active,
     Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum SessionState {
+    Draft,
+    Running,
+    Reviewed,
 }
 
 impl SessionStatus {
@@ -60,6 +72,29 @@ impl FromStr for SessionStatus {
             "active" => Ok(SessionStatus::Active),
             "cancelled" => Ok(SessionStatus::Cancelled),
             _ => Err(format!("Invalid session status: {s}")),
+        }
+    }
+}
+
+impl SessionState {
+    pub fn as_str(&self) -> &str {
+        match self {
+            SessionState::Draft => "draft",
+            SessionState::Running => "running", 
+            SessionState::Reviewed => "reviewed",
+        }
+    }
+}
+
+impl FromStr for SessionState {
+    type Err = String;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "draft" => Ok(SessionState::Draft),
+            "running" => Ok(SessionState::Running),
+            "reviewed" => Ok(SessionState::Reviewed),
+            _ => Err(format!("Invalid session state: {s}")),
         }
     }
 }
@@ -154,6 +189,9 @@ pub struct SessionInfo {
     pub diff_stats: Option<DiffStats>,
     #[serde(default)]
     pub ready_to_merge: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub draft_content: Option<String>,
+    pub session_state: SessionState,
 }
 
 #[derive(Debug, Clone, Serialize)]

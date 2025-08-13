@@ -898,6 +898,11 @@ fn main() {
             para_core_unmark_session_ready,
             para_core_set_agent_type,
             para_core_get_agent_type,
+            para_core_create_draft_session,
+            para_core_start_draft_session,
+            para_core_update_session_state,
+            para_core_update_draft_content,
+            para_core_list_sessions_by_state,
             open_in_vscode,
             open_apps::get_default_open_app,
             open_apps::set_default_open_app,
@@ -1080,6 +1085,72 @@ async fn set_project_default_base_branch(branch: Option<String>) -> Result<(), S
     let core = para_core.lock().await;
     core.db.set_default_base_branch(branch.as_deref())
         .map_err(|e| format!("Failed to set default base branch: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_create_draft_session(name: String, draft_content: String) -> Result<para_core::Session, String> {
+    log::info!("Creating draft session: {name}");
+    
+    let core = get_para_core().await?;
+    let core_lock = core.lock().await;
+    let manager = core_lock.session_manager();
+    
+    manager.create_draft_session(&name, &draft_content)
+        .map_err(|e| format!("Failed to create draft session: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_start_draft_session(name: String, base_branch: Option<String>) -> Result<(), String> {
+    log::info!("Starting draft session: {name}");
+    
+    let core = get_para_core().await?;
+    let core_lock = core.lock().await;
+    let manager = core_lock.session_manager();
+    
+    manager.start_draft_session(&name, base_branch.as_deref())
+        .map_err(|e| format!("Failed to start draft session: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_update_session_state(name: String, state: String) -> Result<(), String> {
+    log::info!("Updating session state: {name} -> {state}");
+    
+    let session_state = state.parse::<para_core::SessionState>()
+        .map_err(|e| format!("Invalid session state: {e}"))?;
+    
+    let core = get_para_core().await?;
+    let core_lock = core.lock().await;
+    let manager = core_lock.session_manager();
+    
+    manager.update_session_state(&name, session_state)
+        .map_err(|e| format!("Failed to update session state: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_update_draft_content(name: String, content: String) -> Result<(), String> {
+    log::info!("Updating draft content for session: {name}");
+    
+    let core = get_para_core().await?;
+    let core_lock = core.lock().await;
+    let manager = core_lock.session_manager();
+    
+    manager.update_draft_content(&name, &content)
+        .map_err(|e| format!("Failed to update draft content: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_list_sessions_by_state(state: String) -> Result<Vec<para_core::Session>, String> {
+    log::info!("Listing sessions by state: {state}");
+    
+    let session_state = state.parse::<para_core::SessionState>()
+        .map_err(|e| format!("Invalid session state: {e}"))?;
+    
+    let core = get_para_core().await?;
+    let core_lock = core.lock().await;
+    let manager = core_lock.session_manager();
+    
+    manager.list_sessions_by_state(session_state)
+        .map_err(|e| format!("Failed to list sessions by state: {e}"))
 }
 
 #[cfg(test)]
