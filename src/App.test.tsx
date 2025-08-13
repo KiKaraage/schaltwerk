@@ -35,7 +35,7 @@ vi.mock('./components/OpenInSplitButton', () => ({
 }))
 
 // ---- Mock: HomeScreen to drive transitions via onOpenProject ----
-vi.mock('./components/HomeScreen', () => ({
+vi.mock('./components/home/HomeScreen', () => ({
   HomeScreen: ({ onOpenProject }: { onOpenProject: (p: string) => void }) => (
     <div data-testid="home-screen">
       <button data-testid="open-project" onClick={() => onOpenProject('/Users/me/sample-project')}>Open</button>
