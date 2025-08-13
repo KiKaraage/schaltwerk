@@ -78,7 +78,7 @@ export function DiffFileList({ onFileSelect }: DiffFileListProps) {
   }
   
   return (
-    <div className="h-full flex flex-col bg-slate-950">
+    <div className="h-full flex flex-col bg-panel">
       <div className="px-3 py-2 border-b border-slate-800 relative">
         <div className="flex items-center justify-between pr-12">
           <div className="flex items-center gap-2">

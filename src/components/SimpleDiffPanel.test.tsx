@@ -51,12 +51,10 @@ describe('SimpleDiffPanel', () => {
     expect(screen.queryByText(/show prompt/i)).not.toBeInTheDocument()
   })
 
-  it('fetches and renders prompt markdown when dock opened', async () => {
+  it('does not render prompt dock in session mode anymore', async () => {
     currentSelection = { kind: 'session', payload: 's1' }
 
-    // DiffFileList background calls - stub minimal set used in component
     invoke.mockImplementation(async (cmd: string) => {
-      if (cmd === 'para_core_get_session') return { initial_prompt: '# Title\n\nSome **bold** text' }
       if (cmd === 'get_changed_files_from_main') return []
       if (cmd === 'get_current_branch_name') return 'feat'
       if (cmd === 'get_base_branch_name') return 'main'
@@ -66,37 +64,13 @@ describe('SimpleDiffPanel', () => {
     const { SimpleDiffPanel } = await import('./SimpleDiffPanel')
     render(<SimpleDiffPanel onFileSelect={vi.fn()} />)
 
-    // Toggle dock button appears for session
-    await waitFor(() => expect(screen.getByRole('button', { name: /show prompt/i })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /show prompt/i }))
+    // No prompt toggle button is present anymore
+    await waitFor(() => expect(screen.queryByRole('button', { name: /show prompt/i })).not.toBeInTheDocument())
 
-    // Markdown content
-    expect(await screen.findByRole('heading', { name: /title/i })).toBeInTheDocument()
-    expect(screen.getByText(/bold/i)).toBeInTheDocument()
-  })
-
-  it('copy button copies prompt text and shows copied state', async () => {
-    currentSelection = { kind: 'session', payload: 's1' }
-
-    const prompt = 'Copy me'
-    invoke.mockImplementation(async (cmd: string) => {
-      if (cmd === 'para_core_get_session') return { initial_prompt: prompt }
-      if (cmd === 'get_changed_files_from_main') return []
-      if (cmd === 'get_current_branch_name') return 'feat'
-      if (cmd === 'get_base_branch_name') return 'main'
-      if (cmd === 'get_commit_comparison_info') return ['a', 'b']
-      return null
-    })
-    const { SimpleDiffPanel } = await import('./SimpleDiffPanel')
-    render(<SimpleDiffPanel onFileSelect={vi.fn()} />)
-
-    await user.click(await screen.findByRole('button', { name: /show prompt/i }))
-
-    const copyBtn = await screen.findByTitle(/copy prompt to clipboard/i)
-    await user.click(copyBtn)
-
-    await waitFor(() => expect(screen.getByText(/copied/i)).toBeInTheDocument())
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(prompt)
+    // And we never fetch the session prompt
+    // @ts-expect-error access mock calls
+    const calls = (invoke as any).mock.calls as any[]
+    expect(calls.find((c: any[]) => c[0] === 'para_core_get_session')).toBeUndefined()
   })
 
   it('renders changed files, highlights selected row, and calls onFileSelect', async () => {

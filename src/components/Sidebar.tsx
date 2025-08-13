@@ -607,7 +607,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             <div className="px-3 py-2 border-t border-b border-slate-800 text-sm text-slate-300">
                 <div className="flex items-center gap-2">
                     <span className="text-xs flex-shrink-0">Tasks</span>
-                    <div className="flex items-center gap-1 ml-auto flex-wrap">
+                    <div className="flex items-center gap-1 ml-auto flex-nowrap overflow-x-auto">
                         <button
                             className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
                                 filterMode === 'all' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
@@ -641,7 +641,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                             Reviewed <span className="text-slate-400">({sessions.filter(s => !!s.info.ready_to_merge).length})</span>
                         </button>
                         <button
-                            className="px-1.5 py-0.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-white flex items-center gap-0.5"
+                            className="px-1.5 py-0.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-white flex items-center gap-0.5 flex-shrink-0"
                             onClick={() => {
                                 // Cycle through: name -> created -> last-edited -> name
                                 const nextMode = sortMode === 'name' ? 'created' : 
