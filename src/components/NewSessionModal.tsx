@@ -194,7 +194,12 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
         }
 
         window.addEventListener('keydown', handleKeyDown)
-        return () => window.removeEventListener('keydown', handleKeyDown)
+        const setDraftHandler = () => setCreateAsDraft(true)
+        window.addEventListener('schaltwerk:new-session:set-draft' as any, setDraftHandler)
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown)
+            window.removeEventListener('schaltwerk:new-session:set-draft' as any, setDraftHandler)
+        }
     }, [open, onClose])
 
     if (!open) return null

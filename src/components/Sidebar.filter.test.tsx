@@ -33,7 +33,7 @@ interface EnrichedSession {
   terminals: string[]
 }
 
-const createSession = (id: string, readyToMerge = false): EnrichedSession => ({
+const createSession = (id: string, readyToMerge = false, sessionState?: 'draft' | 'active'): EnrichedSession => ({
   info: {
     session_id: id,
     branch: `para/${id}`,
@@ -44,6 +44,9 @@ const createSession = (id: string, readyToMerge = false): EnrichedSession => ({
     is_current: false,
     session_type: 'worktree',
     ready_to_merge: readyToMerge,
+    // Explicit session state for draft filtering in UI
+    // @ts-expect-error test-only relaxed shape
+    session_state: sessionState,
   },
   terminals: []
 })
@@ -66,10 +69,10 @@ describe('Sidebar filter functionality and persistence', () => {
     localStorage.clear()
 
     const sessions = [
-      createSession('alpha', false),
-      createSession('bravo', true),  // reviewed
-      createSession('charlie', false),
-      createSession('delta', true),  // reviewed
+      createSession('alpha', false, 'draft'),
+      createSession('bravo', true, 'active'),  // reviewed
+      createSession('charlie', false, 'draft'),
+      createSession('delta', true, 'active'),  // reviewed
     ]
 
     vi.mocked(invoke).mockImplementation(async (cmd) => {

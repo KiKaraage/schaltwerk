@@ -1,11 +1,12 @@
 import { Terminal, TerminalHandle } from './Terminal'
+import { DraftPlaceholder } from './DraftPlaceholder'
 import Split from 'react-split'
 import { useSelection } from '../contexts/SelectionContext'
 import { useFocus } from '../contexts/FocusContext'
 import { useRef, useEffect, useState } from 'react'
 
 export function TerminalGrid() {
-    const { selection, terminals, isReady } = useSelection()
+    const { selection, terminals, isReady, isDraft } = useSelection()
     const { getFocusForSession, setFocusForSession, currentFocus } = useFocus()
     const [terminalKey, setTerminalKey] = useState(0)
     
@@ -82,6 +83,17 @@ export function TerminalGrid() {
         return (
             <div className="h-full p-2 relative flex items-center justify-center">
                 <div className="text-slate-500 text-sm">Initializing terminals...</div>
+            </div>
+        )
+    }
+
+    // Draft sessions show placeholder instead of terminals
+    if (selection.kind === 'session' && isDraft) {
+        return (
+            <div className="h-full p-2 relative">
+                <div className="bg-panel rounded border border-slate-800 overflow-hidden min-h-0 h-full">
+                    <DraftPlaceholder />
+                </div>
             </div>
         )
     }

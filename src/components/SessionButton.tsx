@@ -46,6 +46,7 @@ interface SessionButtonProps {
     onUnmarkReady: (sessionId: string) => void
     onCancel: (sessionId: string, hasUncommitted: boolean) => void
     onRunDraft?: (sessionId: string) => void
+    onDeleteDraft?: (sessionId: string) => void
 }
 
 function getSessionStateColor(state?: string): 'green' | 'violet' | 'amber' | 'gray' {
@@ -69,7 +70,8 @@ export const SessionButton = memo<SessionButtonProps>(({
     onMarkReady,
     onUnmarkReady,
     onCancel,
-    onRunDraft
+    onRunDraft,
+    onDeleteDraft
 }) => {
     const s = session.info
     const color = getSessionStateColor(s.session_state)
@@ -86,7 +88,7 @@ export const SessionButton = memo<SessionButtonProps>(({
     // Determine session state
     const sessionState = isReadyToMerge ? 'reviewed' : 
                         s.session_state === 'active' ? 'running' : 
-                        'draft'
+                        (s.session_state === 'draft' ? 'draft' : 'running')
     
     // State icon removed - no longer using emojis
 
@@ -118,11 +120,24 @@ export const SessionButton = memo<SessionButtonProps>(({
         >
             <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                    <div className="font-medium text-slate-100 truncate">
+                    <div className="font-medium text-slate-100 truncate flex items-center gap-2">
                         {sessionName}
                         {isReadyToMerge && (
                             <span className="ml-2 text-xs text-green-400">
                                 ✓ Reviewed
+                            </span>
+                        )}
+                        {/* State pill */}
+                        {!isReadyToMerge && (
+                            <span
+                                className={clsx(
+                                    'text-[10px] px-1.5 py-0.5 rounded border',
+                                    sessionState === 'running'
+                                        ? 'bg-green-900/30 text-green-300 border-green-700/50'
+                                        : 'bg-amber-900/30 text-amber-300 border-amber-700/50'
+                                )}
+                            >
+                                {sessionState === 'running' ? 'Running' : 'Draft'}
                             </span>
                         )}
                         {isBlocked && <span className="ml-2 text-xs text-red-400">⚠ blocked</span>}
@@ -155,54 +170,67 @@ export const SessionButton = memo<SessionButtonProps>(({
             </div>
             <div className="-mt-4 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity whitespace-nowrap">
                 {sessionState === 'draft' ? (
-                    <button 
+                    <span 
                         onClick={(e) => {
                             e.stopPropagation()
                             if (onRunDraft) {
                                 onRunDraft(s.session_id)
                             }
                         }}
-                        className="text-[11px] px-2 py-0.5 rounded bg-green-800/60 hover:bg-green-700/60"
+                        className="inline-block cursor-pointer text-[11px] px-2 py-0.5 rounded bg-green-800/60 hover:bg-green-700/60"
                         title="Run task"
                     >
                         Run
-                    </button>
+                    </span>
                 ) : (
                     <>
                         {!isReadyToMerge ? (
-                            <button 
+                            <span 
                                 onClick={(e) => {
                                     e.stopPropagation()
                                     onMarkReady(s.session_id, s.has_uncommitted_changes || false)
                                 }}
-                                className="text-[11px] px-2 py-0.5 rounded bg-green-800/60 hover:bg-green-700/60"
+                                className="inline-block cursor-pointer text-[11px] px-2 py-0.5 rounded bg-green-800/60 hover:bg-green-700/60"
                                 title="Mark as reviewed (⌘R)"
                             >
                                 Mark Reviewed
-                            </button>
+                            </span>
                         ) : (
-                            <button 
+                            <span 
                                 onClick={async (e) => {
                                     e.stopPropagation()
                                     onUnmarkReady(s.session_id)
                                 }}
-                                className="text-[11px] px-2 py-0.5 rounded bg-slate-700/60 hover:bg-slate-600/60"
+                                className="inline-block cursor-pointer text-[11px] px-2 py-0.5 rounded bg-slate-700/60 hover:bg-slate-600/60"
                                 title="Unmark as reviewed"
                             >
                                 Unmark
-                            </button>
+                            </span>
                         )}
-                        <button 
+                        <span 
                             onClick={(e) => {
                                 e.stopPropagation()
                                 onCancel(s.session_id, s.has_uncommitted_changes || false)
                             }}
-                            className="text-[11px] px-2 py-0.5 rounded bg-red-800/60 hover:bg-red-700/60"
+                            className="inline-block cursor-pointer text-[11px] px-2 py-0.5 rounded bg-red-800/60 hover:bg-red-700/60"
                                 title="Cancel session (⌘D, ⇧⌘D to force)"
                         >
                             Cancel
-                        </button>
+                        </span>
                     </>
+                )}
+                {/* Show Delete for drafts */}
+                {sessionState === 'draft' && (
+                    <span
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            onDeleteDraft?.(s.session_id)
+                        }}
+                        className="inline-block cursor-pointer text-[11px] px-2 py-0.5 rounded bg-red-900/60 hover:bg-red-800/60"
+                        title="Delete draft"
+                    >
+                        Delete
+                    </span>
                 )}
             </div>
             <div className="mt-1 text-[12px] text-slate-400 truncate">{task}</div>

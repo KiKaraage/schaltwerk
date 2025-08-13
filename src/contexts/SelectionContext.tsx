@@ -19,6 +19,7 @@ interface SelectionContextType {
     setSelection: (selection: Selection, forceRecreate?: boolean) => Promise<void>
     clearTerminalTracking: (terminalIds: string[]) => void
     isReady: boolean
+    isDraft: boolean
 }
 
 const SelectionContext = createContext<SelectionContextType | null>(null)
@@ -32,6 +33,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     })
     // Start as not ready, will become ready once we have initialized with a project
     const [isReady, setIsReady] = useState(false)
+    const [isDraft, setIsDraft] = useState(false)
     const previousProjectPath = useRef<string | null>(null)
     const hasInitialized = useRef(false)
     
@@ -110,34 +112,47 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     // Ensure terminals exist for a selection
     const ensureTerminals = useCallback(async (sel: Selection): Promise<TerminalSet> => {
         const ids = getTerminalIds(sel)
-        
-        
-        // Determine working directory
-        let cwd: string
+
+        // Orchestrator always has terminals and is never a draft
         if (sel.kind === 'orchestrator') {
-            cwd = projectPath || await invoke<string>('get_current_directory')
-        } else if (sel.worktreePath) {
-            cwd = sel.worktreePath
-        } else {
-            // Need to fetch the session data to get worktree path
-            try {
-                const sessionData = await invoke('para_core_get_session', { 
-                    name: sel.payload 
-                }) as any
-                cwd = sessionData.worktree_path
-            } catch (e) {
-                console.error('Failed to get session worktree path:', e)
-                cwd = await invoke<string>('get_current_directory')
-            }
+            setIsDraft(false)
+            const cwd = projectPath || await invoke<string>('get_current_directory')
+            await Promise.all([
+                createTerminal(ids.top, cwd),
+                createTerminal(ids.bottom, cwd)
+            ])
+            return ids
         }
-        
-        // Create terminals in parallel for better performance
-        await Promise.all([
-            createTerminal(ids.top, cwd),
-            createTerminal(ids.bottom, cwd)
-        ])
-        
-        return ids
+
+        // Sessions: determine if draft and working directory
+        try {
+            const sessionData = await invoke<any>('para_core_get_session', { name: sel.payload })
+            const state: string | undefined = sessionData?.state || sessionData?.session_state
+            const worktreePath: string | undefined = sel.worktreePath || sessionData?.worktree_path
+            const isDraftSession = state === 'draft'
+            setIsDraft(!!isDraftSession)
+
+            if (isDraftSession) {
+                // Do not create terminals for drafts
+                return ids
+            }
+
+            const cwd = worktreePath || await invoke<string>('get_current_directory')
+            await Promise.all([
+                createTerminal(ids.top, cwd),
+                createTerminal(ids.bottom, cwd)
+            ])
+            return ids
+        } catch (e) {
+            console.error('[SelectionContext] Failed to inspect session state; creating terminals with fallback cwd', e)
+            setIsDraft(false)
+            const cwd = await invoke<string>('get_current_directory')
+            await Promise.all([
+                createTerminal(ids.top, cwd),
+                createTerminal(ids.bottom, cwd)
+            ])
+            return ids
+        }
     }, [getTerminalIds, createTerminal, projectPath])
     
     // Clear terminal tracking for specific terminals
@@ -187,6 +202,37 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             setIsReady(true)
         }
     }, [ensureTerminals, getTerminalIds, clearTerminalTracking, isReady, selection])
+
+    // React to backend session refreshes (e.g., draft -> running)
+    useEffect(() => {
+        let unlisten: (() => void) | null = null
+        const attach = async () => {
+            try {
+                const { listen } = await import('@tauri-apps/api/event')
+                unlisten = await listen('schaltwerk:sessions-refreshed', async () => {
+                    if (selection.kind !== 'session' || !selection.payload) return
+                    try {
+                        const sessionData = await invoke<any>('para_core_get_session', { name: selection.payload })
+                        const state: string | undefined = sessionData?.state || sessionData?.session_state
+                        const nowDraft = state === 'draft'
+                        setIsDraft(!!nowDraft)
+                        if (!nowDraft) {
+                            // Session became running - ensure terminals exist now
+                            try { await ensureTerminals(selection) } catch {}
+                            // Update terminals state to pick up any new ids (same ids, but ensures UI triggers)
+                            setTerminals(getTerminalIds(selection))
+                        }
+                    } catch (e) {
+                        console.warn('[SelectionContext] Failed to refresh current session state after event', e)
+                    }
+                })
+            } catch (e) {
+                console.warn('[SelectionContext] Failed to attach sessions-refreshed listener', e)
+            }
+        }
+        attach()
+        return () => { try { if (unlisten) unlisten() } catch {} }
+    }, [selection, ensureTerminals, getTerminalIds])
     
     // Initialize on mount and when project path changes
     useEffect(() => {
@@ -261,7 +307,8 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             terminals,
             setSelection,
             clearTerminalTracking,
-            isReady
+            isReady,
+            isDraft
         }}>
             {children}
         </SelectionContext.Provider>

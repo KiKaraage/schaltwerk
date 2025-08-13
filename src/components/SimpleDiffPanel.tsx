@@ -13,6 +13,9 @@ interface SimpleDiffPanelProps {
 
 export function SimpleDiffPanel({ onFileSelect }: SimpleDiffPanelProps) {
   const { selection } = useSelection()
+  
+  // Test hook data-testid for App.test.tsx
+  const testProps = { 'data-testid': 'diff-panel' } as any
   const [dockOpen, setDockOpen] = useState(false)
   const [originalPrompt, setOriginalPrompt] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -53,7 +56,7 @@ export function SimpleDiffPanel({ onFileSelect }: SimpleDiffPanelProps) {
   }
 
   return (
-    <div className="relative h-full flex flex-col overflow-hidden">
+    <div className="relative h-full flex flex-col overflow-hidden" {...testProps}>
       <div className={clsx('flex-1 min-h-0 overflow-hidden transition-[max-height] duration-200')}>
         <DiffFileList onFileSelect={onFileSelect} />
       </div>
