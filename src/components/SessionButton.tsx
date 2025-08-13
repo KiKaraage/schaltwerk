@@ -80,17 +80,32 @@ export const SessionButton = memo<SessionButtonProps>(({
     const lastActivity = formatLastActivity(s.last_modified)
     const isBlocked = s.is_blocked || false
     const isReadyToMerge = s.ready_to_merge || false
+    
+    // Determine session state
+    const sessionState = isReadyToMerge ? 'reviewed' : 
+                        s.session_state === 'active' ? 'running' : 
+                        'draft'
+    
+    // Get state icon
+    const stateIcon = sessionState === 'draft' ? '📝' :
+                     sessionState === 'running' ? '🚀' :
+                     sessionState === 'reviewed' ? '✅' : ''
+
+    // Get background color based on state
+    const getStateBackground = () => {
+        if (isSelected) return 'session-ring session-ring-blue border-transparent'
+        if (isReadyToMerge) return 'session-ring session-ring-green border-transparent opacity-90'
+        if (sessionState === 'running') return 'border-slate-700 bg-slate-800/50 hover:bg-slate-800/60'
+        if (sessionState === 'draft') return 'border-slate-800 bg-slate-900/30 hover:bg-slate-800/30 opacity-85'
+        return 'border-slate-800 bg-slate-900/40 hover:bg-slate-800/30'
+    }
 
     return (
         <button
             onClick={() => onSelect(index)}
             className={clsx(
                 'group w-full text-left px-3 py-2.5 rounded-md mb-2 border transition-all duration-300',
-                isReadyToMerge && !isSelected
-                    ? 'session-ring session-ring-green border-transparent opacity-75'
-                    : isSelected
-                    ? 'session-ring session-ring-blue border-transparent'
-                    : 'border-slate-800 bg-slate-900/40 hover:bg-slate-800/30',
+                getStateBackground(),
                 hasStuckTerminals && !isSelected &&
                     'ring-2 ring-amber-400/50 shadow-lg shadow-amber-400/20 bg-amber-950/20',
                 hasFollowUpMessage && !isSelected &&
@@ -105,6 +120,7 @@ export const SessionButton = memo<SessionButtonProps>(({
             <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                     <div className="font-medium text-slate-100 truncate">
+                        {stateIcon && <span className="mr-1.5">{stateIcon}</span>}
                         {sessionName}
                         {isReadyToMerge && (
                             <span className="ml-2 text-xs text-green-400">
@@ -121,11 +137,11 @@ export const SessionButton = memo<SessionButtonProps>(({
                             </span>
                         )}
                         {hasFollowUpMessage && !isReadyToMerge && (
-                            <span className="ml-2 text-xs text-blue-400" title="New follow-up message received">
-                                <div className="inline-flex items-center gap-1">
-                                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-                                    💬 new message
-                                </div>
+                            <span className="ml-2 inline-flex items-center gap-1" title="New follow-up message received">
+                                <span className="flex h-4 w-4 relative">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-500 text-white text-[9px] items-center justify-center font-bold">!</span>
+                                </span>
                             </span>
                         )}
                     </div>

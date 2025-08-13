@@ -86,7 +86,7 @@ describe('Sidebar filter functionality and persistence', () => {
     vi.restoreAllMocks()
   })
 
-  it('filters sessions: All -> New (unreviewed) -> Reviewed', async () => {
+  it('filters sessions: All -> Drafts -> Reviewed', async () => {
     renderWithProviders(<Sidebar />)
 
     // Wait for sessions to render
@@ -95,19 +95,19 @@ describe('Sidebar filter functionality and persistence', () => {
       expect(buttons).toHaveLength(4)
     })
 
-    // Click New (unreviewed)
-    fireEvent.click(screen.getByRole('button', { name: 'New' }))
+    // Click Drafts
+    fireEvent.click(screen.getByRole('button', { name: /📝 Drafts/ }))
 
     await waitFor(() => {
-      const unreviewed = screen.getAllByRole('button').filter(b => (b.textContent || '').includes('para/'))
-      // Only alpha and charlie remain
-      expect(unreviewed).toHaveLength(2)
-      expect(unreviewed[0]).toHaveTextContent('alpha')
-      expect(unreviewed[1]).toHaveTextContent('charlie')
+      const drafts = screen.getAllByRole('button').filter(b => (b.textContent || '').includes('para/'))
+      // Only alpha and charlie remain (they are not ready_to_merge and not active)
+      expect(drafts).toHaveLength(2)
+      expect(drafts[0]).toHaveTextContent('alpha')
+      expect(drafts[1]).toHaveTextContent('charlie')
     })
 
     // Click Reviewed
-    fireEvent.click(screen.getByRole('button', { name: 'Reviewed' }))
+    fireEvent.click(screen.getByRole('button', { name: /✅ Reviewed/ }))
 
     await waitFor(() => {
       const reviewed = screen.getAllByRole('button').filter(b => (b.textContent || '').includes('para/'))
@@ -119,7 +119,8 @@ describe('Sidebar filter functionality and persistence', () => {
     })
 
     // Back to All
-    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    const allButton = screen.getAllByRole('button').find(b => b.textContent?.startsWith('All'))
+    fireEvent.click(allButton!)
 
     await waitFor(() => {
       const all = screen.getAllByRole('button').filter(b => (b.textContent || '').includes('para/'))
@@ -136,7 +137,7 @@ describe('Sidebar filter functionality and persistence', () => {
       expect(all).toHaveLength(4)
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reviewed' }))
+    fireEvent.click(screen.getByRole('button', { name: /✅ Reviewed/ }))
 
     await waitFor(() => {
       expect(localStorage.getItem('schaltwerk:sessions:filterMode')).toBe('reviewed')

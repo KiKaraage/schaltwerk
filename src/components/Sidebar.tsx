@@ -75,9 +75,9 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     const { selection, setSelection, clearTerminalTracking, terminals } = useSelection()
     const { setFocusForSession, setCurrentFocus } = useFocus()
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
-    const [filterMode, setFilterMode] = useState<'all' | 'unreviewed' | 'reviewed'>(() => {
+    const [filterMode, setFilterMode] = useState<'all' | 'draft' | 'running' | 'reviewed'>(() => {
         const saved = typeof window !== 'undefined' ? window.localStorage.getItem('schaltwerk:sessions:filterMode') : null
-        return (saved === 'unreviewed' || saved === 'reviewed') ? saved : 'all'
+        return (saved === 'draft' || saved === 'running' || saved === 'reviewed') ? saved : 'all'
     })
     const [sortMode, setSortMode] = useState<'name' | 'created' | 'last-edited'>(() => {
         if (typeof window === 'undefined') return 'name'
@@ -142,8 +142,10 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     // Memoize displayed sessions (filter + sort) to prevent re-computation on every render
     const sortedSessions = useMemo(() => {
         let filtered = sessions
-        if (filterMode === 'unreviewed') {
-            filtered = sessions.filter(s => !s.info.ready_to_merge)
+        if (filterMode === 'draft') {
+            filtered = sessions.filter(s => !s.info.ready_to_merge && s.info.session_state !== 'active')
+        } else if (filterMode === 'running') {
+            filtered = sessions.filter(s => !s.info.ready_to_merge && s.info.session_state === 'active')
         } else if (filterMode === 'reviewed') {
             filtered = sessions.filter(s => !!s.info.ready_to_merge)
         }
@@ -602,45 +604,66 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 </button>
             </div>
 
-            <div className="px-3 py-2 border-t border-b border-slate-800 text-sm text-slate-300 flex items-center gap-2">
-                <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-xs">Sessions {sortedSessions.length > 0 && <span className="text-slate-500">({sortedSessions.length})</span>}</span>
-                </div>
-                <div className="flex items-center gap-0.5 ml-auto">
-                    <button
-                        className={clsx('text-[10px] px-1.5 py-0.5 rounded', filterMode === 'all' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
-                        onClick={() => setFilterMode('all')}
-                        title="Show all sessions"
-                    >All</button>
-                    <button
-                        className={clsx('text-[10px] px-1.5 py-0.5 rounded', filterMode === 'unreviewed' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
-                        onClick={() => setFilterMode('unreviewed')}
-                        title="Show only unreviewed sessions"
-                    >New</button>
-                    <button
-                        className={clsx('text-[10px] px-1.5 py-0.5 rounded', filterMode === 'reviewed' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
-                        onClick={() => setFilterMode('reviewed')}
-                        title="Show only reviewed sessions"
-                    >Reviewed</button>
-                    <button
-                        className="px-1.5 py-0.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-white flex items-center gap-0.5"
-                        onClick={() => {
-                            // Cycle through: name -> created -> last-edited -> name
-                            const nextMode = sortMode === 'name' ? 'created' : 
-                                           sortMode === 'created' ? 'last-edited' : 'name'
-                            setSortMode(nextMode)
-                        }}
-                        title={`Sort: ${sortMode === 'name' ? 'Name (A-Z)' : sortMode === 'created' ? 'Creation Time' : 'Last Edited'}`}
-                    >
-                        {/* Sort icon - compact */}
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                        </svg>
-                        {/* Compact text indicator */}
-                        <span className="text-[9px] font-medium leading-none">
-                            {sortMode === 'name' ? 'A-Z' : sortMode === 'created' ? 'New' : 'Edit'}
-                        </span>
-                    </button>
+            <div className="px-3 py-2 border-t border-b border-slate-800 text-sm text-slate-300 flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                    <span className="text-xs flex-shrink-0">Sessions {sessions.length > 0 && <span className="text-slate-500">({sessions.length})</span>}</span>
+                    <div className="flex items-center gap-0.5 ml-auto flex-wrap">
+                        <button
+                            className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
+                                filterMode === 'all' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
+                            onClick={() => setFilterMode('all')}
+                            title="Show all sessions"
+                        >
+                            All
+                            <span className="text-slate-400">({sessions.length})</span>
+                        </button>
+                        <button
+                            className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
+                                filterMode === 'draft' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
+                            onClick={() => setFilterMode('draft')}
+                            title="Show draft sessions"
+                        >
+                            📝 Drafts
+                            <span className="text-slate-400">({sessions.filter(s => !s.info.ready_to_merge && s.info.session_state !== 'active').length})</span>
+                        </button>
+                        <button
+                            className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
+                                filterMode === 'running' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
+                            onClick={() => setFilterMode('running')}
+                            title="Show running sessions"
+                        >
+                            🚀 Running
+                            <span className="text-slate-400">({sessions.filter(s => !s.info.ready_to_merge && s.info.session_state === 'active').length})</span>
+                        </button>
+                        <button
+                            className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
+                                filterMode === 'reviewed' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
+                            onClick={() => setFilterMode('reviewed')}
+                            title="Show reviewed sessions"
+                        >
+                            ✅ Reviewed
+                            <span className="text-slate-400">({sessions.filter(s => !!s.info.ready_to_merge).length})</span>
+                        </button>
+                        <button
+                            className="px-1.5 py-0.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-white flex items-center gap-0.5"
+                            onClick={() => {
+                                // Cycle through: name -> created -> last-edited -> name
+                                const nextMode = sortMode === 'name' ? 'created' : 
+                                               sortMode === 'created' ? 'last-edited' : 'name'
+                                setSortMode(nextMode)
+                            }}
+                            title={`Sort: ${sortMode === 'name' ? 'Name (A-Z)' : sortMode === 'created' ? 'Creation Time' : 'Last Edited'}`}
+                        >
+                            {/* Sort icon - compact */}
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                            </svg>
+                            {/* Compact text indicator */}
+                            <span className="text-[9px] font-medium leading-none">
+                                {sortMode === 'name' ? 'A-Z' : sortMode === 'created' ? 'New' : 'Edit'}
+                            </span>
+                        </button>
+                    </div>
                 </div>
             </div>
             <div className="flex-1 overflow-y-auto px-2 pt-2">
