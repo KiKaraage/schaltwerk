@@ -151,6 +151,40 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
 
         // Send initial size to backend immediately
         invoke('resize_terminal', { id: terminalId, cols: initialCols, rows: initialRows }).catch(console.error);
+        
+        // For OpenCode terminals, send additional resize events to ensure proper TUI layout
+        // But delay them longer to avoid conflicts with the mounting process
+        if (terminalId.includes('session-') && !terminalId.includes('orchestrator')) {
+            setTimeout(() => {
+                if (terminal.current && termRef.current) {
+                    try {
+                        const addon = fitAddon.current;
+                        if (!addon) return;
+                        addon.fit();
+                        const { cols, rows } = terminal.current;
+                        // Only send if we got reasonable dimensions
+                        if (cols > 80 && rows > 24) {
+                            invoke('resize_terminal', { id: terminalId, cols, rows }).catch(console.error);
+                        }
+                    } catch (e) {
+                        console.warn('OpenCode resize failed:', e);
+                    }
+                }
+            }, 1500);
+            setTimeout(() => {
+                if (terminal.current && termRef.current) {
+                    try {
+                        const addon = fitAddon.current;
+                        if (!addon) return;
+                        addon.fit();
+                        const { cols, rows } = terminal.current;
+                        invoke('resize_terminal', { id: terminalId, cols, rows }).catch(console.error);
+                    } catch (e) {
+                        console.warn('OpenCode resize failed:', e);
+                    }
+                }
+            }, 3000);
+        }
 
         // Flush queued writes once per frame
         const flushQueuedWrites = () => {
