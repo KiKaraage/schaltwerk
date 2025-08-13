@@ -59,6 +59,14 @@ interface TerminalUnstuckNotification {
     session_id?: string
 }
 
+interface FollowUpMessageNotification {
+    session_name: string
+    message: string
+    message_type: string
+    timestamp: number
+    terminal_id: string
+}
+
 interface SidebarProps {
     isDiffViewerOpen?: boolean
 }
@@ -87,6 +95,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     })
     const [loading, setLoading] = useState(true)
     const [stuckTerminals, setStuckTerminals] = useState<Set<string>>(new Set())
+    const [sessionsWithNotifications, setSessionsWithNotifications] = useState<Set<string>>(new Set())
     const [markReadyModal, setMarkReadyModal] = useState<{ open: boolean; sessionName: string; hasUncommitted: boolean }>({
         open: false,
         sessionName: '',
@@ -162,6 +171,13 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             
             // Clear stuck terminal indicator when user selects the session
             setStuckTerminals(prev => {
+                const updated = new Set(prev)
+                updated.delete(s.session_id)
+                return updated
+            })
+            
+            // Clear follow-up message notification when user selects the session
+            setSessionsWithNotifications(prev => {
                 const updated = new Set(prev)
                 updated.delete(s.session_id)
                 return updated
@@ -520,6 +536,25 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 }
             })
             unlisteners.push(u6)
+            
+            // Listen for follow-up message notifications
+            const u7 = await listen<FollowUpMessageNotification>('schaltwerk:follow-up-message', (event) => {
+                const { session_name, message, message_type } = event.payload
+                
+                // Add visual notification badge for the session
+                setSessionsWithNotifications(prev => new Set([...prev, session_name]))
+                
+                // Show a toast notification
+                console.log(`📬 Follow-up message for ${session_name}: ${message}`)
+                
+                // For now, just log the message - in the future we could show toast notifications
+                if (message_type === 'system') {
+                    console.log(`📢 System message for session ${session_name}: ${message}`)
+                } else {
+                    console.log(`💬 User message for session ${session_name}: ${message}`)
+                }
+            })
+            unlisteners.push(u7)
         }
         attach()
         
@@ -617,6 +652,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                     sortedSessions.map((session, i) => {
                         const isSelected = selection.kind === 'session' && selection.payload === session.info.session_id
                         const hasStuckTerminals = stuckTerminals.has(session.info.session_id)
+                        const hasFollowUpMessage = sessionsWithNotifications.has(session.info.session_id)
 
                         return (
                             <SessionButton
@@ -625,6 +661,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                                 index={i}
                                 isSelected={isSelected}
                                 hasStuckTerminals={hasStuckTerminals}
+                                hasFollowUpMessage={hasFollowUpMessage}
                                 onSelect={handleSelectSession}
                                 onMarkReady={(sessionId, hasUncommitted) => {
                                     setMarkReadyModal({

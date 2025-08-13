@@ -40,6 +40,7 @@ interface SessionButtonProps {
     index: number
     isSelected: boolean
     hasStuckTerminals: boolean
+    hasFollowUpMessage: boolean
     onSelect: (index: number) => void
     onMarkReady: (sessionId: string, hasUncommitted: boolean) => void
     onUnmarkReady: (sessionId: string) => void
@@ -62,6 +63,7 @@ export const SessionButton = memo<SessionButtonProps>(({
     index, 
     isSelected, 
     hasStuckTerminals,
+    hasFollowUpMessage,
     onSelect,
     onMarkReady,
     onUnmarkReady,
@@ -90,7 +92,9 @@ export const SessionButton = memo<SessionButtonProps>(({
                     ? 'session-ring session-ring-blue border-transparent'
                     : 'border-slate-800 bg-slate-900/40 hover:bg-slate-800/30',
                 hasStuckTerminals && !isSelected &&
-                    'ring-2 ring-amber-400/50 shadow-lg shadow-amber-400/20 bg-amber-950/20'
+                    'ring-2 ring-amber-400/50 shadow-lg shadow-amber-400/20 bg-amber-950/20',
+                hasFollowUpMessage && !isSelected &&
+                    'ring-2 ring-blue-400/50 shadow-lg shadow-blue-400/20 bg-blue-950/20'
             )}
             title={isSelected 
                 ? `Selected session • Diff: ⌘G • Cancel: ⌘D (⇧⌘D force) • Mark Reviewed: ⌘R` 
@@ -113,6 +117,14 @@ export const SessionButton = memo<SessionButtonProps>(({
                                 <div className="inline-flex items-center gap-1">
                                     <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
                                     idle
+                                </div>
+                            </span>
+                        )}
+                        {hasFollowUpMessage && !isReadyToMerge && (
+                            <span className="ml-2 text-xs text-blue-400" title="New follow-up message received">
+                                <div className="inline-flex items-center gap-1">
+                                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+                                    💬 new message
                                 </div>
                             </span>
                         )}

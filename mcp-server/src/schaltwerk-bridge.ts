@@ -210,6 +210,18 @@ export class SchaltwerkBridge {
     return session
   }
 
+  async sendFollowUpMessage(sessionName: string, message: string, messageType: 'user' | 'system' = 'user'): Promise<void> {
+    if (!this.db) await this.connect()
+    
+    const session = await this.getSession(sessionName)
+    if (!session) {
+      throw new Error(`Session '${sessionName}' not found`)
+    }
+    
+    // Notify Schaltwerk UI about the follow-up message
+    await this.notifyFollowUpMessage(sessionName, message, messageType)
+  }
+
   async cancelSession(name: string, force: boolean = false): Promise<void> {
     if (!this.db) await this.connect()
     
@@ -488,6 +500,27 @@ export class SchaltwerkBridge {
       })
     } catch (error) {
       console.warn('Failed to notify session removed:', error)
+    }
+  }
+
+  private async notifyFollowUpMessage(sessionName: string, message: string, messageType: 'user' | 'system'): Promise<void> {
+    try {
+      const payload = {
+        session_name: sessionName,
+        message: message,
+        message_type: messageType,
+        timestamp: Date.now()
+      }
+      
+      await fetch(`${this.webhookUrl}/webhook/follow-up-message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+    } catch (error) {
+      console.warn('Failed to notify follow-up message:', error)
     }
   }
 }

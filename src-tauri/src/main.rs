@@ -19,8 +19,20 @@ mod project_manager;
 use std::sync::Arc;
 use project_manager::ProjectManager;
 use tokio::sync::OnceCell;
+use std::collections::HashMap;
+use tokio::sync::Mutex;
 
 static PROJECT_MANAGER: OnceCell<Arc<ProjectManager>> = OnceCell::const_new();
+
+#[derive(Clone, Debug)]
+struct QueuedMessage {
+    message: String,
+    message_type: String,
+    timestamp: u64,
+}
+
+type MessageQueue = Arc<Mutex<HashMap<String, Vec<QueuedMessage>>>>;
+static QUEUED_MESSAGES: OnceCell<MessageQueue> = OnceCell::const_new();
 
 fn parse_agent_command(command: &str) -> Result<(String, String, Vec<String>), String> {
     // Command format: "cd /path/to/worktree && {claude|cursor-agent} [args]"
@@ -118,6 +130,12 @@ async fn get_para_core() -> Result<Arc<tokio::sync::Mutex<para_core::SchaltwerkC
     let manager = get_project_manager().await;
     manager.current_para_core().await
         .map_err(|e| format!("Failed to get para core: {e}"))
+}
+
+async fn get_message_queue() -> MessageQueue {
+    QUEUED_MESSAGES.get_or_init(|| async {
+        Arc::new(Mutex::new(HashMap::new()))
+    }).await.clone()
 }
 
 async fn start_terminal_monitoring(app: tauri::AppHandle) {
@@ -232,8 +250,60 @@ async fn para_core_list_enriched_sessions() -> Result<Vec<para_core::EnrichedSes
 #[tauri::command]
 async fn create_terminal(app: tauri::AppHandle, id: String, cwd: String) -> Result<String, String> {
     let manager = get_terminal_manager().await?;
-    manager.set_app_handle(app).await;
+    manager.set_app_handle(app.clone()).await;
     manager.create_terminal(id.clone(), cwd).await?;
+    
+    // Check for and deliver any queued messages for this terminal
+    let queue = get_message_queue().await;
+    let mut queue_lock = queue.lock().await;
+    if let Some(messages) = queue_lock.remove(&id) {
+        log::info!("Delivering {} queued messages to terminal {}", messages.len(), id);
+        drop(queue_lock); // Release the lock before async operations
+        
+        for queued_msg in messages {
+            let message = &queued_msg.message;
+            let formatted_message = match queued_msg.message_type.as_str() {
+                "system" => format!("\n📢 System: {message}\n"),
+                _ => format!("\n💬 Follow-up: {message}\n"),
+            };
+            
+            if let Err(e) = manager.write_terminal(id.clone(), formatted_message.as_bytes().to_vec()).await {
+                log::warn!("Failed to deliver queued message to terminal {id}: {e}");
+            } else {
+                log::info!("Successfully delivered queued message to terminal {id}");
+            }
+            
+            // Also emit event for frontend notification
+            use tauri::Emitter;
+            #[derive(serde::Serialize, Clone)]
+            struct FollowUpMessagePayload {
+                session_name: String,
+                message: String,
+                message_type: String,
+                timestamp: u64,
+                terminal_id: String,
+            }
+            
+            let session_name = if id.starts_with("session-") {
+                id.split('-').nth(1).unwrap_or("unknown").to_string()
+            } else {
+                "orchestrator".to_string()
+            };
+            
+            let message_payload = FollowUpMessagePayload {
+                session_name,
+                message: queued_msg.message,
+                message_type: queued_msg.message_type,
+                timestamp: queued_msg.timestamp,
+                terminal_id: id.clone(),
+            };
+            
+            if let Err(e) = app.emit("schaltwerk:follow-up-message", &message_payload) {
+                log::error!("Failed to emit queued follow-up-message event: {e}");
+            }
+        }
+    }
+    
     Ok(id)
 }
 
@@ -301,7 +371,6 @@ async fn get_current_directory() -> Result<String, String> {
 }
 
 use std::process::Command;
-use std::sync::Mutex;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Incoming as IncomingBody, Request, Response, StatusCode};
@@ -309,7 +378,7 @@ use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 use http_body_util::BodyExt;
 
-static MCP_SERVER_PROCESS: Mutex<Option<std::process::Child>> = Mutex::new(None);
+static MCP_SERVER_PROCESS: OnceCell<Arc<tokio::sync::Mutex<Option<std::process::Child>>>> = OnceCell::const_new();
 
 async fn start_webhook_server(app: tauri::AppHandle) {
     async fn handle_webhook(
@@ -385,6 +454,95 @@ async fn start_webhook_server(app: tauri::AppHandle) {
                 
                 Ok(Response::new("OK".to_string()))
             }
+            (&hyper::Method::POST, "/webhook/follow-up-message") => {
+                // Parse the JSON body for follow-up message
+                let body = req.into_body();
+                let body_bytes = body.collect().await?.to_bytes();
+                
+                if let Ok(body_str) = String::from_utf8(body_bytes.to_vec()) {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                        log::info!("Received follow-up-message webhook: {payload}");
+                        
+                        if let (Some(session_name), Some(message)) = (
+                            payload.get("session_name").and_then(|v| v.as_str()),
+                            payload.get("message").and_then(|v| v.as_str())
+                        ) {
+                            let message_type = payload.get("message_type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("user");
+                            let timestamp = payload.get("timestamp")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or_else(|| std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap().as_millis() as u64);
+                            
+                            // Format the message for terminal display
+                            let formatted_message = match message_type {
+                                "system" => format!("\n📢 System: {message}\n"),
+                                _ => format!("\n💬 Follow-up: {message}\n"),
+                            };
+                            
+                            // Try to write to the session's top terminal (where agent is usually active)
+                            let terminal_id = format!("session-{session_name}-top");
+                            
+                            if let Ok(manager) = get_terminal_manager().await {
+                                match manager.terminal_exists(&terminal_id).await {
+                                    Ok(true) => {
+                                        // Terminal exists, write the message directly
+                                        if let Err(e) = manager.write_terminal(terminal_id.clone(), formatted_message.as_bytes().to_vec()).await {
+                                            log::warn!("Failed to write follow-up message to terminal {terminal_id}: {e}");
+                                        } else {
+                                            log::info!("Successfully delivered follow-up message to terminal {terminal_id}");
+                                        }
+                                    },
+                                    Ok(false) => {
+                                        // Terminal doesn't exist yet - queue the message for later delivery
+                                        log::info!("Terminal {terminal_id} doesn't exist yet, queuing message");
+                                        let queue = get_message_queue().await;
+                                        let mut queue_lock = queue.lock().await;
+                                        let queued_msg = QueuedMessage {
+                                            message: message.to_string(),
+                                            message_type: message_type.to_string(),
+                                            timestamp,
+                                        };
+                                        queue_lock.entry(terminal_id.clone()).or_insert_with(Vec::new).push(queued_msg);
+                                        log::info!("Queued message for terminal {terminal_id}: {message}");
+                                    },
+                                    Err(e) => {
+                                        log::warn!("Failed to check if terminal {terminal_id} exists: {e}");
+                                    }
+                                }
+                            } else {
+                                log::warn!("Could not get terminal manager for follow-up message");
+                            }
+                            
+                            // Always emit event for frontend notification
+                            #[derive(serde::Serialize, Clone)]
+                            struct FollowUpMessagePayload {
+                                session_name: String,
+                                message: String,
+                                message_type: String,
+                                timestamp: u64,
+                                terminal_id: String,
+                            }
+                            
+                            let message_payload = FollowUpMessagePayload {
+                                session_name: session_name.to_string(),
+                                message: message.to_string(),
+                                message_type: message_type.to_string(),
+                                timestamp,
+                                terminal_id,
+                            };
+                            
+                            if let Err(e) = app.emit("schaltwerk:follow-up-message", &message_payload) {
+                                log::error!("Failed to emit follow-up-message event: {e}");
+                            }
+                        }
+                    }
+                }
+                
+                Ok(Response::new("OK".to_string()))
+            }
             _ => {
                 let mut response = Response::new("Not Found".to_string());
                 *response.status_mut() = StatusCode::NOT_FOUND;
@@ -430,7 +588,11 @@ async fn start_webhook_server(app: tauri::AppHandle) {
 
 #[tauri::command]
 async fn start_mcp_server(_port: Option<u16>) -> Result<(), String> {
-    let mut process_guard = MCP_SERVER_PROCESS.lock().unwrap();
+    let process_mutex = MCP_SERVER_PROCESS.get_or_init(|| async {
+        Arc::new(tokio::sync::Mutex::new(None))
+    }).await;
+    
+    let mut process_guard = process_mutex.lock().await;
     
     // Check if already running
     if let Some(ref mut process) = *process_guard {
@@ -973,9 +1135,11 @@ fn main() {
                 });
                 
                 // Stop MCP server if running
-                if let Ok(mut guard) = MCP_SERVER_PROCESS.lock() {
-                    if let Some(mut process) = guard.take() {
-                        let _ = process.kill();
+                if let Some(process_mutex) = MCP_SERVER_PROCESS.get() {
+                    if let Ok(mut guard) = process_mutex.try_lock() {
+                        if let Some(mut process) = guard.take() {
+                            let _ = process.kill();
+                        }
                     }
                 }
             }
