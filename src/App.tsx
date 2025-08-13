@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { TerminalGrid } from './components/TerminalGrid'
-import { SimpleDiffPanel } from './components/SimpleDiffPanel'
+import { RightPanelTabs } from './components/RightPanelTabs'
 import { DiffViewerWithReview } from './components/DiffViewerWithReview'
 import Split from 'react-split'
 import { NewSessionModal } from './components/NewSessionModal'
@@ -300,7 +300,7 @@ export default function App() {
             <TerminalGrid />
           </main>
           <section className="overflow-hidden">
-            <SimpleDiffPanel onFileSelect={handleFileSelect} />
+            <RightPanelTabs onFileSelect={handleFileSelect} />
           </section>
         </Split>
       </div>
