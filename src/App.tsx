@@ -157,25 +157,47 @@ export default function App() {
     prompt?: string
     baseBranch: string
     userEditedName?: boolean
+    isDraft?: boolean
+    draftContent?: string
   }) => {
     try {
-      await invoke('para_core_create_session', { 
-        name: data.name,
-        prompt: data.prompt || null,
-        baseBranch: data.baseBranch || null,
-        userEditedName: data.userEditedName ?? false,
-      })
-      setNewSessionOpen(false)
-      
-      // Get the created session to get the correct worktree path
-      const sessionData = await invoke('para_core_get_session', { name: data.name }) as any
-      
-      // Switch to the new session immediately - context handles terminal creation and Claude start
-      await setSelection({
-        kind: 'session',
-        payload: data.name,
-        worktreePath: sessionData.worktree_path
-      })
+      if (data.isDraft) {
+        // Create draft session
+        await invoke('para_core_create_draft_session', {
+          name: data.name,
+          draftContent: data.draftContent || '',
+        })
+        setNewSessionOpen(false)
+        
+        // Get the created session to get the correct worktree path
+        const sessionData = await invoke('para_core_get_session', { name: data.name }) as any
+        
+        // Switch to the new draft session - no agent will start
+        await setSelection({
+          kind: 'session',
+          payload: data.name,
+          worktreePath: sessionData.worktree_path
+        })
+      } else {
+        // Create regular session
+        await invoke('para_core_create_session', { 
+          name: data.name,
+          prompt: data.prompt || null,
+          baseBranch: data.baseBranch || null,
+          userEditedName: data.userEditedName ?? false,
+        })
+        setNewSessionOpen(false)
+        
+        // Get the created session to get the correct worktree path
+        const sessionData = await invoke('para_core_get_session', { name: data.name }) as any
+        
+        // Switch to the new session immediately - context handles terminal creation and Claude start
+        await setSelection({
+          kind: 'session',
+          payload: data.name,
+          worktreePath: sessionData.worktree_path
+        })
+      }
     } catch (error) {
       console.error('Failed to create session:', error)
       alert(`Failed to create session: ${error}`)

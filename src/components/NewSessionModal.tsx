@@ -12,6 +12,8 @@ interface Props {
         prompt?: string
         baseBranch: string
         userEditedName?: boolean
+        isDraft?: boolean
+        draftContent?: string
     }) => void | Promise<void>
 }
 
@@ -27,6 +29,8 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [agentType, setAgentType] = useState<'claude' | 'cursor'>('claude')
     const [validationError, setValidationError] = useState('')
     const [creating, setCreating] = useState(false)
+    const [createAsDraft, setCreateAsDraft] = useState(false)
+    const [draftContent, setDraftContent] = useState('')
     const { getSkipPermissions, setSkipPermissions: saveSkipPermissions, getAgentType, setAgentType: saveAgentType } = useClaudeSession()
     const nameInputRef = useRef<HTMLInputElement>(null)
     const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -94,6 +98,12 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             return
         }
         
+        // Validate draft content if creating as draft
+        if (createAsDraft && !draftContent.trim()) {
+            setValidationError('Please enter draft content')
+            return
+        }
+        
         // Replace spaces with underscores for the actual session name
         finalName = finalName.replace(/ /g, '_')
         
@@ -114,13 +124,15 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                 baseBranch,
                 // If user touched the input, treat name as manually edited
                 userEditedName: !!userEdited,
+                isDraft: createAsDraft,
+                draftContent: createAsDraft ? draftContent : undefined,
             }))
             // On success the parent will close the modal; no need to reset creating here
         } catch (_e) {
             // Parent handles showing the error; re-enable to allow retry
             setCreating(false)
         }
-    }, [creating, name, prompt, baseBranch, onCreate, validateSessionName])
+    }, [creating, name, prompt, baseBranch, onCreate, validateSessionName, createAsDraft, draftContent, branches])
 
     // Keep ref in sync immediately on render to avoid stale closures in tests
     createRef.current = handleCreate
@@ -136,6 +148,8 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             wasEditedRef.current = false
             setPrompt('')
             setValidationError('')
+            setCreateAsDraft(false)
+            setDraftContent('')
             
             // Fetch available branches and the project-specific default branch
             setLoadingBranches(true)
@@ -216,17 +230,53 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                         )}
                     </div>
 
-                    <div>
-                        <label className="block text-sm text-slate-300 mb-1">Initial prompt (optional)</label>
-                        <textarea 
-                            ref={promptTextareaRef}
-                            value={prompt} 
-                            onChange={e => setPrompt(e.target.value)} 
-                            className="w-full h-28 bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700" 
-                            placeholder="Describe the task for the Claude session" 
+                    <div className="flex items-center gap-2 mb-2">
+                        <input 
+                            id="createAsDraft" 
+                            type="checkbox" 
+                            checked={createAsDraft} 
+                            onChange={e => setCreateAsDraft(e.target.checked)} 
+                            className="text-blue-600"
                         />
-                        <p className="text-xs text-slate-400 mt-1">Equivalent to: schaltwerk start &lt;name&gt; -p "&lt;prompt&gt;"</p>
+                        <label htmlFor="createAsDraft" className="text-sm text-slate-300">Create as draft (no agent will start)</label>
                     </div>
+
+                    {createAsDraft ? (
+                        <div>
+                            <label className="block text-sm text-slate-300 mb-1">Draft content</label>
+                            <textarea 
+                                ref={promptTextareaRef}
+                                value={draftContent} 
+                                onChange={e => {
+                                    setDraftContent(e.target.value)
+                                    // Clear validation error when user starts typing
+                                    if (validationError) {
+                                        setValidationError('')
+                                    }
+                                }} 
+                                className="w-full h-40 bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700 font-mono text-sm" 
+                                placeholder="Enter task description in markdown..." 
+                            />
+                            <p className="text-xs text-slate-400 mt-1">
+                                <svg className="inline-block w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                                Draft sessions are saved for later. You can start them when ready.
+                            </p>
+                        </div>
+                    ) : (
+                        <div>
+                            <label className="block text-sm text-slate-300 mb-1">Initial prompt (optional)</label>
+                            <textarea 
+                                ref={promptTextareaRef}
+                                value={prompt} 
+                                onChange={e => setPrompt(e.target.value)} 
+                                className="w-full h-28 bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700" 
+                                placeholder="Describe the task for the Claude session" 
+                            />
+                            <p className="text-xs text-slate-400 mt-1">Equivalent to: schaltwerk start &lt;name&gt; -p "&lt;prompt&gt;"</p>
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-3 gap-3">
                         <div>
@@ -255,6 +305,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                             )}
                             <p className="text-xs text-slate-400 mt-1">Branch from which to create the worktree</p>
                         </div>
+                        {!createAsDraft && (
                         <div>
                             <label className="block text-sm text-slate-300 mb-1">Agent</label>
                             <div className="flex gap-2">
@@ -275,10 +326,13 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                             </div>
                             <p className="text-xs text-slate-400 mt-1">AI agent to use for this session</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <input id="skipPerms" type="checkbox" checked={skipPermissions} onChange={e => handleSkipPermissionsChange(e.target.checked)} />
-                            <label htmlFor="skipPerms" className="text-sm text-slate-300">{agentType === 'cursor' ? 'Force flag' : 'Skip permissions'}</label>
-                        </div>
+                        )}
+                        {!createAsDraft && (
+                            <div className="flex items-center gap-2">
+                                <input id="skipPerms" type="checkbox" checked={skipPermissions} onChange={e => handleSkipPermissionsChange(e.target.checked)} />
+                                <label htmlFor="skipPerms" className="text-sm text-slate-300">{agentType === 'cursor' ? 'Force flag' : 'Skip permissions'}</label>
+                            </div>
+                        )}
                     </div>
                 </div>
                 <div className="px-4 py-3 border-t border-slate-800 flex justify-end gap-2">
@@ -292,9 +346,9 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                     </button>
                     <button 
                         onClick={handleCreate} 
-                        disabled={!name.trim() || !baseBranch || !isValidBranch || creating}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-white group relative inline-flex items-center gap-2"
-                        title={!isValidBranch ? "Please select a valid branch" : "Create session (Cmd+Enter)"}
+                        disabled={!name.trim() || !baseBranch || !isValidBranch || creating || (createAsDraft && !draftContent.trim())}
+                        className={`px-3 py-1.5 ${createAsDraft ? 'bg-amber-600 hover:bg-amber-500' : 'bg-blue-600 hover:bg-blue-500'} disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-white group relative inline-flex items-center gap-2`}
+                        title={!isValidBranch ? "Please select a valid branch" : createAsDraft ? "Create draft (Cmd+Enter)" : "Create session (Cmd+Enter)"}
                     >
                         {creating && (
                             <span
@@ -302,7 +356,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                                 aria-hidden="true"
                             />
                         )}
-                        <span>Create</span>
+                        <span>{createAsDraft ? 'Create Draft' : 'Create'}</span>
                         {!creating && <span className="ml-1.5 text-xs opacity-60 group-hover:opacity-100">⌘↵</span>}
                     </button>
                 </div>
