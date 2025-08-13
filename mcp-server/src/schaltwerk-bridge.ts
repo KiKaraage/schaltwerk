@@ -15,7 +15,7 @@ export interface Session {
   branch: string
   parent_branch: string
   worktree_path: string
-  status: 'active' | 'cancelled'
+  status: 'active' | 'cancelled' | 'paused'
   created_at: number
   updated_at: number
   last_activity?: number
@@ -34,6 +34,14 @@ export interface GitStats {
   lines_removed: number
   has_uncommitted: boolean
   calculated_at: number
+}
+
+interface GitStatusResult {
+  hasUncommittedChanges: boolean
+  modifiedFiles: number
+  untrackedFiles: number
+  stagedFiles: number
+  changedFiles: string[]
 }
 
 export class SchaltwerkBridge {
@@ -101,7 +109,7 @@ export class SchaltwerkBridge {
         pending_name_generation,
         was_auto_generated
       FROM sessions
-      WHERE status = 'active'
+      WHERE status IN ('active', 'paused')
       ORDER BY 
         CASE WHEN ready_to_merge = 0 THEN 0 ELSE 1 END,
         last_activity DESC
@@ -115,7 +123,7 @@ export class SchaltwerkBridge {
     
     const session = await this.db!.get<Session>(`
       SELECT * FROM sessions 
-      WHERE name = ? AND status = 'active'
+      WHERE name = ? AND status IN ('active', 'paused')
     `, name)
     
     return session
@@ -202,12 +210,46 @@ export class SchaltwerkBridge {
     return session
   }
 
-  async cancelSession(name: string): Promise<void> {
+  async cancelSession(name: string, force: boolean = false): Promise<void> {
     if (!this.db) await this.connect()
     
     const session = await this.getSession(name)
     if (!session) {
       throw new Error(`Session '${name}' not found`)
+    }
+    
+    // Check for uncommitted changes unless force is true
+    if (!force) {
+      const gitStatus = await this.checkGitStatus(session.worktree_path)
+      if (gitStatus.hasUncommittedChanges) {
+        const changesSummary = gitStatus.changedFiles.length > 0 
+          ? `\n\nFiles with changes:\n${gitStatus.changedFiles.map(f => `  - ${f}`).join('\n')}`
+          : ''
+        
+        throw new Error(`⚠️ SAFETY CHECK FAILED: Session '${name}' has uncommitted changes that would be PERMANENTLY LOST.
+
+📊 UNCOMMITTED WORK DETECTED:
+- Modified files: ${gitStatus.modifiedFiles}
+- New files: ${gitStatus.untrackedFiles}
+- Staged changes: ${gitStatus.stagedFiles}${changesSummary}
+
+🛡️ SAFETY OPTIONS:
+1. RECOMMENDED: Commit your work first:
+   - cd "${session.worktree_path}"
+   - git add .
+   - git commit -m "Save progress before cancellation"
+   - Then retry cancellation
+
+2. SAFER ALTERNATIVE: Use schaltwerk_pause instead
+   - Preserves all work without deletion
+   - Can resume later exactly where you left off
+
+3. FORCE DELETION (DANGEROUS): Add force: true parameter
+   - schaltwerk_cancel(session_name: "${name}", force: true)
+   - ⚠️ THIS WILL PERMANENTLY DELETE ALL UNCOMMITTED WORK
+
+💡 Your work is valuable - consider saving it before cancellation!`)
+      }
     }
     
     // Remove worktree
@@ -239,6 +281,25 @@ export class SchaltwerkBridge {
     await this.notifySessionRemoved(name)
   }
 
+  async pauseSession(name: string): Promise<void> {
+    if (!this.db) await this.connect()
+    
+    const session = await this.getSession(name)
+    if (!session) {
+      throw new Error(`Session '${name}' not found`)
+    }
+    
+    // Mark session as paused in database (we'll add a 'paused' status)
+    await this.db!.run(`
+      UPDATE sessions 
+      SET status = 'paused', updated_at = ?
+      WHERE name = ?
+    `, Date.now(), name)
+    
+    // Note: We intentionally do NOT remove the worktree or branch
+    // This preserves all work and allows resuming later
+  }
+
   async getGitStats(sessionId: string): Promise<GitStats | undefined> {
     if (!this.db) await this.connect()
     
@@ -248,6 +309,63 @@ export class SchaltwerkBridge {
     `, sessionId)
     
     return stats
+  }
+
+  private async checkGitStatus(worktreePath: string): Promise<GitStatusResult> {
+    try {
+      // Get git status --porcelain for machine-readable output
+      const statusOutput = execSync('git status --porcelain', {
+        cwd: worktreePath,
+        stdio: 'pipe',
+        encoding: 'utf8'
+      }).toString()
+
+      const lines = statusOutput.trim().split('\n').filter(line => line.length > 0)
+      
+      let modifiedFiles = 0
+      let untrackedFiles = 0
+      let stagedFiles = 0
+      const changedFiles: string[] = []
+
+      for (const line of lines) {
+        const status = line.substring(0, 2)
+        const filename = line.substring(3)
+        changedFiles.push(filename)
+
+        // Check staged changes (first character)
+        if (status[0] !== ' ' && status[0] !== '?') {
+          stagedFiles++
+        }
+
+        // Check unstaged changes (second character)
+        if (status[1] === 'M') {
+          modifiedFiles++
+        }
+
+        // Check untracked files
+        if (status[0] === '?' && status[1] === '?') {
+          untrackedFiles++
+        }
+      }
+
+      return {
+        hasUncommittedChanges: lines.length > 0,
+        modifiedFiles,
+        untrackedFiles,
+        stagedFiles,
+        changedFiles
+      }
+    } catch (error) {
+      // If git status fails, assume no changes for safety
+      console.warn(`Failed to check git status for ${worktreePath}: ${error}`)
+      return {
+        hasUncommittedChanges: false,
+        modifiedFiles: 0,
+        untrackedFiles: 0,
+        stagedFiles: 0,
+        changedFiles: []
+      }
+    }
   }
 
   private async getRepositoryPath(): Promise<string> {

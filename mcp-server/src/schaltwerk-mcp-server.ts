@@ -22,6 +22,11 @@ interface SchaltwerkStartArgs {
 
 interface SchaltwerkCancelArgs {
   session_name: string
+  force?: boolean
+}
+
+interface SchaltwerkPauseArgs {
+  session_name: string
 }
 
 interface SchaltwerkListArgs {
@@ -142,32 +147,85 @@ Use json: true for programmatic access with clean, essential data only.`,
         name: "schaltwerk_cancel",
         description: `Cancel and permanently delete a Schaltwerk session.
 
-⚠️ WARNING: DESTRUCTIVE OPERATION
+⚠️ EXTREMELY DESTRUCTIVE OPERATION - READ CAREFULLY ⚠️
+
+🔒 SAFETY CHECKS:
+- By default, checks for uncommitted changes and REFUSES to proceed
+- Requires 'force: true' to bypass safety checks
+- Suggests committing work before cancellation
+- Provides clear warnings about data loss
+
+📋 SAFE USAGE:
+schaltwerk_cancel(session_name: "feature-auth")  // Checks for uncommitted work first
+schaltwerk_cancel(session_name: "feature-auth", force: true)  // Forces deletion
+
+🔥 DESTRUCTIVE ACTIONS (only with force: true):
 - Removes the Git worktree
-- Deletes the Git branch
+- Deletes the Git branch  
 - Loses ALL uncommitted changes
 - Cannot be undone
 
-📋 USAGE:
-schaltwerk_cancel(session_name: "feature-auth")
-
 ✅ WHEN TO USE:
-- Cleaning up abandoned or failed sessions
-- Removing experimental branches
+- Cleaning up sessions that are fully committed
+- Removing experimental branches with no valuable work
 - After work has been merged elsewhere
 
 ❌ WHEN NOT TO USE:
 - If session has uncommitted work you want to keep
-- For the current active session
-- If you're unsure about losing the work
+- Without first checking what work would be lost
+- If you're unsure about the session's state
 
-💡 ALTERNATIVE: Use 'schaltwerk_finish' to properly complete and merge work instead.`,
+🛡️ SAFER ALTERNATIVES:
+- 'schaltwerk_pause': Archive session without deletion
+- Commit your work first, then cancel
+- Use 'schaltwerk_finish' to properly complete and merge work`,
         inputSchema: {
           type: "object",
           properties: {
             session_name: {
               type: "string",
               description: "Name of the session to cancel and delete permanently"
+            },
+            force: {
+              type: "boolean",
+              description: "Force deletion even if uncommitted changes exist. DANGEROUS - only use if you're certain you want to lose uncommitted work.",
+              default: false
+            }
+          },
+          required: ["session_name"]
+        }
+      },
+      {
+        name: "schaltwerk_pause",
+        description: `Pause a Schaltwerk session without deleting it (SAFE alternative to cancel).
+
+🛡️ SAFE OPERATION - NO DATA LOSS
+- Preserves all uncommitted changes
+- Keeps Git branch intact  
+- Maintains worktree for future use
+- Can be easily resumed later
+
+📋 USAGE:
+schaltwerk_pause(session_name: "feature-auth")
+
+✅ WHEN TO USE:
+- Taking a break from current work
+- Switching to other priorities
+- Keeping work for later review
+- Uncertain about whether to keep the session
+
+🔄 TO RESUME:
+- Session remains available in schaltwerk_list
+- Worktree and branch are preserved
+- Can continue work exactly where you left off
+
+💡 This is the RECOMMENDED way to stop working on a session without losing progress.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            session_name: {
+              type: "string",
+              description: "Name of the session to pause (preserves all work)"
             }
           },
           required: ["session_name"]
@@ -247,9 +305,18 @@ ${session.initial_prompt ? `- Initial Prompt: ${session.initial_prompt}` : ''}`
       case "schaltwerk_cancel": {
         const cancelArgs = args as unknown as SchaltwerkCancelArgs
         
-        await bridge.cancelSession(cancelArgs.session_name)
+        await bridge.cancelSession(cancelArgs.session_name, cancelArgs.force)
         
         result = `Session '${cancelArgs.session_name}' has been cancelled and removed`
+        break
+      }
+
+      case "schaltwerk_pause": {
+        const pauseArgs = args as unknown as SchaltwerkPauseArgs
+        
+        await bridge.pauseSession(pauseArgs.session_name)
+        
+        result = `Session '${pauseArgs.session_name}' has been paused (all work preserved)`
         break
       }
 
