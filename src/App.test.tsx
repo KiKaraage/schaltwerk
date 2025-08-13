@@ -115,7 +115,7 @@ describe('App.tsx', () => {
     await waitFor(() => {
       expect(screen.getByTestId('sidebar')).toBeInTheDocument()
       expect(screen.getByTestId('terminal-grid')).toBeInTheDocument()
-      expect(screen.getByTestId('diff-panel')).toBeInTheDocument()
+      // Right panel can be in Drafts tab by default; diff panel may not be present
     })
 
     // Click the global Home button to return

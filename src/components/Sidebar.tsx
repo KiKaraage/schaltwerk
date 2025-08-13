@@ -143,9 +143,9 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     const sortedSessions = useMemo(() => {
         let filtered = sessions
         if (filterMode === 'draft') {
-            filtered = sessions.filter(s => !s.info.ready_to_merge && s.info.session_state !== 'active')
+            filtered = sessions.filter(s => s.info.session_state === 'draft')
         } else if (filterMode === 'running') {
-            filtered = sessions.filter(s => !s.info.ready_to_merge && s.info.session_state === 'active')
+            filtered = sessions.filter(s => !s.info.ready_to_merge && s.info.session_state !== 'draft')
         } else if (filterMode === 'reviewed') {
             filtered = sessions.filter(s => !!s.info.ready_to_merge)
         }
@@ -604,18 +604,17 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 </button>
             </div>
 
-            <div className="px-3 py-2 border-t border-b border-slate-800 text-sm text-slate-300 flex flex-col gap-2">
+            <div className="px-3 py-2 border-t border-b border-slate-800 text-sm text-slate-300">
                 <div className="flex items-center gap-2">
-                    <span className="text-xs flex-shrink-0">Tasks {sessions.length > 0 && <span className="text-slate-500">({sessions.length})</span>}</span>
-                    <div className="flex items-center gap-0.5 ml-auto flex-wrap">
+                    <span className="text-xs flex-shrink-0">Tasks</span>
+                    <div className="flex items-center gap-1 ml-auto flex-nowrap overflow-x-auto">
                         <button
                             className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
                                 filterMode === 'all' ? 'bg-slate-700/60 text-white' : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/50')}
                             onClick={() => setFilterMode('all')}
                             title="Show all tasks"
                         >
-                            All
-                            <span className="text-slate-400">({sessions.length})</span>
+                            All <span className="text-slate-400">({sessions.length})</span>
                         </button>
                         <button
                             className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
@@ -623,8 +622,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                             onClick={() => setFilterMode('draft')}
                             title="Show draft tasks"
                         >
-                            Drafts
-                            <span className="text-slate-400">({sessions.filter(s => !s.info.ready_to_merge && s.info.session_state !== 'active').length})</span>
+                            Drafts <span className="text-slate-400">({sessions.filter(s => s.info.session_state === 'draft').length})</span>
                         </button>
                         <button
                             className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
@@ -632,8 +630,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                             onClick={() => setFilterMode('running')}
                             title="Show running tasks"
                         >
-                            Running
-                            <span className="text-slate-400">({sessions.filter(s => !s.info.ready_to_merge && s.info.session_state === 'active').length})</span>
+                            Running <span className="text-slate-400">({sessions.filter(s => !s.info.ready_to_merge && s.info.session_state !== 'draft').length})</span>
                         </button>
                         <button
                             className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
@@ -641,11 +638,10 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                             onClick={() => setFilterMode('reviewed')}
                             title="Show reviewed tasks"
                         >
-                            Reviewed
-                            <span className="text-slate-400">({sessions.filter(s => !!s.info.ready_to_merge).length})</span>
+                            Reviewed <span className="text-slate-400">({sessions.filter(s => !!s.info.ready_to_merge).length})</span>
                         </button>
                         <button
-                            className="px-1.5 py-0.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-white flex items-center gap-0.5"
+                            className="px-1.5 py-0.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-white flex items-center gap-0.5 flex-shrink-0"
                             onClick={() => {
                                 // Cycle through: name -> created -> last-edited -> name
                                 const nextMode = sortMode === 'name' ? 'created' : 
@@ -659,7 +655,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                             </svg>
                             {/* Compact text indicator */}
-                            <span className="text-[9px] font-medium leading-none">
+                            <span className="text-[9px] font-medium leading-none w-6 text-left">
                                 {sortMode === 'name' ? 'A-Z' : sortMode === 'created' ? 'New' : 'Edit'}
                             </span>
                         </button>
@@ -722,9 +718,6 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                                             baseBranch: null 
                                         })
                                         
-                                        // Start Claude/Cursor in the session
-                                        await invoke('para_core_start_claude', { sessionName: sessionId })
-                                        
                                         // Refresh the sessions list
                                         const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
                                         setSessions(result)
@@ -733,6 +726,15 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                                         await handleSelectSession(i)
                                     } catch (err) {
                                         console.error('Failed to run draft session:', err)
+                                    }
+                                }}
+                                onDeleteDraft={async (sessionId) => {
+                                    try {
+                                        await invoke('para_core_cancel_session', { name: sessionId })
+                                        const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
+                                        setSessions(result)
+                                    } catch (err) {
+                                        console.error('Failed to delete draft:', err)
                                     }
                                 }}
                             />

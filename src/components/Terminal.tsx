@@ -158,7 +158,9 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             setTimeout(() => {
                 if (terminal.current && termRef.current) {
                     try {
-                        fitAddon.current.fit();
+                        const addon = fitAddon.current;
+                        if (!addon) return;
+                        addon.fit();
                         const { cols, rows } = terminal.current;
                         // Only send if we got reasonable dimensions
                         if (cols > 80 && rows > 24) {
@@ -172,7 +174,9 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             setTimeout(() => {
                 if (terminal.current && termRef.current) {
                     try {
-                        fitAddon.current.fit();
+                        const addon = fitAddon.current;
+                        if (!addon) return;
+                        addon.fit();
                         const { cols, rows } = terminal.current;
                         invoke('resize_terminal', { id: terminalId, cols, rows }).catch(console.error);
                     } catch (e) {

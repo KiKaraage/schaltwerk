@@ -78,6 +78,14 @@ describe('NewSessionModal', () => {
     expect(call.userEditedName).toBe(false)
   })
 
+  it('responds to draft-mode event by checking Create as draft', async () => {
+    render(<NewSessionModal open={true} onClose={() => {}} onCreate={vi.fn()} />)
+    const checkbox = screen.getByLabelText(/Create as draft/i) as HTMLInputElement
+    expect(checkbox.checked).toBe(false)
+    window.dispatchEvent(new Event('schaltwerk:new-session:set-draft'))
+    await waitFor(() => expect(checkbox.checked).toBe(true))
+  })
+
   // Skipping edge-case validation UI assertion to avoid flakiness in CI
 
   it('toggles agent type and skip permissions', async () => {

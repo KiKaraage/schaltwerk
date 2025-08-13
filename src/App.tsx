@@ -86,6 +86,16 @@ export default function App() {
           setNewSessionOpen(true)
         }
       }
+      // New Draft shortcut: Cmd+Shift+N (avoids conflicts with system Cmd+D)
+      if (modifierKey && e.shiftKey && (e.key === 'n' || e.key === 'N')) {
+        const isInputFocused = document.activeElement?.tagName === 'INPUT' || 
+                               document.activeElement?.tagName === 'TEXTAREA' ||
+                               document.activeElement?.getAttribute('contenteditable') === 'true'
+        if (!newSessionOpen && !cancelModalOpen && !settingsOpen && !isInputFocused) {
+          e.preventDefault()
+          window.dispatchEvent(new CustomEvent('schaltwerk:new-draft'))
+        }
+      }
       
       // Add settings shortcut (Cmd+,)
       if (modifierKey && e.key === ',') {
@@ -123,6 +133,19 @@ export default function App() {
       window.removeEventListener('schaltwerk:open-diff-view' as any, handleOpenDiffView)
     }
   }, [newSessionOpen, cancelModalOpen, settingsOpen])
+
+  // Open NewSessionModal directly in draft mode when requested
+  useEffect(() => {
+    const handler = () => {
+      setNewSessionOpen(true)
+      // Wait a tick then toggle the draft checkbox in the modal by dispatching a custom event
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('schaltwerk:new-session:set-draft'))
+      }, 0)
+    }
+    window.addEventListener('schaltwerk:new-draft', handler as any)
+    return () => window.removeEventListener('schaltwerk:new-draft', handler as any)
+  }, [])
   
   
   const handleCancelSession = async (_force: boolean) => {
@@ -273,13 +296,13 @@ export default function App() {
         </div>
       </div>
 
-      <Split className="h-full w-full flex pt-9" sizes={[18, 82]} minSize={[220, 400]} gutterSize={6}>
+      <Split className="h-full w-full flex pt-9" sizes={[20, 80]} minSize={[240, 400]} gutterSize={6}>
       <div className="h-full bg-panel border-r border-slate-800 overflow-y-auto">
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-y-auto">
             <Sidebar isDiffViewerOpen={isDiffViewerOpen} />
           </div>
-          <div className="p-2 border-t border-slate-800">
+          <div className="p-2 border-t border-slate-800 grid grid-cols-2 gap-2">
             <button 
               onClick={() => setNewSessionOpen(true)} 
               className="w-full bg-slate-800/60 hover:bg-slate-700/60 text-sm px-3 py-1.5 rounded group flex items-center justify-between"
@@ -287,6 +310,14 @@ export default function App() {
             >
               <span>Start new task</span>
               <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">⌘N</span>
+            </button>
+            <button 
+              onClick={() => window.dispatchEvent(new CustomEvent('schaltwerk:new-draft'))} 
+              className="w-full bg-amber-800/40 hover:bg-amber-700/40 text-sm px-3 py-1.5 rounded group flex items-center justify-between border border-amber-700/40"
+              title="Create draft (⇧⌘N)"
+            >
+              <span>New draft</span>
+              <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">⇧⌘N</span>
             </button>
           </div>
         </div>
