@@ -296,7 +296,7 @@ export default function App() {
         </div>
       </div>
 
-      <Split className="h-full w-full flex pt-9" sizes={[18, 82]} minSize={[220, 400]} gutterSize={6}>
+      <Split className="h-full w-full flex pt-9" sizes={[20, 80]} minSize={[240, 400]} gutterSize={6}>
       <div className="h-full bg-panel border-r border-slate-800 overflow-y-auto">
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-y-auto">

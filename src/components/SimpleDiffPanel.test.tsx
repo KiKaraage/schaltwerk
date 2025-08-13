@@ -68,8 +68,7 @@ describe('SimpleDiffPanel', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: /show prompt/i })).not.toBeInTheDocument())
 
     // And we never fetch the session prompt
-    // @ts-expect-error access mock calls
-    const calls = (invoke as any).mock.calls as any[]
+    const calls = (invoke as unknown as { mock: { calls: any[][] } }).mock.calls as any[]
     expect(calls.find((c: any[]) => c[0] === 'para_core_get_session')).toBeUndefined()
   })
 
