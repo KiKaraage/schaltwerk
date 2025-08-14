@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
-import { SimpleDiffPanel } from './diff/SimpleDiffPanel'
-import { useSelection } from '../contexts/SelectionContext'
+import { SimpleDiffPanel } from '../diff/SimpleDiffPanel'
+import { useSelection } from '../../contexts/SelectionContext'
 import { VscDiff, VscChevronLeft, VscNotebook } from 'react-icons/vsc'
 import clsx from 'clsx'
-import { DraftContentView } from './drafts/DraftContentView'
-import { DraftListView } from './drafts/DraftListView'
+import { DraftContentView } from '../drafts/DraftContentView'
+import { DraftListView } from '../drafts/DraftListView'
 
 interface RightPanelTabsProps {
   onFileSelect: (filePath: string) => void

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, waitFor } from '@testing-library/react'
 import { Sidebar } from './Sidebar'
-import { SelectionProvider } from '../contexts/SelectionContext'
-import { FocusProvider } from '../contexts/FocusContext'
-import { ProjectProvider } from '../contexts/ProjectContext'
+import { SelectionProvider } from '../../contexts/SelectionContext'
+import { FocusProvider } from '../../contexts/FocusContext'
+import { ProjectProvider } from '../../contexts/ProjectContext'
 
 // Do NOT mock useKeyboardShortcuts here; we want real keyboard behavior
 

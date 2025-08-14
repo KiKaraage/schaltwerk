@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { clsx } from 'clsx'
-import { formatLastActivity } from '../utils/time'
+import { formatLastActivity } from '../../utils/time'
 
 interface DiffStats {
     files_changed: number

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Sidebar } from './components/Sidebar'
-import { TerminalGrid } from './components/TerminalGrid'
-import { RightPanelTabs } from './components/RightPanelTabs'
+import { Sidebar } from './components/sidebar/Sidebar'
+import { TerminalGrid } from './components/terminal/TerminalGrid'
+import { RightPanelTabs } from './components/right-panel/RightPanelTabs'
 import { DiffViewerWithReview } from './components/diff/DiffViewerWithReview'
 import Split from 'react-split'
-import { NewSessionModal } from './components/NewSessionModal'
-import { CancelConfirmation } from './components/CancelConfirmation'
+import { NewSessionModal } from './components/modals/NewSessionModal'
+import { CancelConfirmation } from './components/modals/CancelConfirmation'
 import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from './contexts/SelectionContext'
 import { useProject } from './contexts/ProjectContext'
@@ -334,7 +334,7 @@ export default function App() {
       </div>
 
           <Split className="h-full w-full flex pt-9" sizes={[20, 80]} minSize={[240, 400]} gutterSize={6}>
-      <div className="h-full bg-panel border-r border-slate-800 overflow-y-auto">
+      <div className="h-full bg-panel border-r border-slate-800 overflow-y-auto" data-testid="sidebar">
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-y-auto">
             <Sidebar isDiffViewerOpen={isDiffViewerOpen} />
@@ -364,7 +364,7 @@ export default function App() {
         {/* Unified session ring around center + right (Claude, Terminal, Diff) */}
         <div id="work-ring" className="absolute inset-2 rounded-xl pointer-events-none" />
         <Split className="h-full w-full flex" sizes={[70, 30]} minSize={[400, 280]} gutterSize={8}>
-          <main className="bg-slate-950 h-full">
+          <main className="bg-slate-950 h-full" data-testid="terminal-grid">
             <TerminalGrid />
           </main>
           <section className="overflow-hidden">

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { useSelection } from '../contexts/SelectionContext'
+import { useSelection } from '../../contexts/SelectionContext'
 import { VscPlay, VscDebugStart, VscRocket } from 'react-icons/vsc'
 
 export function DraftPlaceholder() {

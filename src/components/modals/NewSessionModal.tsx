@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react'
-import { useClaudeSession } from '../hooks/useClaudeSession'
-import { generateDockerStyleName } from '../utils/dockerNames'
+import { useClaudeSession } from '../../hooks/useClaudeSession'
+import { generateDockerStyleName } from '../../utils/dockerNames'
 import { invoke } from '@tauri-apps/api/core'
-import { BranchAutocomplete } from './BranchAutocomplete'
-import { ModelSelector } from './ModelSelector'
+import { BranchAutocomplete } from '../inputs/BranchAutocomplete'
+import { ModelSelector } from '../inputs/ModelSelector'
 
 interface Props {
     open: boolean
@@ -222,7 +222,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                             className={`w-full bg-slate-800 text-slate-100 rounded px-3 py-2 border ${
                                 validationError ? 'border-red-500' : 'border-slate-700'
                             }`} 
-                            placeholder={name || "e.g. eager_cosmos"} 
+                            placeholder="eager_cosmos" 
                         />
                         {validationError && (
                             <div className="flex items-start gap-2 mt-1">

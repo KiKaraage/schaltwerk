@@ -88,9 +88,9 @@ const mockInvoke = vi.mocked(invoke)
 
 // Now import component under test and helpers
 import { TerminalGrid } from './TerminalGrid'
-import { TestProviders } from '../tests/test-utils'
-import { useSelection } from '../contexts/SelectionContext'
-import { useFocus } from '../contexts/FocusContext'
+import { TestProviders } from '../../tests/test-utils'
+import { useSelection } from '../../contexts/SelectionContext'
+import { useFocus } from '../../contexts/FocusContext'
 
 // Bridge to call context setters from tests sharing the same provider tree
 let bridge: {

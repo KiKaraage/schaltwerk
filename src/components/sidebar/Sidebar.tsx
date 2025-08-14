@@ -1,15 +1,15 @@
 import { useState, useEffect, useMemo, useCallback, startTransition, useRef } from 'react'
 import { clsx } from 'clsx'
 import { invoke } from '@tauri-apps/api/core'
-import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
-import { useFocus } from '../contexts/FocusContext'
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
+import { useFocus } from '../../contexts/FocusContext'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
-import { useSelection } from '../contexts/SelectionContext'
-import { computeNextSelectedSessionId } from '../utils/selectionNext'
-import { MarkReadyConfirmation } from './MarkReadyConfirmation'
+import { useSelection } from '../../contexts/SelectionContext'
+import { computeNextSelectedSessionId } from '../../utils/selectionNext'
+import { MarkReadyConfirmation } from '../modals/MarkReadyConfirmation'
 import { SessionButton } from './SessionButton'
-import { SwitchOrchestratorModal } from './SwitchOrchestratorModal'
-import { clearTerminalStartedTracking } from './Terminal'
+import { SwitchOrchestratorModal } from '../modals/SwitchOrchestratorModal'
+import { clearTerminalStartedTracking } from '../terminal/Terminal'
 
 interface DiffStats {
     files_changed: number

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { ModelSelector } from './ModelSelector'
-import { useClaudeSession } from '../hooks/useClaudeSession'
+import { ModelSelector } from '../inputs/ModelSelector'
+import { useClaudeSession } from '../../hooks/useClaudeSession'
 
 interface Props {
     open: boolean

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { Sidebar } from './Sidebar'
-import { SelectionProvider } from '../contexts/SelectionContext'
-import { FocusProvider } from '../contexts/FocusContext'
-import { ProjectProvider } from '../contexts/ProjectContext'
+import { SelectionProvider } from '../../contexts/SelectionContext'
+import { FocusProvider } from '../../contexts/FocusContext'
+import { ProjectProvider } from '../../contexts/ProjectContext'
 
 // Use real keyboard hook behavior
 

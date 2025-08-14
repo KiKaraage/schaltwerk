@@ -4,7 +4,7 @@ import { listen } from '@tauri-apps/api/event'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { VscEdit, VscPlay, VscTrash, VscSave, VscClose, VscAdd } from 'react-icons/vsc'
-import { ConfirmModal } from './ConfirmModal'
+import { ConfirmModal } from '../modals/ConfirmModal'
 import clsx from 'clsx'
 
 interface DraftSession {

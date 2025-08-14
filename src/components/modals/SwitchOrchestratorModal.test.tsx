@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-libra
 import { SwitchOrchestratorModal } from './SwitchOrchestratorModal'
 
 // Mock useClaudeSession to control getAgentType behavior and avoid tauri calls
-vi.mock('../hooks/useClaudeSession', () => {
+vi.mock('../../hooks/useClaudeSession', () => {
   return {
     useClaudeSession: () => ({
       getAgentType: vi.fn().mockResolvedValue('cursor'),

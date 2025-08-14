@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { Sidebar } from '../components/Sidebar'
+import { Sidebar } from '../components/sidebar/Sidebar'
 import { SelectionProvider } from '../contexts/SelectionContext'
 import { FocusProvider } from '../contexts/FocusContext'
 import { ProjectProvider } from '../contexts/ProjectContext'

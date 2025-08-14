@@ -8,7 +8,7 @@ const mockSetSkipPermissions = vi.fn().mockResolvedValue(true)
 const mockGetAgentType = vi.fn().mockResolvedValue('cursor')
 const mockSetAgentType = vi.fn().mockResolvedValue(true)
 
-vi.mock('../hooks/useClaudeSession', () => ({
+vi.mock('../../hooks/useClaudeSession', () => ({
   useClaudeSession: () => ({
     getSkipPermissions: mockGetSkipPermissions,
     setSkipPermissions: mockSetSkipPermissions,
@@ -17,7 +17,7 @@ vi.mock('../hooks/useClaudeSession', () => ({
   })
 }))
 
-vi.mock('../utils/dockerNames', () => ({
+vi.mock('../../utils/dockerNames', () => ({
   generateDockerStyleName: () => 'eager_cosmos'
 }))
 

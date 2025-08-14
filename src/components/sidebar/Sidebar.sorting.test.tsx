@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Sidebar } from './Sidebar'
-import { SelectionProvider } from '../contexts/SelectionContext'
-import { FocusProvider } from '../contexts/FocusContext'
-import { ProjectProvider } from '../contexts/ProjectContext'
+import { SelectionProvider } from '../../contexts/SelectionContext'
+import { FocusProvider } from '../../contexts/FocusContext'
+import { ProjectProvider } from '../../contexts/ProjectContext'
 import { invoke } from '@tauri-apps/api/core'
 
 vi.mock('@tauri-apps/api/core')

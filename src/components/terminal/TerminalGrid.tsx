@@ -1,8 +1,8 @@
 import { Terminal, TerminalHandle } from './Terminal'
-import { DraftPlaceholder } from './DraftPlaceholder'
+import { DraftPlaceholder } from '../drafts/DraftPlaceholder'
 import Split from 'react-split'
-import { useSelection } from '../contexts/SelectionContext'
-import { useFocus } from '../contexts/FocusContext'
+import { useSelection } from '../../contexts/SelectionContext'
+import { useFocus } from '../../contexts/FocusContext'
 import { useRef, useEffect, useState } from 'react'
 
 export function TerminalGrid() {
