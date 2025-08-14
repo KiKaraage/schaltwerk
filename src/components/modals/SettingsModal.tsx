@@ -8,7 +8,7 @@ interface Props {
 
 type AgentType = 'claude' | 'cursor' | 'opencode'
 type EnvVars = Record<string, string>
-type SettingsCategory = 'environment' // Add more categories here as needed: 'general' | 'appearance' | 'shortcuts' etc.
+type SettingsCategory = 'environment' | 'projects' // Add more categories here as needed: 'general' | 'appearance' | 'shortcuts' etc.
 
 interface CategoryConfig {
     id: SettingsCategory
@@ -26,22 +26,27 @@ const CATEGORIES: CategoryConfig[] = [
             </svg>
         )
     },
-    // Add more categories here as needed:
-    // {
-    //     id: 'general',
-    //     label: 'General',
-    //     icon: <svg>...</svg>
-    // },
-    // {
-    //     id: 'appearance',
-    //     label: 'Appearance',
-    //     icon: <svg>...</svg>
-    // },
+    {
+        id: 'projects',
+        label: 'Project Settings',
+        icon: (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+            </svg>
+        )
+    },
 ]
+
+interface ProjectSettings {
+    setupScript: string
+}
 
 export function SettingsModal({ open, onClose }: Props) {
     const [activeCategory, setActiveCategory] = useState<SettingsCategory>('environment')
     const [activeAgentTab, setActiveAgentTab] = useState<AgentType>('claude')
+    const [projectSettings, setProjectSettings] = useState<ProjectSettings>({
+        setupScript: ''
+    })
     const [envVars, setEnvVars] = useState<Record<AgentType, Array<{key: string, value: string}>>>({
         claude: [],
         cursor: [],
@@ -53,8 +58,20 @@ export function SettingsModal({ open, onClose }: Props) {
     useEffect(() => {
         if (open) {
             loadEnvVars()
+            loadProjectSettings()
         }
     }, [open])
+
+    const loadProjectSettings = async () => {
+        try {
+            const settings = await invoke<ProjectSettings>('get_project_settings')
+            console.log('Loaded project settings:', settings)
+            setProjectSettings(settings || { setupScript: '' })
+        } catch (error) {
+            console.error('Failed to load project settings:', error)
+            setProjectSettings({ setupScript: '' })
+        }
+    }
 
     const loadEnvVars = async () => {
         setLoading(true)
@@ -82,6 +99,7 @@ export function SettingsModal({ open, onClose }: Props) {
     const handleSave = async () => {
         setSaving(true)
         try {
+            // Save environment variables
             const agents: AgentType[] = ['claude', 'cursor', 'opencode']
             
             for (const agent of agents) {
@@ -94,9 +112,13 @@ export function SettingsModal({ open, onClose }: Props) {
                 await invoke('set_agent_env_vars', { agentType: agent, envVars: vars })
             }
             
+            // Save project settings
+            console.log('Saving project settings:', projectSettings)
+            await invoke('set_project_settings', { settings: projectSettings })
+            
             onClose()
         } catch (error) {
-            console.error('Failed to save environment variables:', error)
+            console.error('Failed to save settings:', error)
         } finally {
             setSaving(false)
         }
@@ -247,15 +269,72 @@ export function SettingsModal({ open, onClose }: Props) {
         </div>
     )
 
+    const renderProjectSettings = () => (
+        <div className="flex flex-col h-full">
+            <div className="flex-1 overflow-y-auto p-6">
+                <div className="space-y-4">
+                    <div>
+                        <h3 className="text-sm font-medium text-slate-200 mb-2">Worktree Setup Script</h3>
+                        <div className="text-sm text-slate-400 mb-4">
+                            Configure a script that runs automatically when a new worktree is created for this project.
+                            The script will be executed in the new worktree directory.
+                        </div>
+                        
+                        <div className="mb-4 p-3 bg-slate-800/50 border border-slate-700 rounded">
+                            <div className="text-xs text-slate-400 mb-2">
+                                <strong>Available variables:</strong>
+                            </div>
+                            <ul className="text-xs text-slate-500 space-y-1 list-disc list-inside">
+                                <li><code className="text-blue-400">$WORKTREE_PATH</code> - Path to the new worktree</li>
+                                <li><code className="text-blue-400">$REPO_PATH</code> - Path to the main repository</li>
+                                <li><code className="text-blue-400">$SESSION_NAME</code> - Name of the session</li>
+                                <li><code className="text-blue-400">$BRANCH_NAME</code> - Name of the new branch</li>
+                            </ul>
+                        </div>
+
+                        <div className="relative">
+                            <textarea
+                                value={projectSettings.setupScript}
+                                onChange={(e) => setProjectSettings({ ...projectSettings, setupScript: e.target.value })}
+                                placeholder={`#!/bin/bash
+# Example: Copy .env file from main repo
+if [ -f "$REPO_PATH/.env" ]; then
+    cp "$REPO_PATH/.env" "$WORKTREE_PATH/.env"
+    echo "✓ Copied .env file to worktree"
+fi`}
+                                className="w-full h-80 bg-slate-800 text-slate-100 rounded px-3 py-2 border border-slate-700 placeholder-slate-500 font-mono text-sm resize-none overflow-auto focus:outline-none focus:border-blue-500 transition-colors scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800"
+                                spellCheck={false}
+                                style={{ 
+                                    scrollbarWidth: 'thin',
+                                    scrollbarColor: '#475569 #1e293b'
+                                }}
+                            />
+                        </div>
+                        
+                        <div className="mt-4 p-3 bg-blue-900/20 border border-blue-800/50 rounded">
+                            <div className="text-xs text-blue-300 mb-2">
+                                <strong>Example use cases:</strong>
+                            </div>
+                            <ul className="text-xs text-slate-400 space-y-1 list-disc list-inside">
+                                <li>Copy environment files (.env, .env.local)</li>
+                                <li>Install dependencies (npm install, pip install)</li>
+                                <li>Set up database connections</li>
+                                <li>Configure IDE settings</li>
+                                <li>Create required directories</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+
     const renderSettingsContent = () => {
         switch (activeCategory) {
             case 'environment':
                 return renderEnvironmentSettings()
-            // Add more cases here as you add more categories:
-            // case 'general':
-            //     return renderGeneralSettings()
-            // case 'appearance':
-            //     return renderAppearanceSettings()
+            case 'projects':
+                return renderProjectSettings()
             default:
                 return renderEnvironmentSettings()
         }
@@ -305,13 +384,6 @@ export function SettingsModal({ open, onClose }: Props) {
                                 ))}
                             </nav>
                             
-                            {/* Placeholder for future categories */}
-                            <div className="mt-8 px-3">
-                                <div className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">More Settings</div>
-                                <div className="px-3 py-8 text-xs text-slate-600 italic">
-                                    Additional settings will appear here as they become available
-                                </div>
-                            </div>
                         </div>
 
                         {/* Content Area */}

@@ -182,6 +182,13 @@ impl SessionManager {
             return Err(anyhow!("Failed to create worktree: {}", e));
         }
         
+        // Execute project setup script if configured
+        if let Ok(Some(setup_script)) = self.db.get_project_setup_script(&self.repo_path) {
+            if !setup_script.trim().is_empty() {
+                self.execute_setup_script(&setup_script, &unique_name, &branch, &worktree_path)?;
+            }
+        }
+        
         if let Err(e) = self.db.create_session(&session) {
             let _ = git::remove_worktree(&self.repo_path, &worktree_path);
             let _ = git::delete_branch(&self.repo_path, &branch);
@@ -251,6 +258,60 @@ impl SessionManager {
     
     pub fn get_session(&self, name: &str) -> Result<Session> {
         self.db.get_session_by_name(&self.repo_path, name)
+    }
+    
+    fn execute_setup_script(&self, script: &str, session_name: &str, branch_name: &str, worktree_path: &Path) -> Result<()> {
+        use std::process::Command;
+        
+        log::info!("Executing setup script for session {session_name}");
+        
+        // Create a temporary script file
+        let temp_dir = std::env::temp_dir();
+        let script_path = temp_dir.join(format!("para_setup_{session_name}.sh"));
+        std::fs::write(&script_path, script)?;
+        
+        // Make the script executable
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&script_path)?.permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&script_path, perms)?;
+        }
+        
+        // Set up environment variables
+        let mut cmd = Command::new(if cfg!(windows) { "cmd" } else { "sh" });
+        
+        if cfg!(windows) {
+            cmd.args(["/C", &script_path.to_string_lossy()]);
+        } else {
+            cmd.arg(&script_path);
+        }
+        
+        cmd.current_dir(worktree_path)
+            .env("WORKTREE_PATH", worktree_path)
+            .env("REPO_PATH", &self.repo_path)
+            .env("SESSION_NAME", session_name)
+            .env("BRANCH_NAME", branch_name);
+        
+        // Execute the script
+        let output = cmd.output()?;
+        
+        // Clean up the temporary script file
+        let _ = std::fs::remove_file(&script_path);
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            log::error!("Setup script failed for session {session_name}: {stderr}");
+            return Err(anyhow!("Setup script failed: {stderr}"));
+        }
+        
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if !stdout.trim().is_empty() {
+            log::info!("Setup script output for session {session_name}: {stdout}");
+        }
+        
+        Ok(())
     }
     
     pub fn list_sessions(&self) -> Result<Vec<Session>> {

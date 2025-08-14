@@ -48,4 +48,8 @@ impl SchaltwerkCore {
     pub fn session_manager(&self) -> SessionManager {
         SessionManager::new(self.db.clone(), self.repo_path.clone())
     }
+    
+    pub fn database(&self) -> &Database {
+        &self.db
+    }
 }

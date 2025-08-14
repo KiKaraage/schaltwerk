@@ -1153,6 +1153,71 @@ async fn set_agent_env_vars(agent_type: String, env_vars: HashMap<String, String
     manager.set_agent_env_vars(&agent_type, env_vars)
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectSettings {
+    setup_script: String,
+}
+
+#[tauri::command]
+async fn get_project_settings() -> Result<ProjectSettings, String> {
+    let project = PROJECT_MANAGER
+        .get()
+        .ok_or_else(|| "Project manager not initialized".to_string())?
+        .current_project()
+        .await
+        .map_err(|e| format!("Failed to get current project: {e}"))?;
+    
+    let core = project.para_core.lock().await;
+    let db = core.database();
+    
+    let setup_script = db.get_project_setup_script(&project.path)
+        .map_err(|e| format!("Failed to get project setup script: {e}"))?
+        .unwrap_or_default();
+    
+    Ok(ProjectSettings { setup_script })
+}
+
+#[tauri::command]
+async fn set_project_settings(settings: ProjectSettings) -> Result<(), String> {
+    let project = PROJECT_MANAGER
+        .get()
+        .ok_or_else(|| "Project manager not initialized".to_string())?
+        .current_project()
+        .await
+        .map_err(|e| format!("Failed to get current project: {e}"))?;
+    
+    let core = project.para_core.lock().await;
+    let db = core.database();
+    
+    db.set_project_setup_script(&project.path, &settings.setup_script)
+        .map_err(|e| format!("Failed to set project setup script: {e}"))?;
+    
+    Ok(())
+}
+
+#[cfg(test)]
+mod project_settings_tests {
+    use super::*;
+    
+    #[test]
+    fn test_project_settings_serialization() {
+        let settings = ProjectSettings {
+            setup_script: "#!/bin/bash\necho test".to_string(),
+        };
+        
+        // Serialize to JSON
+        let json = serde_json::to_string(&settings).unwrap();
+        assert!(json.contains("setupScript"), "Should use camelCase field name");
+        assert!(!json.contains("setup_script"), "Should not use snake_case field name");
+        
+        // Deserialize from JSON with camelCase
+        let json_input = r#"{"setupScript":"echo hello"}"#;
+        let deserialized: ProjectSettings = serde_json::from_str(json_input).unwrap();
+        assert_eq!(deserialized.setup_script, "echo hello");
+    }
+}
+
 fn main() {
     // Initialize logging
     logging::init_logging();
@@ -1216,7 +1281,9 @@ fn main() {
             get_project_default_base_branch,
             set_project_default_base_branch,
             get_agent_env_vars,
-            set_agent_env_vars
+            set_agent_env_vars,
+            get_project_settings,
+            set_project_settings
         ])
         .setup(|app| {
             // Initialize settings manager
