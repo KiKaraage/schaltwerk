@@ -16,7 +16,7 @@ export interface Session {
   parent_branch: string
   worktree_path: string
   status: 'active' | 'cancelled' | 'paused' | 'draft'
-  state?: 'Draft' | 'Running' | 'Reviewed'
+  session_state?: 'Draft' | 'Running' | 'Reviewed'
   created_at: number
   updated_at: number
   last_activity?: number
@@ -101,7 +101,7 @@ export class SchaltwerkBridge {
         parent_branch,
         worktree_path,
         status,
-        state,
+        session_state,
         created_at,
         updated_at,
         last_activity,
@@ -549,7 +549,7 @@ export class SchaltwerkBridge {
       parent_branch: parentBranch,
       worktree_path: worktreePath,
       status: 'draft',
-      state: 'Draft',
+      session_state: 'Draft',
       created_at: now,
       updated_at: now,
       last_activity: now,
@@ -566,7 +566,7 @@ export class SchaltwerkBridge {
       INSERT INTO sessions (
         id, name, display_name, repository_path, repository_name,
         branch, parent_branch, worktree_path,
-        status, state, created_at, updated_at, last_activity, draft_content, ready_to_merge,
+        status, session_state, created_at, updated_at, last_activity, draft_content, ready_to_merge,
         original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
@@ -579,7 +579,7 @@ export class SchaltwerkBridge {
       session.parent_branch,
       session.worktree_path,
       session.status,
-      session.state,
+      session.session_state,
       session.created_at,
       session.updated_at,
       session.last_activity,
@@ -639,7 +639,7 @@ export class SchaltwerkBridge {
     await this.db!.run(`
       UPDATE sessions 
       SET status = 'active', 
-          state = 'Running',
+          session_state = 'Running',
           updated_at = ?, 
           last_activity = ?,
           initial_prompt = draft_content,
@@ -690,7 +690,7 @@ export class SchaltwerkBridge {
         parent_branch,
         worktree_path,
         status,
-        state,
+        session_state,
         created_at,
         updated_at,
         last_activity,
@@ -740,7 +740,7 @@ export class SchaltwerkBridge {
         parent_branch,
         worktree_path,
         status,
-        state,
+        session_state,
         created_at,
         updated_at,
         last_activity,

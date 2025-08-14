@@ -550,7 +550,7 @@ ${session.initial_prompt ? `- Initial Prompt: ${session.initial_prompt}` : ''}`
             name: s.name,
             display_name: s.display_name || s.name,
             status: s.status === 'draft' ? 'draft' : (s.ready_to_merge ? 'reviewed' : 'new'),
-            state: s.state,
+            state: s.session_state,
             created_at: new Date(s.created_at).toISOString(),
             last_activity: s.last_activity ? new Date(s.last_activity).toISOString() : null,
             agent_type: s.original_agent_type || 'claude',
