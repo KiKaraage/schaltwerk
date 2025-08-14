@@ -113,7 +113,7 @@ export class SchaltwerkBridge {
         pending_name_generation,
         was_auto_generated
       FROM sessions
-      WHERE status IN ('active', 'paused', 'draft')
+      WHERE status IN ('active', 'paused')
       ORDER BY 
         CASE WHEN ready_to_merge = 0 THEN 0 ELSE 1 END,
         last_activity DESC
