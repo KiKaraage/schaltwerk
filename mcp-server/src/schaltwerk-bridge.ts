@@ -489,6 +489,27 @@ export class SchaltwerkBridge {
     }
   }
 
+  private async notifyDraftCreated(session: Session): Promise<void> {
+    try {
+      const payload = {
+        session_name: session.name,
+        draft_content: session.draft_content,
+        parent_branch: session.parent_branch,
+        status: 'draft'
+      }
+      
+      await fetch(`${this.webhookUrl}/webhook/draft-created`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+    } catch (error) {
+      console.warn('Failed to notify draft created:', error)
+    }
+  }
+
   private async notifySessionRemoved(sessionName: string): Promise<void> {
     try {
       const payload = {
@@ -591,7 +612,7 @@ export class SchaltwerkBridge {
       session.was_auto_generated ? 1 : 0
     ])
     
-    await this.notifySessionAdded(session)
+    await this.notifyDraftCreated(session)
     
     return session
   }
@@ -652,7 +673,10 @@ export class SchaltwerkBridge {
       await this.updateAppConfig(agentType, skipPermissions)
     }
     
-    await this.notifySessionAdded(session)
+    const updatedSession = await this.getSession(sessionName)
+    if (updatedSession) {
+      await this.notifySessionAdded(updatedSession)
+    }
   }
 
   async deleteDraftSession(sessionName: string): Promise<void> {
