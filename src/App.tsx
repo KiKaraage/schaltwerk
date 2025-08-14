@@ -13,6 +13,7 @@ import { OpenInSplitButton } from './components/OpenInSplitButton'
 import { VscGear, VscHome } from 'react-icons/vsc'
 import { HomeScreen } from './components/HomeScreen'
 import { SettingsModal } from './components/SettingsModal'
+import { TabBar, ProjectTab } from './components/TabBar'
 // FocusProvider moved to root in main.tsx
 
 export interface SessionActionEvent {
@@ -32,7 +33,7 @@ function getBasename(path: string): string {
 
 export default function App() {
   const { selection, setSelection } = useSelection()
-  const { projectPath, setProjectPath } = useProject()
+  const { setProjectPath } = useProject()
   const [newSessionOpen, setNewSessionOpen] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
@@ -41,6 +42,8 @@ export default function App() {
   const [isDiffViewerOpen, setIsDiffViewerOpen] = useState(false)
   const [showHome, setShowHome] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [openTabs, setOpenTabs] = useState<ProjectTab[]>([])
+  const [activeTabPath, setActiveTabPath] = useState<string | null>(null)
   
   // Start with home screen, user must explicitly choose a project
   // Remove automatic project detection to ensure home screen is shown first
@@ -229,8 +232,28 @@ export default function App() {
 
   const handleOpenProject = async (path: string) => {
     try {
+      // Check if tab already exists
+      const existingTab = openTabs.find(tab => tab.projectPath === path)
+      if (existingTab) {
+        // Switch to existing tab
+        setActiveTabPath(path)
+        setProjectPath(path)
+        setShowHome(false)
+        return
+      }
+
+      // Initialize and add new tab
       await invoke('initialize_project', { path })
       await invoke('add_recent_project', { path })
+      
+      const projectName = getBasename(path)
+      const newTab: ProjectTab = {
+        projectPath: path,
+        projectName
+      }
+      
+      setOpenTabs(prev => [...prev, newTab])
+      setActiveTabPath(path)
       setProjectPath(path)
       setShowHome(false)
       // SelectionContext will automatically update orchestrator when projectPath changes
@@ -242,35 +265,71 @@ export default function App() {
 
   const handleGoHome = () => {
     setShowHome(true)
+    setActiveTabPath(null)
+    setProjectPath(null)
+  }
+
+  const handleSelectTab = (path: string) => {
+    setActiveTabPath(path)
+    setProjectPath(path)
+    setShowHome(false)
+  }
+
+  const handleCloseTab = async (path: string) => {
+    const tabIndex = openTabs.findIndex(tab => tab.projectPath === path)
+    if (tabIndex === -1) return
+
+    // Remove the tab
+    const newTabs = openTabs.filter(tab => tab.projectPath !== path)
+    setOpenTabs(newTabs)
+
+    // If this was the active tab, handle navigation
+    if (path === activeTabPath) {
+      if (newTabs.length > 0) {
+        // Switch to adjacent tab
+        const newIndex = Math.min(tabIndex, newTabs.length - 1)
+        const newActiveTab = newTabs[newIndex]
+        setActiveTabPath(newActiveTab.projectPath)
+        setProjectPath(newActiveTab.projectPath)
+      } else {
+        // No more tabs, go home
+        handleGoHome()
+      }
+    }
   }
   
-  if (showHome) {
+  if (showHome && openTabs.length === 0) {
     return <HomeScreen onOpenProject={handleOpenProject} />
   }
   
   return (
     <>
-      {/* Global top bar */}
-      <div className="absolute top-0 right-0 left-0 h-9 flex items-center justify-between px-3 z-20 pointer-events-none">
-        <div className="flex items-center gap-2 pointer-events-auto">
-          <button
-            onClick={handleGoHome}
-            className="h-7 w-7 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 border border-slate-700/60"
-            title="Home"
-            aria-label="Home"
-          >
-            <VscHome className="text-[15px]" />
-          </button>
-          {projectPath && (
-            <div className="flex items-center gap-1 text-xs bg-slate-800/40 border border-slate-700/60 rounded-lg px-2 py-1">
-              <span className="text-slate-400 font-medium">{getBasename(projectPath)}</span>
-              <span className="text-slate-600">•</span>
-              <span className="text-slate-500 max-w-[200px] truncate" title={projectPath}>
-                {projectPath}
-              </span>
+      {/* Show home screen if requested, or no active tab */}
+      {showHome && (
+        <HomeScreen onOpenProject={handleOpenProject} />
+      )}
+      
+      {/* Show project content when a tab is active */}
+      {!showHome && activeTabPath && (
+        <>
+          {/* Global top bar */}
+          <div className="absolute top-0 right-0 left-0 h-9 flex items-center justify-between px-3 z-20 pointer-events-none">
+            <div className="flex items-center gap-2 pointer-events-auto">
+              <button
+                onClick={handleGoHome}
+                className="h-7 w-7 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 border border-slate-700/60"
+                title="Home"
+                aria-label="Home"
+              >
+                <VscHome className="text-[15px]" />
+              </button>
+              <TabBar
+                tabs={openTabs}
+                activeTabPath={activeTabPath}
+                onSelectTab={handleSelectTab}
+                onCloseTab={handleCloseTab}
+              />
             </div>
-          )}
-        </div>
         <div className="flex items-center gap-2 pointer-events-auto">
           <OpenInSplitButton resolvePath={async () => {
             if (selection.kind === 'session') {
@@ -296,7 +355,7 @@ export default function App() {
         </div>
       </div>
 
-      <Split className="h-full w-full flex pt-9" sizes={[20, 80]} minSize={[240, 400]} gutterSize={6}>
+          <Split className="h-full w-full flex pt-9" sizes={[20, 80]} minSize={[240, 400]} gutterSize={6}>
       <div className="h-full bg-panel border-r border-slate-800 overflow-y-auto">
         <div className="h-full flex flex-col">
           <div className="flex-1 overflow-y-auto">
@@ -348,17 +407,19 @@ export default function App() {
           loading={isCancelling}
         />
       )}
-      </Split>
-      
-      {/* Diff Viewer Overlay with Review - render only when open */}
-      {isDiffViewerOpen && (
-        <DiffViewerWithReview 
-          filePath={selectedDiffFile}
-          isOpen={true}
-          onClose={handleCloseDiffViewer}
-        />
+          </Split>
+          
+          {/* Diff Viewer Overlay with Review - render only when open */}
+          {isDiffViewerOpen && (
+            <DiffViewerWithReview 
+              filePath={selectedDiffFile}
+              isOpen={true}
+              onClose={handleCloseDiffViewer}
+            />
+          )}
+          <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        </>
       )}
-      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   )
 }

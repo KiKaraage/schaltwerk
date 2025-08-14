@@ -158,11 +158,11 @@ describe('App.tsx', () => {
       expect(screen.getByTestId('sidebar')).toBeInTheDocument()
     }, { timeout: 3000 })
 
-    // The basename of the project path should appear, along with the full path
+    // The project should appear as a tab with tooltip showing full path
     // Note: The mocked HomeScreen is hardcoded to open '/Users/me/sample-project'
     await waitFor(() => {
       expect(screen.getByText('sample-project')).toBeInTheDocument()
-      expect(screen.getByText('/Users/me/sample-project')).toBeInTheDocument()
+      expect(screen.getByTitle('/Users/me/sample-project')).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 })
