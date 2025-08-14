@@ -233,7 +233,8 @@ Respond with just the short kebab-case name:"#
         
         // OpenCode uses the `run` command with a specific model and prompt
         let timeout_duration = Duration::from_secs(20);
-        let opencode_future = Command::new("/Users/marius.wichtner/.opencode/bin/opencode")
+        let binary = crate::para_core::opencode::resolve_opencode_binary();
+        let opencode_future = Command::new(&binary)
             .args(["run", "--model", "openrouter/openai/gpt-4o-mini", &prompt_plain])
             .current_dir(worktree_path)
             .env("NO_COLOR", "1")

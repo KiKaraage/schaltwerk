@@ -38,7 +38,7 @@ type MessageQueue = Arc<Mutex<HashMap<String, Vec<QueuedMessage>>>>;
 static QUEUED_MESSAGES: OnceCell<MessageQueue> = OnceCell::const_new();
 
 fn parse_agent_command(command: &str) -> Result<(String, String, Vec<String>), String> {
-    // Command format: "cd /path/to/worktree && {claude|cursor-agent|opencode} [args]"
+    // Command format: "cd /path/to/worktree && {claude|cursor-agent|<path>/opencode|opencode} [args]"
     let parts: Vec<&str> = command.split(" && ").collect();
     if parts.len() != 2 {
         return Err(format!("Invalid command format: {command}"));
@@ -53,31 +53,28 @@ fn parse_agent_command(command: &str) -> Result<(String, String, Vec<String>), S
     
     // Parse agent command and arguments
     let agent_part = parts[1];
-    let agent_name = if agent_part.starts_with("claude") {
+    // Extract the agent token (first whitespace-delimited token)
+    let mut split = agent_part.splitn(2, ' ');
+    let agent_token = split.next().unwrap_or("");
+    let rest = split.next().unwrap_or("");
+
+    // Normalize/validate the agent token
+    let is_opencode = agent_token == "opencode" || agent_token.ends_with("/opencode");
+    let agent_name = if agent_token == "claude" {
         "claude"
-    } else if agent_part.starts_with("cursor-agent") {
+    } else if agent_token == "cursor-agent" {
         "cursor-agent"
-    } else if agent_part.starts_with("/Users/marius.wichtner/.opencode/bin/opencode") {
-        "/Users/marius.wichtner/.opencode/bin/opencode"
+    } else if is_opencode {
+        agent_token
     } else {
         return Err(format!("Second part doesn't start with 'claude', 'cursor-agent', or 'opencode': {command}"));
     };
-    
-    // Split the agent command into arguments, handling quoted strings
+
+    // Split the rest into arguments, handling quoted strings
     let mut args = Vec::new();
     let mut current_arg = String::new();
     let mut in_quotes = false;
-    let mut chars = agent_part.chars().peekable();
-    
-    // Skip agent name part
-    for _ in 0..agent_name.len() {
-        chars.next();
-    }
-    
-    // Skip any leading whitespace
-    while chars.peek() == Some(&' ') {
-        chars.next();
-    }
+    let mut chars = rest.chars().peekable();
     
     while let Some(ch) = chars.next() {
         match ch {
@@ -382,7 +379,6 @@ use hyper::{body::Incoming as IncomingBody, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 use http_body_util::BodyExt;
-
 static MCP_SERVER_PROCESS: OnceCell<Arc<tokio::sync::Mutex<Option<std::process::Child>>>> = OnceCell::const_new();
 
 async fn start_webhook_server(app: tauri::AppHandle) {
@@ -602,43 +598,55 @@ async fn start_mcp_server(_port: Option<u16>) -> Result<(), String> {
     // Check if already running
     if let Some(ref mut process) = *process_guard {
         match process.try_wait() {
-            Ok(Some(_)) => {
+            Ok(Some(status)) => {
+                log::info!("Previous MCP server process exited with status: {status:?}");
                 // Process has exited, continue to start new one
             }
             Ok(None) => {
                 // Process is still running
+                log::info!("MCP server is already running");
                 return Ok(());
             }
-            Err(_) => {
+            Err(e) => {
+                log::warn!("Error checking MCP server status: {e}");
                 // Error checking status, continue to start new one
             }
         }
     }
     
-    // Get the path to the MCP server
-    let app_dir = std::env::current_dir()
-        .map_err(|e| format!("Failed to get current directory: {e}"))?;
+    // Get the path to the MCP server - always look relative to the source file location
+    // This ensures we find it regardless of working directory
+    let mcp_server_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or_else(|| "Failed to get project root".to_string())?
+        .join("mcp-server")
+        .join("build")
+        .join("schaltwerk-mcp-server.js");
     
-    let mcp_server_path = if app_dir.file_name().and_then(|n| n.to_str()) == Some("src-tauri") {
-        app_dir.parent()
-            .map(|p| p.join("mcp-server").join("build").join("schaltwerk-mcp-server.js"))
-            .ok_or_else(|| "Failed to get parent directory".to_string())?
-    } else {
-        app_dir.join("mcp-server").join("build").join("schaltwerk-mcp-server.js")
-    };
+    log::info!("MCP server path: {}", mcp_server_path.display());
     
     if !mcp_server_path.exists() {
-        return Err(format!("MCP server not found at: {}", mcp_server_path.display()));
+        let error = format!("MCP server not found at: {}", mcp_server_path.display());
+        log::error!("{error}");
+        return Err(error);
     }
+    
+    log::info!("Starting MCP server process with node...");
     
     // Start the MCP server as a subprocess
     let child = Command::new("node")
-        .arg(mcp_server_path)
+        .arg(&mcp_server_path)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| format!("Failed to start MCP server: {e}"))?;
+        .map_err(|e| {
+            let error = format!("Failed to start MCP server: {e}");
+            log::error!("{error}");
+            error
+        })?;
+    
+    log::info!("MCP server process started successfully with PID: {:?}", child.id());
     
     *process_guard = Some(child);
     
@@ -918,8 +926,8 @@ async fn para_core_start_claude(session_name: String) -> Result<String, String> 
     // Create new terminal with the agent directly
     log::info!("Creating terminal with {agent_name} directly: {terminal_id} with {} env vars", env_vars.len());
     
-    // Keep a copy for comparison before moving
-    let is_opencode = agent_name == "/Users/marius.wichtner/.opencode/bin/opencode";
+    // Detect OpenCode regardless of absolute path or PATH usage
+    let is_opencode = agent_name == "opencode" || agent_name.ends_with("/opencode");
     
     terminal_manager.create_terminal_with_app(
         terminal_id.clone(),
@@ -1004,8 +1012,8 @@ async fn para_core_start_claude_orchestrator(terminal_id: String) -> Result<Stri
     // Create new terminal with the agent directly
     log::info!("Creating terminal with {agent_name} directly: {terminal_id} with {} env vars", env_vars.len());
     
-    // Keep a copy for comparison before moving
-    let is_opencode = agent_name == "/Users/marius.wichtner/.opencode/bin/opencode";
+    // Detect OpenCode regardless of absolute path or PATH usage
+    let is_opencode = agent_name == "opencode" || agent_name.ends_with("/opencode");
     
     terminal_manager.create_terminal_with_app(
         terminal_id.clone(),
@@ -1253,12 +1261,8 @@ fn main() {
                 start_webhook_server(webhook_handle).await;
             });
             
-            // Try to start MCP server automatically (don't fail if it doesn't work)
-            tauri::async_runtime::spawn(async {
-                if let Err(e) = start_mcp_server(None).await {
-                    log::warn!("Failed to auto-start MCP server: {e}");
-                }
-            });
+            // MCP server is now managed by Claude Code via .mcp.json configuration
+            // No need to start it from Schaltwerk
             
             Ok(())
         })
@@ -1512,20 +1516,29 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_agent_command_opencode_with_prompt() {
-        let cmd = r#"cd /tmp/work && /Users/marius.wichtner/.opencode/bin/opencode --prompt "hello world""#;
+    fn test_parse_agent_command_opencode_with_prompt_absolute() {
+        let cmd = r#"cd /tmp/work && /opt/bin/opencode --prompt "hello world""#;
         let (cwd, agent, args) = parse_agent_command(cmd).unwrap();
         assert_eq!(cwd, "/tmp/work");
-        assert_eq!(agent, "/Users/marius.wichtner/.opencode/bin/opencode");
+        assert_eq!(agent, "/opt/bin/opencode");
         assert_eq!(args, vec!["--prompt", "hello world"]);
     }
 
     #[test]
-    fn test_parse_agent_command_opencode_continue() {
-        let cmd = r#"cd /repo && /Users/marius.wichtner/.opencode/bin/opencode --continue"#;
+    fn test_parse_agent_command_opencode_with_prompt_path() {
+        let cmd = r#"cd /tmp/work && opencode --prompt "hello world""#;
+        let (cwd, agent, args) = parse_agent_command(cmd).unwrap();
+        assert_eq!(cwd, "/tmp/work");
+        assert_eq!(agent, "opencode");
+        assert_eq!(args, vec!["--prompt", "hello world"]);
+    }
+
+    #[test]
+    fn test_parse_agent_command_opencode_continue_absolute() {
+        let cmd = r#"cd /repo && /opt/bin/opencode --continue"#;
         let (cwd, agent, args) = parse_agent_command(cmd).unwrap();
         assert_eq!(cwd, "/repo");
-        assert_eq!(agent, "/Users/marius.wichtner/.opencode/bin/opencode");
+        assert_eq!(agent, "/opt/bin/opencode");
         assert_eq!(args, vec!["--continue"]);
     }
 

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs;
 
 pub fn find_opencode_session(path: &Path) -> Option<String> {
@@ -29,7 +29,8 @@ pub fn build_opencode_command(
     initial_prompt: Option<&str>,
     _skip_permissions: bool,
 ) -> String {
-    let mut cmd = format!("cd {} && /Users/marius.wichtner/.opencode/bin/opencode", worktree_path.display());
+    let opencode_bin = resolve_opencode_binary();
+    let mut cmd = format!("cd {} && {}", worktree_path.display(), opencode_bin);
     
     if let Some(_id) = session_id {
         // For OpenCode, we use --continue to resume the last session
@@ -46,63 +47,99 @@ pub fn build_opencode_command(
     cmd
 }
 
+/// Resolve the OpenCode binary path in a user-agnostic way.
+/// Order:
+/// 1. Environment variable `OPENCODE_BIN` when set (useful for tests/CI)
+/// 2. `~/.opencode/bin/opencode` if it exists
+/// 3. Fallback to `opencode` (expecting it on PATH)
+pub fn resolve_opencode_binary() -> String {
+    if let Ok(from_env) = std::env::var("OPENCODE_BIN") {
+        let trimmed = from_env.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    if let Some(home) = dirs::home_dir() {
+        let candidate: PathBuf = home.join(".opencode").join("bin").join("opencode");
+        if candidate.exists() {
+            return candidate.to_string_lossy().to_string();
+        }
+    }
+    "opencode".to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;
 
     #[test]
+    #[serial_test::serial]
     fn test_new_session_with_prompt() {
+        std::env::set_var("OPENCODE_BIN", "/custom/bin/opencode");
         let cmd = build_opencode_command(
             Path::new("/path/to/worktree"),
             None,
             Some("implement feature X"),
             true,
         );
-        assert_eq!(cmd, r#"cd /path/to/worktree && /Users/marius.wichtner/.opencode/bin/opencode --prompt "implement feature X""#);
+        assert_eq!(cmd, r#"cd /path/to/worktree && /custom/bin/opencode --prompt "implement feature X""#);
+        std::env::remove_var("OPENCODE_BIN");
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_continue_with_session_id() {
+        std::env::set_var("OPENCODE_BIN", "/custom/bin/opencode");
         let cmd = build_opencode_command(
             Path::new("/path/to/worktree"),
             Some("my-session"),
             None,
             false,
         );
-        assert_eq!(cmd, r#"cd /path/to/worktree && /Users/marius.wichtner/.opencode/bin/opencode --continue"#);
+        assert_eq!(cmd, r#"cd /path/to/worktree && /custom/bin/opencode --continue"#);
+        std::env::remove_var("OPENCODE_BIN");
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_new_session_no_prompt() {
+        std::env::set_var("OPENCODE_BIN", "/custom/bin/opencode");
         let cmd = build_opencode_command(
             Path::new("/path/to/worktree"),
             None,
             None,
             false,
         );
-        assert_eq!(cmd, "cd /path/to/worktree && /Users/marius.wichtner/.opencode/bin/opencode");
+        assert_eq!(cmd, "cd /path/to/worktree && /custom/bin/opencode");
+        std::env::remove_var("OPENCODE_BIN");
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_continue_session_with_new_prompt() {
+        std::env::set_var("OPENCODE_BIN", "/custom/bin/opencode");
         let cmd = build_opencode_command(
             Path::new("/path/to/worktree"),
             Some("session-123"),
             Some("new task"),
             true,
         );
-        assert_eq!(cmd, r#"cd /path/to/worktree && /Users/marius.wichtner/.opencode/bin/opencode --continue --prompt "new task""#);
+        assert_eq!(cmd, r#"cd /path/to/worktree && /custom/bin/opencode --continue --prompt "new task""#);
+        std::env::remove_var("OPENCODE_BIN");
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_prompt_with_quotes() {
+        std::env::set_var("OPENCODE_BIN", "/custom/bin/opencode");
         let cmd = build_opencode_command(
             Path::new("/path/to/worktree"),
             None,
             Some(r#"implement "feature" with quotes"#),
             false,
         );
-        assert_eq!(cmd, r#"cd /path/to/worktree && /Users/marius.wichtner/.opencode/bin/opencode --prompt "implement \"feature\" with quotes""#);
+        assert_eq!(cmd, r#"cd /path/to/worktree && /custom/bin/opencode --prompt "implement \"feature\" with quotes""#);
+        std::env::remove_var("OPENCODE_BIN");
     }
 }
