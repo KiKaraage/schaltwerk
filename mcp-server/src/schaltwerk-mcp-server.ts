@@ -15,9 +15,11 @@ import { SchaltwerkBridge, Session } from "./schaltwerk-bridge.js"
 interface SchaltwerkStartArgs {
   name?: string
   prompt?: string
-  agent_type?: 'claude' | 'cursor'
+  agent_type?: 'claude' | 'cursor' | 'opencode'
   base_branch?: string
   skip_permissions?: boolean
+  is_draft?: boolean
+  draft_content?: string
 }
 
 interface SchaltwerkCancelArgs {
@@ -31,12 +33,40 @@ interface SchaltwerkPauseArgs {
 
 interface SchaltwerkListArgs {
   json?: boolean
+  filter?: 'all' | 'active' | 'draft' | 'reviewed'
 }
 
 interface SchaltwerkSendMessageArgs {
   session_name: string
   message: string
   message_type?: 'user' | 'system'
+}
+
+interface SchaltwerkDraftCreateArgs {
+  name?: string
+  content?: string
+  base_branch?: string
+}
+
+interface SchaltwerkDraftUpdateArgs {
+  session_name: string
+  content: string
+  append?: boolean
+}
+
+interface SchaltwerkDraftStartArgs {
+  session_name: string
+  agent_type?: 'claude' | 'cursor' | 'opencode'
+  skip_permissions?: boolean
+  base_branch?: string
+}
+
+interface SchaltwerkDraftListArgs {
+  json?: boolean
+}
+
+interface SchaltwerkDraftDeleteArgs {
+  session_name: string
 }
 
 const bridge = new SchaltwerkBridge()
@@ -278,6 +308,189 @@ schaltwerk_pause(session_name: "feature-auth")
           },
           required: ["session_name"]
         }
+      },
+      {
+        name: "schaltwerk_draft_create",
+        description: `Create a new draft session for later refinement and execution.
+
+🎯 PURPOSE: Create draft sessions to collaborate on task descriptions before starting agents.
+
+📋 USAGE:
+- Basic: schaltwerk_draft_create(name: "auth-feature", content: "# Authentication\\n\\nImplement user login")
+- Without content: schaltwerk_draft_create(name: "bug-fix")
+- With base branch: schaltwerk_draft_create(name: "hotfix", content: "Fix critical bug", base_branch: "production")
+
+✏️ DRAFTS:
+- Drafts are lightweight planning sessions
+- No worktree created until draft is started
+- Content can be refined multiple times
+- Convert to active session when ready
+
+📝 CONTENT FORMAT:
+- Use Markdown for structured task descriptions
+- Include requirements, technical details, acceptance criteria
+- More detail leads to better AI agent results
+
+⚡ WORKFLOW:
+1. Create draft with initial idea
+2. Refine content as needed (schaltwerk_draft_update)
+3. Start when ready (schaltwerk_draft_start)`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description: "Draft session name (alphanumeric, hyphens, underscores). Auto-generated if not provided."
+            },
+            content: {
+              type: "string",
+              description: "Initial draft content in Markdown format. Can be updated later."
+            },
+            base_branch: {
+              type: "string",
+              description: "Base branch for future worktree (default: main/master)"
+            }
+          },
+          additionalProperties: false
+        }
+      },
+      {
+        name: "schaltwerk_draft_update",
+        description: `Update content of an existing draft session.
+
+🎯 PURPOSE: Refine and improve draft content before starting an agent.
+
+📋 USAGE:
+- Replace content: schaltwerk_draft_update(session_name: "auth-feature", content: "# Updated Requirements...")
+- Append content: schaltwerk_draft_update(session_name: "auth-feature", content: "\\n## Additional Notes...", append: true)
+
+📝 UPDATE MODES:
+- Replace (default): Completely replace existing content
+- Append: Add to existing content with newline separator
+
+💡 BEST PRACTICES:
+- Iteratively refine requirements
+- Add technical details as discovered
+- Include acceptance criteria
+- Document edge cases and constraints`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            session_name: {
+              type: "string",
+              description: "Name of the draft session to update"
+            },
+            content: {
+              type: "string",
+              description: "New or additional content in Markdown format"
+            },
+            append: {
+              type: "boolean",
+              description: "Append to existing content instead of replacing (default: false)",
+              default: false
+            }
+          },
+          required: ["session_name", "content"]
+        }
+      },
+      {
+        name: "schaltwerk_draft_start",
+        description: `Start a draft session with an AI agent.
+
+🎯 PURPOSE: Convert a refined draft into an active development session.
+
+📋 USAGE:
+- Basic: schaltwerk_draft_start(session_name: "auth-feature")
+- With agent: schaltwerk_draft_start(session_name: "auth-feature", agent_type: "claude")
+- Skip permissions: schaltwerk_draft_start(session_name: "quick-fix", skip_permissions: true)
+- Override branch: schaltwerk_draft_start(session_name: "hotfix", base_branch: "production")
+
+🤖 AGENT TYPES:
+- 'claude': Claude AI assistant (default)
+- 'cursor': Cursor IDE integration
+- 'opencode': OpenCode assistant
+
+⚡ WHAT HAPPENS:
+1. Creates Git worktree from base branch
+2. Starts selected AI agent with draft content
+3. Draft content becomes initial prompt
+4. Session transitions to active state
+
+⚠️ IMPORTANT: Once started, draft cannot be reverted to draft state.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            session_name: {
+              type: "string",
+              description: "Name of the draft session to start"
+            },
+            agent_type: {
+              type: "string",
+              enum: ["claude", "cursor", "opencode"],
+              description: "AI agent type to use (default: claude)"
+            },
+            skip_permissions: {
+              type: "boolean",
+              description: "Skip permission checks for autonomous operation",
+              default: false
+            },
+            base_branch: {
+              type: "string",
+              description: "Override base branch if needed"
+            }
+          },
+          required: ["session_name"]
+        }
+      },
+      {
+        name: "schaltwerk_draft_list",
+        description: `List all draft sessions.
+
+📊 OUTPUT:
+- Shows all draft sessions with content preview
+- Ordered by last update time (newest first)
+- Includes creation time and content length
+
+📋 USAGE:
+- Text format: schaltwerk_draft_list()
+- JSON format: schaltwerk_draft_list(json: true)
+
+💡 Use this to review drafts before starting them.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            json: {
+              type: "boolean",
+              description: "Return as JSON for programmatic access (default: false)",
+              default: false
+            }
+          },
+          additionalProperties: false
+        }
+      },
+      {
+        name: "schaltwerk_draft_delete",
+        description: `Delete a draft session permanently.
+
+⚠️ DESTRUCTIVE OPERATION
+- Permanently removes draft from database
+- Cannot be undone
+- No worktree to clean up (drafts don't create worktrees)
+
+📋 USAGE:
+schaltwerk_draft_delete(session_name: "old-draft")
+
+✅ SAFE TO USE: Only affects database record, no files or branches.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            session_name: {
+              type: "string",
+              description: "Name of the draft session to delete"
+            }
+          },
+          required: ["session_name"]
+        }
       }
     ]
   }
@@ -293,58 +506,82 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "schaltwerk_create": {
         const createArgs = args as SchaltwerkStartArgs
         
-        const session = await bridge.createSession(
-          createArgs.name || `mcp_session_${Date.now()}`,
-          createArgs.prompt,
-          createArgs.base_branch,
-          createArgs.agent_type,
-          createArgs.skip_permissions
-        )
-        
-        result = `Session created successfully:
+        if (createArgs.is_draft) {
+          const session = await bridge.createDraftSession(
+            createArgs.name || `draft_${Date.now()}`,
+            createArgs.draft_content || createArgs.prompt,
+            createArgs.base_branch
+          )
+          
+          result = `Draft session created successfully:
+- Name: ${session.name}
+- Branch: ${session.branch} (will be created when started)
+- Base Branch: ${session.parent_branch}
+- Content Length: ${session.draft_content?.length || 0} characters
+- Status: Draft (ready for refinement)`
+        } else {
+          const session = await bridge.createSession(
+            createArgs.name || `mcp_session_${Date.now()}`,
+            createArgs.prompt,
+            createArgs.base_branch,
+            createArgs.agent_type,
+            createArgs.skip_permissions
+          )
+          
+          result = `Session created successfully:
 - Name: ${session.name}
 - Branch: ${session.branch}
 - Worktree: ${session.worktree_path}
 - Agent: ${session.original_agent_type}
 - Base Branch: ${session.parent_branch}
 ${session.initial_prompt ? `- Initial Prompt: ${session.initial_prompt}` : ''}`
+        }
         break
       }
 
       case "schaltwerk_list": {
         const listArgs = args as SchaltwerkListArgs
         
-        const sessions = await bridge.listSessions()
+        const sessions = await bridge.listSessionsByState(listArgs.filter)
         
         if (listArgs.json) {
           // Return only essential fields for LLM session management
           const essentialSessions = sessions.map(s => ({
             name: s.name,
             display_name: s.display_name || s.name,
-            status: s.ready_to_merge ? 'reviewed' : 'new',
+            status: s.status === 'draft' ? 'draft' : (s.ready_to_merge ? 'reviewed' : 'new'),
+            state: s.state,
             created_at: new Date(s.created_at).toISOString(),
             last_activity: s.last_activity ? new Date(s.last_activity).toISOString() : null,
             agent_type: s.original_agent_type || 'claude',
             branch: s.branch,
             worktree_path: s.worktree_path,
-            initial_prompt: s.initial_prompt || null
+            initial_prompt: s.initial_prompt || null,
+            draft_content: s.draft_content || null
           }))
           result = JSON.stringify(essentialSessions, null, 2)
         } else {
           if (sessions.length === 0) {
-            result = 'No active sessions found'
+            result = 'No sessions found'
           } else {
             // Format as human-readable text
             const lines = sessions.map((s: Session) => {
-              const reviewed = s.ready_to_merge ? '[REVIEWED]' : '[NEW]'
-              const agent = s.original_agent_type || 'unknown'
-              const modified = s.last_activity ? new Date(s.last_activity).toLocaleString() : 'never'
-              const name = s.display_name || s.name
-              
-              return `${reviewed} ${name} - Agent: ${agent}, Modified: ${modified}`
+              if (s.status === 'draft') {
+                const created = new Date(s.created_at).toLocaleDateString()
+                const contentLength = s.draft_content?.length || 0
+                const name = s.display_name || s.name
+                return `[DRAFT] ${name} - Created: ${created}, Content: ${contentLength} chars`
+              } else {
+                const reviewed = s.ready_to_merge ? '[REVIEWED]' : '[NEW]'
+                const agent = s.original_agent_type || 'unknown'
+                const modified = s.last_activity ? new Date(s.last_activity).toLocaleString() : 'never'
+                const name = s.display_name || s.name
+                return `${reviewed} ${name} - Agent: ${agent}, Modified: ${modified}`
+              }
             })
             
-            result = `Active Sessions (${sessions.length}):\n${lines.join('\n')}`
+            const filterLabel = listArgs.filter ? ` (${listArgs.filter})` : ''
+            result = `Sessions${filterLabel} (${sessions.length}):\n${lines.join('\n')}`
           }
         }
         break
@@ -378,6 +615,108 @@ ${session.initial_prompt ? `- Initial Prompt: ${session.initial_prompt}` : ''}`
         await bridge.pauseSession(pauseArgs.session_name)
         
         result = `Session '${pauseArgs.session_name}' has been paused (all work preserved)`
+        break
+      }
+
+      case "schaltwerk_draft_create": {
+        const draftCreateArgs = args as SchaltwerkDraftCreateArgs
+        
+        const session = await bridge.createDraftSession(
+          draftCreateArgs.name || `draft_${Date.now()}`,
+          draftCreateArgs.content,
+          draftCreateArgs.base_branch
+        )
+        
+        result = `Draft session created successfully:
+- Name: ${session.name}
+- Branch: ${session.branch} (will be created when started)
+- Base Branch: ${session.parent_branch}
+- Content Length: ${session.draft_content?.length || 0} characters
+- Status: Draft (ready for refinement)`
+        break
+      }
+
+      case "schaltwerk_draft_update": {
+        const draftUpdateArgs = args as unknown as SchaltwerkDraftUpdateArgs
+        
+        await bridge.updateDraftContent(
+          draftUpdateArgs.session_name,
+          draftUpdateArgs.content,
+          draftUpdateArgs.append
+        )
+        
+        const contentPreview = draftUpdateArgs.content.length > 100 
+          ? draftUpdateArgs.content.substring(0, 100) + '...'
+          : draftUpdateArgs.content
+        
+        result = `Draft '${draftUpdateArgs.session_name}' updated successfully.
+- Update Mode: ${draftUpdateArgs.append ? 'Append' : 'Replace'}
+- Content Preview: ${contentPreview}`
+        break
+      }
+
+      case "schaltwerk_draft_start": {
+        const draftStartArgs = args as unknown as SchaltwerkDraftStartArgs
+        
+        await bridge.startDraftSession(
+          draftStartArgs.session_name,
+          draftStartArgs.agent_type,
+          draftStartArgs.skip_permissions,
+          draftStartArgs.base_branch
+        )
+        
+        result = `Draft '${draftStartArgs.session_name}' started successfully:
+- Agent Type: ${draftStartArgs.agent_type || 'claude'}
+- Skip Permissions: ${draftStartArgs.skip_permissions || false}
+- Status: Active (worktree created, agent ready)`
+        break
+      }
+
+      case "schaltwerk_draft_list": {
+        const draftListArgs = args as SchaltwerkDraftListArgs
+        
+        const drafts = await bridge.listDraftSessions()
+        
+        if (draftListArgs.json) {
+          const essentialDrafts = drafts.map(d => ({
+            name: d.name,
+            display_name: d.display_name || d.name,
+            created_at: new Date(d.created_at).toISOString(),
+            updated_at: new Date(d.updated_at).toISOString(),
+            base_branch: d.parent_branch,
+            content_length: d.draft_content?.length || 0,
+            content_preview: d.draft_content?.substring(0, 200) || ''
+          }))
+          result = JSON.stringify(essentialDrafts, null, 2)
+        } else {
+          if (drafts.length === 0) {
+            result = 'No draft sessions found'
+          } else {
+            const lines = drafts.map((d: Session) => {
+              const name = d.display_name || d.name
+              const created = new Date(d.created_at).toLocaleDateString()
+              const updated = new Date(d.updated_at).toLocaleDateString()
+              const contentLength = d.draft_content?.length || 0
+              const preview = d.draft_content?.substring(0, 50)?.replace(/\n/g, ' ') || '(empty)'
+              
+              return `${name}:
+  - Created: ${created}, Updated: ${updated}
+  - Content: ${contentLength} chars
+  - Preview: ${preview}${contentLength > 50 ? '...' : ''}`
+            })
+            
+            result = `Draft Sessions (${drafts.length}):\n\n${lines.join('\n\n')}`
+          }
+        }
+        break
+      }
+
+      case "schaltwerk_draft_delete": {
+        const draftDeleteArgs = args as unknown as SchaltwerkDraftDeleteArgs
+        
+        await bridge.deleteDraftSession(draftDeleteArgs.session_name)
+        
+        result = `Draft session '${draftDeleteArgs.session_name}' has been deleted permanently`
         break
       }
 
@@ -419,6 +758,18 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
         name: "New Sessions",
         description: "Sessions not yet reviewed",
         mimeType: "application/json"
+      },
+      {
+        uri: "schaltwerk://drafts",
+        name: "Draft Sessions",
+        description: "All draft sessions awaiting refinement and start",
+        mimeType: "application/json"
+      },
+      {
+        uri: "schaltwerk://drafts/{name}",
+        name: "Draft Content",
+        description: "Content of a specific draft session",
+        mimeType: "text/markdown"
       }
     ]
   }
@@ -451,8 +802,37 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
         break
       }
 
-      default:
+      case "schaltwerk://drafts": {
+        const drafts = await bridge.listDraftSessions()
+        content = JSON.stringify(drafts, null, 2)
+        break
+      }
+
+      default: {
+        // Check if it's a specific draft content request
+        const draftMatch = uri.match(/^schaltwerk:\/\/drafts\/(.+)$/)
+        if (draftMatch) {
+          const draftName = draftMatch[1]
+          const drafts = await bridge.listDraftSessions()
+          const draft = drafts.find(d => d.name === draftName)
+          
+          if (!draft) {
+            throw new McpError(ErrorCode.InvalidRequest, `Draft '${draftName}' not found`)
+          }
+          
+          return {
+            contents: [
+              {
+                uri,
+                mimeType: "text/markdown",
+                text: draft.draft_content || ''
+              }
+            ]
+          }
+        }
+        
         throw new McpError(ErrorCode.InvalidRequest, `Unknown resource: ${uri}`)
+      }
     }
 
     return {

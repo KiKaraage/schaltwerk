@@ -15,11 +15,13 @@ export interface Session {
   branch: string
   parent_branch: string
   worktree_path: string
-  status: 'active' | 'cancelled' | 'paused'
+  status: 'active' | 'cancelled' | 'paused' | 'draft'
+  state?: 'Draft' | 'Running' | 'Reviewed'
   created_at: number
   updated_at: number
   last_activity?: number
   initial_prompt?: string
+  draft_content?: string
   ready_to_merge: boolean
   original_agent_type?: string
   original_skip_permissions?: boolean
@@ -99,17 +101,19 @@ export class SchaltwerkBridge {
         parent_branch,
         worktree_path,
         status,
+        state,
         created_at,
         updated_at,
         last_activity,
         initial_prompt,
+        draft_content,
         ready_to_merge,
         original_agent_type,
         original_skip_permissions,
         pending_name_generation,
         was_auto_generated
       FROM sessions
-      WHERE status IN ('active', 'paused')
+      WHERE status IN ('active', 'paused', 'draft')
       ORDER BY 
         CASE WHEN ready_to_merge = 0 THEN 0 ELSE 1 END,
         last_activity DESC
@@ -522,5 +526,238 @@ export class SchaltwerkBridge {
     } catch (error) {
       console.warn('Failed to notify follow-up message:', error)
     }
+  }
+
+  async createDraftSession(name: string, content?: string, baseBranch?: string): Promise<Session> {
+    if (!this.db) await this.connect()
+    
+    const repoPath = await this.getRepositoryPath()
+    const repoName = path.basename(repoPath)
+    const sessionId = `${Date.now()}-${name}`
+    const parentBranch = baseBranch || await this.getDefaultBranch(repoPath)
+    const branchName = `schaltwerk/${name}`
+    const worktreePath = path.join(repoPath, '.schaltwerk', 'worktrees', name)
+    
+    const now = Date.now()
+    const session: Session = {
+      id: sessionId,
+      name,
+      display_name: undefined,
+      repository_path: repoPath,
+      repository_name: repoName,
+      branch: branchName,
+      parent_branch: parentBranch,
+      worktree_path: worktreePath,
+      status: 'draft',
+      state: 'Draft',
+      created_at: now,
+      updated_at: now,
+      last_activity: now,
+      initial_prompt: undefined,
+      draft_content: content || '',
+      ready_to_merge: false,
+      original_agent_type: 'claude',
+      original_skip_permissions: false,
+      pending_name_generation: false,
+      was_auto_generated: false
+    }
+    
+    await this.db!.run(`
+      INSERT INTO sessions (
+        id, name, display_name, repository_path, repository_name,
+        branch, parent_branch, worktree_path,
+        status, state, created_at, updated_at, last_activity, draft_content, ready_to_merge,
+        original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      session.id,
+      session.name,
+      session.display_name,
+      session.repository_path,
+      session.repository_name,
+      session.branch,
+      session.parent_branch,
+      session.worktree_path,
+      session.status,
+      session.state,
+      session.created_at,
+      session.updated_at,
+      session.last_activity,
+      session.draft_content,
+      session.ready_to_merge ? 1 : 0,
+      session.original_agent_type,
+      session.original_skip_permissions ? 1 : 0,
+      session.pending_name_generation ? 1 : 0,
+      session.was_auto_generated ? 1 : 0
+    ])
+    
+    await this.notifySessionAdded(session)
+    
+    return session
+  }
+
+  async updateDraftContent(sessionName: string, content: string, append: boolean = false): Promise<void> {
+    if (!this.db) await this.connect()
+    
+    const session = await this.getSession(sessionName)
+    if (!session) {
+      throw new Error(`Session '${sessionName}' not found`)
+    }
+    
+    if (session.status !== 'draft') {
+      throw new Error(`Session '${sessionName}' is not a draft`)
+    }
+    
+    const newContent = append && session.draft_content 
+      ? session.draft_content + '\n' + content 
+      : content
+    
+    await this.db!.run(`
+      UPDATE sessions 
+      SET draft_content = ?, updated_at = ?, last_activity = ?
+      WHERE name = ?
+    `, newContent, Date.now(), Date.now(), sessionName)
+  }
+
+  async startDraftSession(sessionName: string, agentType?: string, skipPermissions?: boolean, baseBranch?: string): Promise<void> {
+    if (!this.db) await this.connect()
+    
+    const session = await this.getSession(sessionName)
+    if (!session) {
+      throw new Error(`Session '${sessionName}' not found`)
+    }
+    
+    if (session.status !== 'draft') {
+      throw new Error(`Session '${sessionName}' is not a draft`)
+    }
+    
+    const parentBranch = baseBranch || session.parent_branch
+    
+    await this.createWorktree(session.repository_path, sessionName, session.branch, parentBranch)
+    
+    const now = Date.now()
+    await this.db!.run(`
+      UPDATE sessions 
+      SET status = 'active', 
+          state = 'Running',
+          updated_at = ?, 
+          last_activity = ?,
+          initial_prompt = draft_content,
+          original_agent_type = ?,
+          original_skip_permissions = ?
+      WHERE name = ?
+    `, now, now, agentType || session.original_agent_type, skipPermissions ? 1 : 0, sessionName)
+    
+    if (agentType || skipPermissions !== undefined) {
+      await this.updateAppConfig(agentType, skipPermissions)
+    }
+    
+    await this.notifySessionAdded(session)
+  }
+
+  async deleteDraftSession(sessionName: string): Promise<void> {
+    if (!this.db) await this.connect()
+    
+    const session = await this.getSession(sessionName)
+    if (!session) {
+      throw new Error(`Session '${sessionName}' not found`)
+    }
+    
+    if (session.status !== 'draft') {
+      throw new Error(`Session '${sessionName}' is not a draft`)
+    }
+    
+    await this.db!.run(`
+      UPDATE sessions 
+      SET status = 'cancelled', updated_at = ?
+      WHERE name = ?
+    `, Date.now(), sessionName)
+    
+    await this.notifySessionRemoved(sessionName)
+  }
+
+  async listDraftSessions(): Promise<Session[]> {
+    if (!this.db) await this.connect()
+    
+    const sessions = await this.db!.all<Session[]>(`
+      SELECT 
+        id,
+        name,
+        display_name,
+        repository_path,
+        repository_name,
+        branch,
+        parent_branch,
+        worktree_path,
+        status,
+        state,
+        created_at,
+        updated_at,
+        last_activity,
+        initial_prompt,
+        draft_content,
+        ready_to_merge,
+        original_agent_type,
+        original_skip_permissions,
+        pending_name_generation,
+        was_auto_generated
+      FROM sessions
+      WHERE status = 'draft'
+      ORDER BY updated_at DESC
+    `)
+    
+    return sessions
+  }
+
+  async listSessionsByState(filter?: 'all' | 'active' | 'draft' | 'reviewed'): Promise<Session[]> {
+    if (!this.db) await this.connect()
+    
+    let whereClause = "WHERE status IN ('active', 'paused', 'draft')"
+    
+    switch (filter) {
+      case 'active':
+        whereClause = "WHERE status = 'active'"
+        break
+      case 'draft':
+        whereClause = "WHERE status = 'draft'"
+        break
+      case 'reviewed':
+        whereClause = "WHERE ready_to_merge = 1"
+        break
+      case 'all':
+      default:
+        break
+    }
+    
+    const sessions = await this.db!.all<Session[]>(`
+      SELECT 
+        id,
+        name,
+        display_name,
+        repository_path,
+        repository_name,
+        branch,
+        parent_branch,
+        worktree_path,
+        status,
+        state,
+        created_at,
+        updated_at,
+        last_activity,
+        initial_prompt,
+        draft_content,
+        ready_to_merge,
+        original_agent_type,
+        original_skip_permissions,
+        pending_name_generation,
+        was_auto_generated
+      FROM sessions
+      ${whereClause}
+      ORDER BY 
+        CASE WHEN ready_to_merge = 0 THEN 0 ELSE 1 END,
+        last_activity DESC
+    `)
+    
+    return sessions
   }
 }
