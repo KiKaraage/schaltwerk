@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { SimpleDiffPanel } from './SimpleDiffPanel'
+import { SimpleDiffPanel } from './diff/SimpleDiffPanel'
 import { useSelection } from '../contexts/SelectionContext'
 import { VscDiff, VscChevronLeft, VscNotebook } from 'react-icons/vsc'
 import clsx from 'clsx'

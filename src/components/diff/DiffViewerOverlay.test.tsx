@@ -1,8 +1,8 @@
 import { render, screen, act, fireEvent } from '@testing-library/react'
 import React from 'react'
 import { DiffViewerOverlay } from './DiffViewerOverlay'
-import { SelectionProvider } from '../contexts/SelectionContext'
-import { ProjectProvider } from '../contexts/ProjectContext'
+import { SelectionProvider } from '../../contexts/SelectionContext'
+import { ProjectProvider } from '../../contexts/ProjectContext'
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(async (cmd: string) => {

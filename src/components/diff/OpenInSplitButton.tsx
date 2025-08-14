@@ -27,7 +27,10 @@ export function OpenInSplitButton({ resolvePath }: OpenInSplitButtonProps) {
           invoke<string>('get_default_open_app'),
         ])
         if (!mounted) return
-        setApps(available)
+        const sanitizedApps: OpenApp[] = Array.isArray(available) && available.length > 0
+          ? available
+          : [{ id: 'finder', name: 'Finder', kind: 'system' }]
+        setApps(sanitizedApps)
         if (def && ['finder','cursor','vscode','ghostty','warp','terminal'].includes(def)) {
           setDefaultApp(def as OpenApp['id'])
         }

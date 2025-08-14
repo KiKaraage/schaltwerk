@@ -1,8 +1,8 @@
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { DiffViewerWithReview } from './DiffViewerWithReview'
-import { SelectionProvider } from '../contexts/SelectionContext'
-import { ReviewProvider } from '../contexts/ReviewContext'
-import { ProjectProvider, useProject } from '../contexts/ProjectContext'
+import { SelectionProvider } from '../../contexts/SelectionContext'
+import { ReviewProvider } from '../../contexts/ReviewContext'
+import { ProjectProvider, useProject } from '../../contexts/ProjectContext'
 import { vi } from 'vitest'
 import { useEffect } from 'react'
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { useSelection } from '../contexts/SelectionContext'
+import { useSelection } from '../../contexts/SelectionContext'
 import { VscFile, VscDiffAdded, VscDiffModified, VscDiffRemoved } from 'react-icons/vsc'
 // Open button moved to global top bar
 import clsx from 'clsx'

@@ -1,8 +1,8 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import React, { useEffect } from 'react'
 import { DiffFileList } from './DiffFileList'
-import { SelectionProvider } from '../contexts/SelectionContext'
-import { ProjectProvider, useProject } from '../contexts/ProjectContext'
+import { SelectionProvider } from '../../contexts/SelectionContext'
+import { ProjectProvider, useProject } from '../../contexts/ProjectContext'
 
 // Mock Tauri invoke
 vi.mock('@tauri-apps/api/core', () => ({

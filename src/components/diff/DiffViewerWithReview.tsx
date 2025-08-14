@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
-import { useSelection } from '../contexts/SelectionContext'
-import { useReview } from '../contexts/ReviewContext'
+import { useSelection } from '../../contexts/SelectionContext'
+import { useReview } from '../../contexts/ReviewContext'
 import { VscClose, VscChevronLeft, VscFile, VscDiffAdded, VscDiffModified, VscDiffRemoved, VscComment, VscSend, VscCheck } from 'react-icons/vsc'
 import clsx from 'clsx'
 import hljs from 'highlight.js'
-import { ReviewComment } from '../types/review'
+import { ReviewComment } from '../../types/review'
 
 interface ChangedFile {
   path: string

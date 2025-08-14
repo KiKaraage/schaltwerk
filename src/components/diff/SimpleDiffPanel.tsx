@@ -1,5 +1,5 @@
 import { DiffFileList } from './DiffFileList'
-import { useSelection } from '../contexts/SelectionContext'
+import { useSelection } from '../../contexts/SelectionContext'
 
 interface SimpleDiffPanelProps {
   onFileSelect: (filePath: string) => void

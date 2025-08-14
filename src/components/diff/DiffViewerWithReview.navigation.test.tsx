@@ -1,8 +1,8 @@
 import { render, act } from '@testing-library/react'
 import { DiffViewerWithReview } from './DiffViewerWithReview'
-import { SelectionProvider } from '../contexts/SelectionContext'
-import { ReviewProvider } from '../contexts/ReviewContext'
-import { ProjectProvider } from '../contexts/ProjectContext'
+import { SelectionProvider } from '../../contexts/SelectionContext'
+import { ReviewProvider } from '../../contexts/ReviewContext'
+import { ProjectProvider } from '../../contexts/ProjectContext'
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(async (cmd: string) => {

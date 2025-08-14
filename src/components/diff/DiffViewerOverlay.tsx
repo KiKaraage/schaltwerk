@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
-import { useSelection } from '../contexts/SelectionContext'
+import { useSelection } from '../../contexts/SelectionContext'
 import { VscClose, VscChevronLeft, VscFile, VscDiffAdded, VscDiffModified, VscDiffRemoved } from 'react-icons/vsc'
 import clsx from 'clsx'
 import hljs from 'highlight.js'
