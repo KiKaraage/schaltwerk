@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { VscAdd } from 'react-icons/vsc'
+import { VscAdd, VscCopy } from 'react-icons/vsc'
 
 interface DraftSession {
   name: string
@@ -18,6 +18,7 @@ interface Props {
 export function DraftListView({ onOpenDraft }: Props) {
   const [drafts, setDrafts] = useState<DraftSession[]>([])
   const [loading, setLoading] = useState(true)
+  const [copying, setCopying] = useState<string | null>(null)
 
   const fetchDrafts = useCallback(async () => {
     setLoading(true)
@@ -46,6 +47,19 @@ export function DraftListView({ onOpenDraft }: Props) {
     attach()
     return () => { try { if (unlisten) unlisten() } catch {} }
   }, [fetchDrafts])
+
+  const handleCopy = async (draft: DraftSession, event: React.MouseEvent) => {
+    event.stopPropagation()
+    try {
+      setCopying(draft.name)
+      const contentToCopy = draft.draft_content || draft.initial_prompt || ''
+      await navigator.clipboard.writeText(contentToCopy)
+    } catch (err) {
+      console.error('[DraftListView] Failed to copy content:', err)
+    } finally {
+      setTimeout(() => setCopying(null), 1000)
+    }
+  }
 
   if (loading) {
     return <div className="h-full flex items-center justify-center text-slate-400">Loading drafts…</div>
@@ -76,12 +90,23 @@ export function DraftListView({ onOpenDraft }: Props) {
       {drafts.map((d) => (
         <div
           key={d.name}
-          className="w-full bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800 hover:border-slate-700 rounded-lg px-3 py-2 cursor-pointer transition-colors"
+          className="group w-full bg-slate-900/40 hover:bg-slate-900/60 border border-slate-800 hover:border-slate-700 rounded-lg px-3 py-2 cursor-pointer transition-colors"
           onClick={() => onOpenDraft(d.name)}
         >
           <div className="flex items-center justify-between gap-2">
             <div className="text-sm font-medium text-slate-200 truncate">{d.name}</div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded border bg-amber-900/20 text-amber-300 border-amber-700/40">Draft</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => handleCopy(d, e)}
+                disabled={copying === d.name}
+                className="p-1 text-xs rounded bg-blue-700 hover:bg-blue-600 text-white flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Copy task content"
+              >
+                <VscCopy />
+                {copying === d.name ? 'Copied!' : ''}
+              </button>
+              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-amber-900/20 text-amber-300 border-amber-700/40">Draft</span>
+            </div>
           </div>
           <div className="text-xs text-slate-500 mt-0.5">{new Date(d.created_at).toLocaleString()}</div>
         </div>

@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { VscEdit, VscPlay, VscTrash, VscSave, VscClose, VscAdd } from 'react-icons/vsc'
+import { VscEdit, VscPlay, VscTrash, VscSave, VscClose, VscAdd, VscCopy } from 'react-icons/vsc'
 import { ConfirmModal } from '../modals/ConfirmModal'
 import clsx from 'clsx'
 
@@ -29,6 +29,7 @@ export function DraftTaskPanel({ onSessionStart }: DraftTaskPanelProps) {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [starting, setStarting] = useState<string | null>(null)
+  const [copying, setCopying] = useState<string | null>(null)
 
   const fetchDrafts = useCallback(async () => {
     try {
@@ -131,6 +132,19 @@ export function DraftTaskPanel({ onSessionStart }: DraftTaskPanelProps) {
       setError('Failed to delete draft')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleCopy = async (draft: DraftSession) => {
+    try {
+      setCopying(draft.name)
+      const contentToCopy = draft.draft_content || draft.initial_prompt || ''
+      await navigator.clipboard.writeText(contentToCopy)
+    } catch (err) {
+      console.error('[DraftTaskPanel] Failed to copy content:', err)
+      setError('Failed to copy content')
+    } finally {
+      setTimeout(() => setCopying(null), 1000)
     }
   }
 
@@ -300,6 +314,15 @@ export function DraftTaskPanel({ onSessionStart }: DraftTaskPanelProps) {
                   >
                     <VscEdit />
                     Edit
+                  </button>
+                  <button
+                    onClick={() => handleCopy(draft)}
+                    disabled={copying === draft.name}
+                    className="px-2 py-1 text-xs rounded bg-blue-700 hover:bg-blue-600 text-white flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Copy task content"
+                  >
+                    <VscCopy />
+                    {copying === draft.name ? 'Copied!' : 'Copy'}
                   </button>
                   <button
                     onClick={() => setDeleteConfirm(draft.name)}
