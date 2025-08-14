@@ -6,6 +6,7 @@ import { DiffViewerWithReview } from './components/diff/DiffViewerWithReview'
 import Split from 'react-split'
 import { NewSessionModal } from './components/modals/NewSessionModal'
 import { CancelConfirmation } from './components/modals/CancelConfirmation'
+import { SettingsModal } from './components/modals/SettingsModal'
 import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from './contexts/SelectionContext'
 import { useProject } from './contexts/ProjectContext'
@@ -33,6 +34,7 @@ export default function App() {
   const { selection, setSelection } = useSelection()
   const { setProjectPath } = useProject()
   const [newSessionOpen, setNewSessionOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
   const [currentSession, setCurrentSession] = useState<{ id: string; name: string; displayName: string; branch: string; hasUncommittedChanges: boolean } | null>(null)
@@ -316,76 +318,87 @@ export default function App() {
                 onCloseTab={handleCloseTab}
               />
             </div>
-        <div className="flex items-center gap-2 pointer-events-auto">
-          <OpenInSplitButton resolvePath={async () => {
-            if (selection.kind === 'session') {
-              let worktreePath = selection.worktreePath
-              if (!worktreePath && selection.payload) {
-                try {
-                  const sessionData = await invoke<any>('para_core_get_session', { name: selection.payload })
-                  worktreePath = sessionData?.worktree_path
-                } catch {}
-              }
-              return worktreePath
-            }
-            return await invoke<string>('get_current_directory')
-          }} />
-        </div>
-      </div>
+            <div className="flex items-center gap-2 pointer-events-auto">
+              <OpenInSplitButton resolvePath={async () => {
+                if (selection.kind === 'session') {
+                  let worktreePath = selection.worktreePath
+                  if (!worktreePath && selection.payload) {
+                    try {
+                      const sessionData = await invoke<any>('para_core_get_session', { name: selection.payload })
+                      worktreePath = sessionData?.worktree_path
+                    } catch {}
+                  }
+                  return worktreePath
+                }
+                return await invoke<string>('get_current_directory')
+              }} />
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="px-3 py-1.5 bg-slate-800/40 hover:bg-slate-700/60 border border-slate-700/60 rounded-lg transition-colors flex items-center gap-2 text-sm text-slate-300"
+                title="Settings"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            </div>
+          </div>
 
           <Split className="h-full w-full flex pt-9" sizes={[20, 80]} minSize={[240, 400]} gutterSize={6}>
-      <div className="h-full bg-panel border-r border-slate-800 overflow-y-auto" data-testid="sidebar">
-        <div className="h-full flex flex-col">
-          <div className="flex-1 overflow-y-auto">
-            <Sidebar isDiffViewerOpen={isDiffViewerOpen} />
-          </div>
-          <div className="p-2 border-t border-slate-800 grid grid-cols-2 gap-2">
-            <button 
-              onClick={() => setNewSessionOpen(true)} 
-              className="w-full bg-slate-800/60 hover:bg-slate-700/60 text-sm px-3 py-1.5 rounded group flex items-center justify-between"
-              title="Start new task (⌘N)"
-            >
-              <span>Start new task</span>
-              <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">⌘N</span>
-            </button>
-            <button 
-              onClick={() => window.dispatchEvent(new CustomEvent('schaltwerk:new-draft'))} 
-              className="w-full bg-amber-800/40 hover:bg-amber-700/40 text-sm px-3 py-1.5 rounded group flex items-center justify-between border border-amber-700/40"
-              title="Create draft (⇧⌘N)"
-            >
-              <span>New draft</span>
-              <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">⇧⌘N</span>
-            </button>
-          </div>
-        </div>
-      </div>
+            <div className="h-full bg-panel border-r border-slate-800 overflow-y-auto" data-testid="sidebar">
+              <div className="h-full flex flex-col">
+                <div className="flex-1 overflow-y-auto">
+                  <Sidebar isDiffViewerOpen={isDiffViewerOpen} />
+                </div>
+                <div className="p-2 border-t border-slate-800 grid grid-cols-2 gap-2">
+                  <button 
+                    onClick={() => setNewSessionOpen(true)} 
+                    className="w-full bg-slate-800/60 hover:bg-slate-700/60 text-sm px-3 py-1.5 rounded group flex items-center justify-between"
+                    title="Start new task (⌘N)"
+                  >
+                    <span>Start new task</span>
+                    <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">⌘N</span>
+                  </button>
+                  <button 
+                    onClick={() => window.dispatchEvent(new CustomEvent('schaltwerk:new-draft'))} 
+                    className="w-full bg-amber-800/40 hover:bg-amber-700/40 text-sm px-3 py-1.5 rounded group flex items-center justify-between border border-amber-700/40"
+                    title="Create draft (⇧⌘N)"
+                  >
+                    <span>New draft</span>
+                    <span className="text-xs opacity-60 group-hover:opacity-100 transition-opacity">⇧⌘N</span>
+                  </button>
+                </div>
+              </div>
+            </div>
 
-      <div className="relative h-full">
-        {/* Unified session ring around center + right (Claude, Terminal, Diff) */}
-        <div id="work-ring" className="absolute inset-2 rounded-xl pointer-events-none" />
-        <Split className="h-full w-full flex" sizes={[70, 30]} minSize={[400, 280]} gutterSize={8}>
-          <main className="bg-slate-950 h-full" data-testid="terminal-grid">
-            <TerminalGrid />
-          </main>
-          <section className="overflow-hidden">
-            <RightPanelTabs onFileSelect={handleFileSelect} />
-          </section>
-        </Split>
-      </div>
-      <NewSessionModal open={newSessionOpen} onClose={() => setNewSessionOpen(false)} onCreate={handleCreateSession} />
-      
-      {currentSession && (
-        <CancelConfirmation
-          open={cancelModalOpen}
-          displayName={currentSession.displayName}
-          branch={currentSession.branch}
-          hasUncommittedChanges={currentSession.hasUncommittedChanges}
-          onConfirm={handleCancelSession}
-          onCancel={() => setCancelModalOpen(false)}
-          loading={isCancelling}
-        />
-      )}
+            <div className="relative h-full">
+              {/* Unified session ring around center + right (Claude, Terminal, Diff) */}
+              <div id="work-ring" className="absolute inset-2 rounded-xl pointer-events-none" />
+              <Split className="h-full w-full flex" sizes={[70, 30]} minSize={[400, 280]} gutterSize={8}>
+                <main className="bg-slate-950 h-full" data-testid="terminal-grid">
+                  <TerminalGrid />
+                </main>
+                <section className="overflow-hidden">
+                  <RightPanelTabs onFileSelect={handleFileSelect} />
+                </section>
+              </Split>
+            </div>
           </Split>
+          
+          <NewSessionModal open={newSessionOpen} onClose={() => setNewSessionOpen(false)} onCreate={handleCreateSession} />
+          
+          {currentSession && (
+            <CancelConfirmation
+              open={cancelModalOpen}
+              displayName={currentSession.displayName}
+              branch={currentSession.branch}
+              hasUncommittedChanges={currentSession.hasUncommittedChanges}
+              onConfirm={handleCancelSession}
+              onCancel={() => setCancelModalOpen(false)}
+              loading={isCancelling}
+            />
+          )}
           
           {/* Diff Viewer Overlay with Review - render only when open */}
           {isDiffViewerOpen && (
@@ -395,6 +408,12 @@ export default function App() {
               onClose={handleCloseDiffViewer}
             />
           )}
+
+          {/* Settings Modal */}
+          <SettingsModal
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+          />
         </>
       )}
     </>

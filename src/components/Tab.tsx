@@ -1,3 +1,4 @@
+import React from 'react'
 import { VscClose } from 'react-icons/vsc'
 
 interface TabProps {
@@ -32,13 +33,12 @@ export function Tab({ projectPath, projectName, isActive, onSelect, onClose }: T
       <button
         onClick={handleClose}
         className={`
-          p-0.5 rounded hover:bg-slate-800/60 transition-all -mr-1
-          ${isActive
-            ? 'text-cyan-400/60 hover:text-cyan-300'
-            : 'text-slate-500 hover:text-slate-300'
+          rounded hover:bg-slate-700/60 transition-colors p-0.5
+          ${isActive 
+            ? 'text-cyan-400 hover:text-cyan-200' 
+            : 'text-slate-500 hover:text-red-400'
           }
         `}
-        title={`Close ${projectName}`}
         aria-label={`Close ${projectName}`}
       >
         <VscClose className="text-[10px]" />

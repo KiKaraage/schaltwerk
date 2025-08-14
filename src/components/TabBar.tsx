@@ -8,15 +8,13 @@ export interface ProjectTab {
 interface TabBarProps {
   tabs: ProjectTab[]
   activeTabPath: string | null
-  onSelectTab: (projectPath: string) => void
-  onCloseTab: (projectPath: string) => void
+  onSelectTab: (path: string) => void
+  onCloseTab: (path: string) => void
 }
 
 export function TabBar({ tabs, activeTabPath, onSelectTab, onCloseTab }: TabBarProps) {
-  if (tabs.length === 0) {
-    return null
-  }
-
+  if (tabs.length === 0) return null
+  
   return (
     <div className="flex items-center gap-2">
       {tabs.map((tab) => (

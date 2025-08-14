@@ -15,14 +15,17 @@ mod para_core;
 mod open_apps;
 mod projects;
 mod project_manager;
+mod settings;
 
 use std::sync::Arc;
 use project_manager::ProjectManager;
+use settings::SettingsManager;
 use tokio::sync::OnceCell;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 
 static PROJECT_MANAGER: OnceCell<Arc<ProjectManager>> = OnceCell::const_new();
+static SETTINGS_MANAGER: OnceCell<Arc<Mutex<SettingsManager>>> = OnceCell::const_new();
 
 #[derive(Clone, Debug)]
 struct QueuedMessage {
@@ -892,8 +895,28 @@ async fn para_core_start_claude(session_name: String) -> Result<String, String> 
         terminal_manager.close_terminal(terminal_id.clone()).await?;
     }
     
+    // Determine agent type and fetch environment variables
+    let agent_type = if agent_name == "claude" {
+        "claude"
+    } else if agent_name == "cursor-agent" {
+        "cursor"
+    } else if agent_name.contains("opencode") {
+        "opencode"
+    } else {
+        "claude" // default
+    };
+    
+    let env_vars = if let Some(settings_manager) = SETTINGS_MANAGER.get() {
+        let manager = settings_manager.lock().await;
+        manager.get_agent_env_vars(agent_type)
+            .into_iter()
+            .collect::<Vec<(String, String)>>()
+    } else {
+        vec![]
+    };
+    
     // Create new terminal with the agent directly
-    log::info!("Creating terminal with {agent_name} directly: {terminal_id}");
+    log::info!("Creating terminal with {agent_name} directly: {terminal_id} with {} env vars", env_vars.len());
     
     // Keep a copy for comparison before moving
     let is_opencode = agent_name == "/Users/marius.wichtner/.opencode/bin/opencode";
@@ -903,7 +926,7 @@ async fn para_core_start_claude(session_name: String) -> Result<String, String> 
         cwd,
         agent_name,
         agent_args,
-        vec![],
+        env_vars,
     ).await?;
     
     // For TUI applications like OpenCode, ensure proper initial sizing
@@ -958,8 +981,28 @@ async fn para_core_start_claude_orchestrator(terminal_id: String) -> Result<Stri
         terminal_manager.close_terminal(terminal_id.clone()).await?;
     }
     
+    // Determine agent type and fetch environment variables
+    let agent_type = if agent_name == "claude" {
+        "claude"
+    } else if agent_name == "cursor-agent" {
+        "cursor"
+    } else if agent_name.contains("opencode") {
+        "opencode"
+    } else {
+        "claude" // default
+    };
+    
+    let env_vars = if let Some(settings_manager) = SETTINGS_MANAGER.get() {
+        let manager = settings_manager.lock().await;
+        manager.get_agent_env_vars(agent_type)
+            .into_iter()
+            .collect::<Vec<(String, String)>>()
+    } else {
+        vec![]
+    };
+    
     // Create new terminal with the agent directly
-    log::info!("Creating terminal with {agent_name} directly: {terminal_id}");
+    log::info!("Creating terminal with {agent_name} directly: {terminal_id} with {} env vars", env_vars.len());
     
     // Keep a copy for comparison before moving
     let is_opencode = agent_name == "/Users/marius.wichtner/.opencode/bin/opencode";
@@ -969,7 +1012,7 @@ async fn para_core_start_claude_orchestrator(terminal_id: String) -> Result<Stri
         cwd,
         agent_name,
         agent_args,
-        vec![],
+        env_vars,
     ).await?;
     
     // For TUI applications like OpenCode, ensure proper initial sizing
@@ -1082,6 +1125,26 @@ async fn para_core_unmark_session_ready(name: String) -> Result<(), String> {
         .map_err(|e| format!("Failed to unmark session as reviewed: {e}"))
 }
 
+#[tauri::command]
+async fn get_agent_env_vars(agent_type: String) -> Result<HashMap<String, String>, String> {
+    let settings_manager = SETTINGS_MANAGER
+        .get()
+        .ok_or_else(|| "Settings manager not initialized".to_string())?;
+    
+    let manager = settings_manager.lock().await;
+    Ok(manager.get_agent_env_vars(&agent_type))
+}
+
+#[tauri::command]
+async fn set_agent_env_vars(agent_type: String, env_vars: HashMap<String, String>) -> Result<(), String> {
+    let settings_manager = SETTINGS_MANAGER
+        .get()
+        .ok_or_else(|| "Settings manager not initialized".to_string())?;
+    
+    let mut manager = settings_manager.lock().await;
+    manager.set_agent_env_vars(&agent_type, env_vars)
+}
+
 fn main() {
     // Initialize logging
     logging::init_logging();
@@ -1143,9 +1206,24 @@ fn main() {
             get_project_default_branch,
             list_project_branches,
             get_project_default_base_branch,
-            set_project_default_base_branch
+            set_project_default_base_branch,
+            get_agent_env_vars,
+            set_agent_env_vars
         ])
         .setup(|app| {
+            // Initialize settings manager
+            let settings_handle = app.handle().clone();
+            tauri::async_runtime::block_on(async {
+                match SettingsManager::new(&settings_handle) {
+                    Ok(manager) => {
+                        let _ = SETTINGS_MANAGER.set(Arc::new(Mutex::new(manager)));
+                    }
+                    Err(e) => {
+                        log::error!("Failed to initialize settings manager: {e}");
+                    }
+                }
+            });
+            
             // Start activity tracking for para_core sessions
             let app_handle = app.handle().clone();
             

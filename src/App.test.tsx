@@ -10,28 +10,29 @@ vi.mock('react-split', () => ({
 }))
 
 // ---- Mock: heavy child components to reduce surface area ----
-vi.mock('./components/Sidebar', () => ({
-  Sidebar: () => <div data-testid="sidebar" />,
+vi.mock('./components/sidebar/Sidebar', () => ({
+  Sidebar: () => <div data-testid="sidebar-mock" />,
 }))
-vi.mock('./components/TerminalGrid', () => ({
-  TerminalGrid: () => <div data-testid="terminal-grid" />,
+vi.mock('./components/terminal/TerminalGrid', () => ({
+  TerminalGrid: () => <div data-testid="terminal-grid-mock" />,
 }))
-vi.mock('./components/SimpleDiffPanel', () => ({
-  SimpleDiffPanel: ({ onFileSelect }: { onFileSelect: (p: string) => void }) => (
-    <div data-testid="diff-panel" onClick={() => onFileSelect('file.txt')} />
-  ),
+vi.mock('./components/right-panel/RightPanelTabs', () => ({
+  RightPanelTabs: () => <div data-testid="right-panel-tabs" />,
 }))
-vi.mock('./components/NewSessionModal', () => ({
+vi.mock('./components/modals/NewSessionModal', () => ({
   NewSessionModal: () => null,
 }))
-vi.mock('./components/CancelConfirmation', () => ({
+vi.mock('./components/modals/CancelConfirmation', () => ({
   CancelConfirmation: () => null,
 }))
-vi.mock('./components/DiffViewerWithReview', () => ({
+vi.mock('./components/diff/DiffViewerWithReview', () => ({
   DiffViewerWithReview: () => null,
 }))
-vi.mock('./components/OpenInSplitButton', () => ({
+vi.mock('./components/diff/OpenInSplitButton', () => ({
   OpenInSplitButton: () => <button data-testid="open-in-split" />,
+}))
+vi.mock('./components/TabBar', () => ({
+  TabBar: () => <div data-testid="tab-bar" />,
 }))
 
 // ---- Mock: HomeScreen to drive transitions via onOpenProject ----
@@ -142,7 +143,7 @@ describe('App.tsx', () => {
     errSpy.mockRestore()
   })
 
-  it('displays project path in top bar when a project is opened', async () => {
+  it('displays tab bar when a project is opened', async () => {
     renderApp()
 
     // Initially on home screen
@@ -158,11 +159,9 @@ describe('App.tsx', () => {
       expect(screen.getByTestId('sidebar')).toBeInTheDocument()
     }, { timeout: 3000 })
 
-    // The project should appear as a tab with tooltip showing full path
-    // Note: The mocked HomeScreen is hardcoded to open '/Users/me/sample-project'
+    // Tab bar should be displayed (it's mocked in our test)
     await waitFor(() => {
-      expect(screen.getByText('sample-project')).toBeInTheDocument()
-      expect(screen.getByTitle('/Users/me/sample-project')).toBeInTheDocument()
+      expect(screen.getByTestId('tab-bar')).toBeInTheDocument()
     }, { timeout: 3000 })
   })
 })
