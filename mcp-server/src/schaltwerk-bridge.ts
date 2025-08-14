@@ -736,7 +736,7 @@ export class SchaltwerkBridge {
   async listSessionsByState(filter?: 'all' | 'active' | 'draft' | 'reviewed'): Promise<Session[]> {
     if (!this.db) await this.connect()
     
-    let whereClause = "WHERE status IN ('active', 'paused', 'draft')"
+    let whereClause = "WHERE status IN ('active', 'paused')"
     
     switch (filter) {
       case 'active':
