@@ -3,6 +3,7 @@ import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { useFontSize } from '../../contexts/FontSizeContext';
 import 'xterm/css/xterm.css';
 
 // Global guard to avoid starting Claude multiple times for the same terminal id across remounts
@@ -24,6 +25,7 @@ export interface TerminalHandle {
 }
 
 export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId, className = '', sessionName, isOrchestrator = false }, ref) => {
+    const { terminalFontSize } = useFontSize();
     const termRef = useRef<HTMLDivElement>(null);
     const terminal = useRef<XTerm | null>(null);
     const fitAddon = useRef<FitAddon | null>(null);
@@ -92,7 +94,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
                 brightWhite: '#f1f5f9',
             },
             fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-            fontSize: 13,
+            fontSize: terminalFontSize,
             cursorBlink: true,
             scrollback: 10000,
             // Important: Keep TUI control sequences intact (e.g., from cursor-agent)
@@ -257,6 +259,30 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
 
         hydrateTerminal();
 
+        // Handle font size changes
+        const handleFontSizeChange = () => {
+            if (terminal.current) {
+                terminal.current.options.fontSize = terminalFontSize;
+                if (fitAddon.current) {
+                    // Small delay to ensure the font change is processed
+                    setTimeout(() => {
+                        if (fitAddon.current && terminal.current) {
+                            try {
+                                fitAddon.current.fit();
+                                const { cols, rows } = terminal.current;
+                                lastSize.current = { cols, rows };
+                                invoke('resize_terminal', { id: terminalId, cols, rows }).catch(console.error);
+                            } catch (e) {
+                                console.warn(`[Terminal ${terminalId}] Font size change fit failed:`, e);
+                            }
+                        }
+                    }, 50);
+                }
+            }
+        };
+
+        window.addEventListener('font-size-changed', handleFontSizeChange);
+
         // Send input to backend
         terminal.current.onData((data) => {
             // Gate noisy logs behind a debug flag if needed
@@ -327,6 +353,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
                 // Detach once promise resolves
                 unlistenPromiseRef.current.then((resolved) => { try { resolved(); } catch { /* ignore */ } });
             }
+            window.removeEventListener('font-size-changed', handleFontSizeChange);
             terminal.current?.dispose();
             terminal.current = null;
             resizeObserver.disconnect();
@@ -338,7 +365,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             // Note: We intentionally don't close terminals here to allow switching between sessions
             // All terminals are cleaned up when the app exits via the backend cleanup handler
         };
-    }, [terminalId]); // Only recreate when terminalId changes, not visibility
+    }, [terminalId, terminalFontSize]); // Recreate when terminalId or fontSize changes
 
 
     // Automatically start Claude for top terminals when hydrated and first ready

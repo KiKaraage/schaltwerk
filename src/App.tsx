@@ -10,6 +10,7 @@ import { SettingsModal } from './components/modals/SettingsModal'
 import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from './contexts/SelectionContext'
 import { useProject } from './contexts/ProjectContext'
+import { useFontSize } from './contexts/FontSizeContext'
 import { OpenInSplitButton } from './components/diff/OpenInSplitButton'
 import { VscHome } from 'react-icons/vsc'
 import { HomeScreen } from './components/home/HomeScreen'
@@ -33,6 +34,7 @@ function getBasename(path: string): string {
 export default function App() {
   const { selection, setSelection } = useSelection()
   const { setProjectPath } = useProject()
+  const { increaseFontSize, decreaseFontSize, resetFontSize } = useFontSize()
   const [newSessionOpen, setNewSessionOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
@@ -97,6 +99,20 @@ export default function App() {
           e.preventDefault()
           window.dispatchEvent(new CustomEvent('schaltwerk:new-draft'))
         }
+      }
+      
+      // Font size shortcuts
+      if (modifierKey && (e.key === '+' || e.key === '=')) {
+        e.preventDefault()
+        increaseFontSize()
+      }
+      if (modifierKey && e.key === '-') {
+        e.preventDefault()
+        decreaseFontSize()
+      }
+      if (modifierKey && e.key === '0') {
+        e.preventDefault()
+        resetFontSize()
       }
       
     }

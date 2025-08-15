@@ -79,10 +79,13 @@ describe('NewSessionModal', () => {
   })
 
   it('responds to draft-mode event by checking Create as draft', async () => {
+    const { act } = await import('@testing-library/react')
     render(<NewSessionModal open={true} onClose={() => {}} onCreate={vi.fn()} />)
     const checkbox = screen.getByLabelText(/Create as draft/i) as HTMLInputElement
     expect(checkbox.checked).toBe(false)
-    window.dispatchEvent(new Event('schaltwerk:new-session:set-draft'))
+    await act(async () => {
+      window.dispatchEvent(new Event('schaltwerk:new-session:set-draft'))
+    })
     await waitFor(() => expect(checkbox.checked).toBe(true))
   })
 

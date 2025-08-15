@@ -2,11 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* CSS Variables for global font sizing */
+:root {
+  --terminal-font-size: 13px;
+  --ui-font-size: 12px;
+  --base-font-size: 13px;
+}
+
 /* Prefer dark UI for native system widgets like scrollbars */
 html,
 body,
 #root {
   color-scheme: dark;
+  font-size: var(--ui-font-size);
 }
 
 /* Ensure text selection works in diff viewer */

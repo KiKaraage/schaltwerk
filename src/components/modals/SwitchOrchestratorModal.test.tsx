@@ -43,13 +43,13 @@ describe('SwitchOrchestratorModal', () => {
     cleanup()
   })
 
-  it('renders nothing when closed, shows content when open', () => {
+  it('renders nothing when closed, shows content when open', async () => {
     const { rerender } = render(
       <SwitchOrchestratorModal open={false} onClose={vi.fn()} onSwitch={vi.fn()} />
     )
     expect(screen.queryByText('Switch Orchestrator Model')).not.toBeInTheDocument()
 
-    act(() => {
+    await act(async () => {
       rerender(<SwitchOrchestratorModal open={true} onClose={vi.fn()} onSwitch={vi.fn()} />)
     })
     expect(screen.getByText('Switch Orchestrator Model')).toBeInTheDocument()

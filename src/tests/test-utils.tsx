@@ -4,18 +4,21 @@ import { SelectionProvider } from '../contexts/SelectionContext'
 import { FocusProvider } from '../contexts/FocusContext'
 import { ReviewProvider } from '../contexts/ReviewContext'
 import { ProjectProvider, useProject } from '../contexts/ProjectContext'
+import { FontSizeProvider } from '../contexts/FontSizeContext'
 
 export function renderWithProviders(ui: React.ReactElement) {
   return render(
-    <ProjectProvider>
-      <SelectionProvider>
-        <FocusProvider>
-          <ReviewProvider>
-            {ui}
-          </ReviewProvider>
-        </FocusProvider>
-      </SelectionProvider>
-    </ProjectProvider>
+    <FontSizeProvider>
+      <ProjectProvider>
+        <SelectionProvider>
+          <FocusProvider>
+            <ReviewProvider>
+              {ui}
+            </ReviewProvider>
+          </FocusProvider>
+        </SelectionProvider>
+      </ProjectProvider>
+    </FontSizeProvider>
   )
 }
 
@@ -33,16 +36,18 @@ function TestProjectInitializer({ children }: { children: React.ReactNode }) {
 
 export function TestProviders({ children }: { children: React.ReactNode }) {
   return (
-    <ProjectProvider>
-      <TestProjectInitializer>
-        <SelectionProvider>
-          <FocusProvider>
-            <ReviewProvider>
-              {children}
-            </ReviewProvider>
-          </FocusProvider>
-        </SelectionProvider>
-      </TestProjectInitializer>
-    </ProjectProvider>
+    <FontSizeProvider>
+      <ProjectProvider>
+        <TestProjectInitializer>
+          <SelectionProvider>
+            <FocusProvider>
+              <ReviewProvider>
+                {children}
+              </ReviewProvider>
+            </FocusProvider>
+          </SelectionProvider>
+        </TestProjectInitializer>
+      </ProjectProvider>
+    </FontSizeProvider>
   )
 }

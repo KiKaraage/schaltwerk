@@ -375,7 +375,7 @@ export function DiffViewerOverlay({ filePath, isOpen, onClose }: DiffViewerOverl
                       diffContainer: { background: 'transparent' },
                       line: {
                         fontFamily: 'SF Mono, Monaco, Consolas, monospace',
-                        fontSize: '12px',
+                        fontSize: 'var(--ui-font-size)',
                         lineHeight: '1.3',
                         whiteSpace: 'pre'
                       }

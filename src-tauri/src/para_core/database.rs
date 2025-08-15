@@ -96,7 +96,8 @@ impl Database {
                 skip_permissions BOOLEAN DEFAULT FALSE,
                 agent_type TEXT DEFAULT 'claude',
                 default_open_app TEXT DEFAULT 'finder',
-                default_base_branch TEXT
+                default_base_branch TEXT,
+                font_size INTEGER DEFAULT 13
             )",
             [],
         )?;
@@ -138,8 +139,19 @@ impl Database {
             let _ = conn.execute("ALTER TABLE app_config ADD COLUMN default_base_branch TEXT", []);
         }
         
+        // Migration: Add font_size column if it doesn't exist
+        let font_size_exists = {
+            let result = conn.prepare("SELECT font_size FROM app_config LIMIT 1");
+            result.is_ok()
+        };
+        
+        if !font_size_exists {
+            log::info!("Adding font_size column to app_config table");
+            let _ = conn.execute("ALTER TABLE app_config ADD COLUMN font_size INTEGER DEFAULT 13", []);
+        }
+        
         conn.execute(
-            "INSERT OR IGNORE INTO app_config (id, skip_permissions, agent_type, default_open_app) VALUES (1, FALSE, 'claude', 'finder')",
+            "INSERT OR IGNORE INTO app_config (id, skip_permissions, agent_type, default_open_app, font_size) VALUES (1, FALSE, 'claude', 'finder', 13)",
             [],
         )?;
         
@@ -602,6 +614,32 @@ impl Database {
         conn.execute(
             "UPDATE app_config SET agent_type = ?1 WHERE id = 1",
             params![agent_type],
+        )?;
+        
+        Ok(())
+    }
+    
+    pub fn get_font_size(&self) -> Result<i32> {
+        let conn = self.conn.lock().unwrap();
+        
+        let result: SqlResult<i32> = conn.query_row(
+            "SELECT font_size FROM app_config WHERE id = 1",
+            [],
+            |row| row.get(0),
+        );
+        
+        match result {
+            Ok(value) => Ok(value),
+            Err(_) => Ok(13),
+        }
+    }
+    
+    pub fn set_font_size(&self, font_size: i32) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        
+        conn.execute(
+            "UPDATE app_config SET font_size = ?1 WHERE id = 1",
+            params![font_size],
         )?;
         
         Ok(())

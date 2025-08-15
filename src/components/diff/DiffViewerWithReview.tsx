@@ -701,7 +701,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                 ) : (
                   <>
                 {/* Hidden line measure element */}
-                <div ref={measureLineRef} style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', lineHeight: '1.3', fontSize: 12, whiteSpace: 'pre' }}>X</div>
+                <div ref={measureLineRef} style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', lineHeight: '1.3', fontSize: 'var(--ui-font-size)', whiteSpace: 'pre' }}>X</div>
 
                 <ReactDiffViewer
                       oldValue={mainContent}
@@ -748,7 +748,7 @@ export function DiffViewerWithReview({ filePath, isOpen, onClose }: DiffViewerWi
                         diffContainer: { background: 'transparent' },
                         line: {
                           fontFamily: 'SF Mono, Monaco, Consolas, monospace',
-                          fontSize: '12px',
+                          fontSize: 'var(--ui-font-size)',
                           lineHeight: '1.3',
                           whiteSpace: 'pre'
                         }

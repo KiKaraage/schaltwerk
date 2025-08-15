@@ -138,6 +138,7 @@ class MockResizeObserver {
 
 // Now import the component under test
 import { Terminal } from './Terminal'
+import { FontSizeProvider } from '../../contexts/FontSizeContext'
 // Also import mocked helpers for control
 import * as TauriEvent from '@tauri-apps/api/event'
 import * as TauriCore from '@tauri-apps/api/core'
@@ -182,9 +183,18 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+// Helper function to render Terminal with FontSizeProvider
+function renderTerminal(props: React.ComponentProps<typeof Terminal>) {
+  return render(
+    <FontSizeProvider>
+      <Terminal {...props} />
+    </FontSizeProvider>
+  )
+}
+
 describe('Terminal component', () => {
   it('sends initial resize on mount based on terminal size', async () => {
-    render(<Terminal terminalId="orchestrator-top" />)
+    renderTerminal({ terminalId: "orchestrator-top" })
     await flushAll()
 
     const resizeCalls = (TauriCore as any).invoke.mock.calls.filter((c: any[]) => c[0] === 'resize_terminal')
@@ -196,7 +206,7 @@ describe('Terminal component', () => {
   it('hydrates from buffer and flushes pending output in order (batched)', async () => {
     ;(TauriCore as any).__setInvokeHandler('get_terminal_buffer', () => 'SNAP')
 
-    render(<Terminal terminalId="session-demo-top" sessionName="demo" />)
+    renderTerminal({ terminalId: "session-demo-top", sessionName: "demo" })
 
     // Emit outputs before hydration completes
     ;(TauriEvent as any).__emit('terminal-output-session-demo-top', 'A')
@@ -211,7 +221,7 @@ describe('Terminal component', () => {
   })
 
   it('sends input data to backend', async () => {
-    render(<Terminal terminalId="session-io-top" sessionName="io" />)
+    renderTerminal({ terminalId: "session-io-top", sessionName: "io" })
     await flushAll()
 
     const xterm = getLastXtermInstance()
@@ -226,7 +236,7 @@ describe('Terminal component', () => {
     // Force mac platform
     Object.defineProperty(window.navigator, 'platform', { value: 'MacIntel', configurable: true })
 
-    render(<Terminal terminalId="session-keys-top" sessionName="keys" />)
+    renderTerminal({ terminalId: "session-keys-top", sessionName: "keys" })
     await flushAll()
 
     const xterm = getLastXtermInstance()
@@ -249,7 +259,7 @@ describe('Terminal component', () => {
 
   it('intercepts Ctrl-based shortcuts on non-Mac for mark reviewed', async () => {
     Object.defineProperty(window.navigator, 'platform', { value: 'Win32', configurable: true })
-    render(<Terminal terminalId="session-keys2-top" sessionName="keys2" />)
+    renderTerminal({ terminalId: "session-keys2-top", sessionName: "keys2" })
     await flushAll()
 
     const xterm = getLastXtermInstance()
@@ -268,7 +278,7 @@ describe('Terminal component', () => {
   })
 
   it('auto-starts orchestrator when terminal exists', async () => {
-    render(<Terminal terminalId="orchestrator-auto-top" isOrchestrator />)
+    renderTerminal({ terminalId: "orchestrator-auto-top", isOrchestrator: true })
 
     // hydration tick and start scheduled on next tick
     await flushAll()
@@ -280,7 +290,7 @@ describe('Terminal component', () => {
     expect(startCalls.length).toBe(1)
 
     // Re-render same id -> should not start again due to global guard
-    render(<Terminal terminalId="orchestrator-auto-top" isOrchestrator />)
+    renderTerminal({ terminalId: "orchestrator-auto-top", isOrchestrator: true })
     await flushAll()
     await advanceAndFlush(1)
 
@@ -293,7 +303,7 @@ describe('Terminal component', () => {
   // Removed retry-until-exists timing test per guidance
 
   it('does not auto-start for non-top terminals', async () => {
-    render(<Terminal terminalId="orchestrator-bottom" isOrchestrator />)
+    renderTerminal({ terminalId: "orchestrator-bottom", isOrchestrator: true })
     await flushAll()
     vi.advanceTimersByTime(500)
 
@@ -304,7 +314,7 @@ describe('Terminal component', () => {
   })
 
   it('session top without sessionName does not start', async () => {
-    render(<Terminal terminalId="session-missing-top" />)
+    renderTerminal({ terminalId: "session-missing-top" })
     await flushAll()
     vi.advanceTimersByTime(200)
 
@@ -313,7 +323,7 @@ describe('Terminal component', () => {
   })
 
   it('session top with mismatched id does not start', async () => {
-    render(<Terminal terminalId="session-foo-top" sessionName="bar" />)
+    renderTerminal({ terminalId: "session-foo-top", sessionName: "bar" })
     await flushAll()
     vi.advanceTimersByTime(200)
 
@@ -322,7 +332,7 @@ describe('Terminal component', () => {
   })
 
   it('session top with correct id starts claude for session', async () => {
-    render(<Terminal terminalId="session-work-top" sessionName="work" />)
+    renderTerminal({ terminalId: "session-work-top", sessionName: "work" })
     await flushAll()
     vi.advanceTimersByTime(1)
     await flushAll()
@@ -335,7 +345,7 @@ describe('Terminal component', () => {
   it('stops retrying after limit when terminal never exists', async () => {
     ;(TauriCore as any).__setInvokeHandler('terminal_exists', () => false)
 
-    render(<Terminal terminalId="orchestrator-top" isOrchestrator />)
+    renderTerminal({ terminalId: "orchestrator-top", isOrchestrator: true })
     await flushAll()
 
     // attempts up to 10 times (every 150ms)
@@ -350,7 +360,7 @@ describe('Terminal component', () => {
   it('handles hydration failure and still flushes buffered output (batched)', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     ;(TauriCore as any).__setInvokeHandler('get_terminal_buffer', () => { throw new Error('fail') })
-    render(<Terminal terminalId="session-hydratefail-top" sessionName="hf" />)
+    renderTerminal({ terminalId: "session-hydratefail-top", sessionName: "hf" })
     // Emit before hydration completes -> should be buffered but not flushed due to failure
     ;(TauriEvent as any).__emit('terminal-output-session-hydratefail-top', 'A')
     await flushAll()
@@ -366,7 +376,11 @@ describe('Terminal component', () => {
 
   it('exposes focus via ref', async () => {
     const ref = createRef<{ focus: () => void }>()
-    render(<Terminal terminalId="session-focus-top" sessionName="focus" ref={ref} />)
+    render(
+      <FontSizeProvider>
+        <Terminal terminalId="session-focus-top" sessionName="focus" ref={ref} />
+      </FontSizeProvider>
+    )
     await flushAll()
 
     const xterm = getLastXtermInstance()
