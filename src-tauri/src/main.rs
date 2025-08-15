@@ -556,22 +556,12 @@ async fn start_webhook_server(app: tauri::AppHandle) {
                         if let Some(draft_name) = payload.get("session_name").and_then(|v| v.as_str()) {
                             log::info!("Draft created via MCP: {draft_name}");
                             
-                            // Get the para core and emit the updated sessions list
-                            if let Ok(core) = get_para_core().await {
-                                let core_lock = core.lock().await;
-                                let manager = core_lock.session_manager();
-                                
-                                // Get enriched sessions list (which includes drafts)
-                                if let Ok(sessions) = manager.list_enriched_sessions() {
-                                    log::info!("Emitting sessions-refreshed event after MCP draft creation");
-                                    if let Err(e) = app.emit("schaltwerk:sessions-refreshed", &sessions) {
-                                        log::error!("Failed to emit sessions-refreshed event: {e}");
-                                    }
-                                } else {
-                                    log::warn!("Could not get enriched sessions list after draft creation");
-                                }
-                            } else {
-                                log::warn!("Could not get para core for draft-created webhook");
+                            // Emit sessions-refreshed event to trigger UI updates
+                            // We emit with empty array since UI components will fetch what they need
+                            // (drafts via list_sessions_by_state, sessions via list_enriched_sessions)
+                            log::info!("Emitting sessions-refreshed event after MCP draft creation");
+                            if let Err(e) = app.emit("schaltwerk:sessions-refreshed", &Vec::<para_core::EnrichedSession>::new()) {
+                                log::error!("Failed to emit sessions-refreshed event: {e}");
                             }
                         } else {
                             log::warn!("Draft-created webhook payload missing 'name' field");
@@ -1510,12 +1500,12 @@ async fn para_core_create_draft_session(app: tauri::AppHandle, name: String, dra
     let session = manager.create_draft_session(&name, &draft_content)
         .map_err(|e| format!("Failed to create draft session: {e}"))?;
     
-    // Emit sessions-refreshed event after creating draft
-    if let Ok(sessions) = manager.list_enriched_sessions() {
-        log::info!("Emitting sessions-refreshed event after creating draft session");
-        if let Err(e) = app.emit("schaltwerk:sessions-refreshed", &sessions) {
-            log::warn!("Could not emit sessions refreshed: {e}");
-        }
+    // Emit sessions-refreshed event to trigger UI updates
+    // We emit with empty array since UI components will fetch what they need
+    // (drafts via list_sessions_by_state, sessions via list_enriched_sessions)
+    log::info!("Emitting sessions-refreshed event after creating draft session");
+    if let Err(e) = app.emit("schaltwerk:sessions-refreshed", &Vec::<para_core::EnrichedSession>::new()) {
+        log::warn!("Could not emit sessions refreshed: {e}");
     }
     
     Ok(session)
