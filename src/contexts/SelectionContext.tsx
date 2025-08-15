@@ -10,7 +10,8 @@ export interface Selection {
 
 interface TerminalSet {
     top: string
-    bottom: string
+    bottomBase: string
+    workingDirectory: string
 }
 
 interface SelectionContextType {
@@ -29,7 +30,8 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     const [selection, setSelectionState] = useState<Selection>({ kind: 'orchestrator' })
     const [terminals, setTerminals] = useState<TerminalSet>({
         top: 'orchestrator-default-top',
-        bottom: 'orchestrator-default-bottom'
+        bottomBase: 'orchestrator-default-bottom',
+        workingDirectory: ''
     })
     // Start as not ready, will become ready once we have initialized with a project
     const [isReady, setIsReady] = useState(false)
@@ -43,6 +45,8 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     
     // Get terminal IDs for a selection
     const getTerminalIds = useCallback((sel: Selection): TerminalSet => {
+        let workingDir = projectPath || ''
+        
         if (sel.kind === 'orchestrator') {
             // Make orchestrator terminals project-specific by using project path hash
             // Use a simple hash of the full path to ensure uniqueness
@@ -61,13 +65,16 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             const base = `orchestrator-${projectId}`
             return {
                 top: `${base}-top`,
-                bottom: `${base}-bottom`
+                bottomBase: `${base}-bottom`,
+                workingDirectory: workingDir
             }
         } else {
             const base = `session-${sel.payload}`
+            const sessionWorkingDir = sel.worktreePath || workingDir
             return {
                 top: `${base}-top`,
-                bottom: `${base}-bottom`
+                bottomBase: `${base}-bottom`,
+                workingDirectory: sessionWorkingDir
             }
         }
     }, [projectPath])
@@ -117,10 +124,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
         if (sel.kind === 'orchestrator') {
             setIsDraft(false)
             const cwd = projectPath || await invoke<string>('get_current_directory')
-            await Promise.all([
-                createTerminal(ids.top, cwd),
-                createTerminal(ids.bottom, cwd)
-            ])
+            await createTerminal(ids.top, cwd)
             return ids
         }
 
@@ -138,19 +142,13 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             }
 
             const cwd = worktreePath || await invoke<string>('get_current_directory')
-            await Promise.all([
-                createTerminal(ids.top, cwd),
-                createTerminal(ids.bottom, cwd)
-            ])
+            await createTerminal(ids.top, cwd)
             return ids
         } catch (e) {
             console.error('[SelectionContext] Failed to inspect session state; creating terminals with fallback cwd', e)
             setIsDraft(false)
             const cwd = await invoke<string>('get_current_directory')
-            await Promise.all([
-                createTerminal(ids.top, cwd),
-                createTerminal(ids.bottom, cwd)
-            ])
+            await createTerminal(ids.top, cwd)
             return ids
         }
     }, [getTerminalIds, createTerminal, projectPath])
@@ -177,7 +175,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             // If forcing recreate, clear terminal tracking first
             if (forceRecreate) {
                 const ids = getTerminalIds(newSelection)
-                clearTerminalTracking([ids.top, ids.bottom])
+                clearTerminalTracking([ids.top])
             }
             
             // Ensure terminals exist BEFORE changing selection

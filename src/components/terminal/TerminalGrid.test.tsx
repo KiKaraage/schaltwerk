@@ -78,6 +78,42 @@ vi.mock('./Terminal', () => {
   }
 })
 
+// Mock TerminalTabs to work with the mount counting system
+vi.mock('./TerminalTabs', () => {
+  const TerminalTabsMock = forwardRef<any, any>(function TerminalTabsMock(props, ref) {
+    const { baseTerminalId } = props
+    const terminalId = `${baseTerminalId}-0`  // Default first tab
+    const focus = vi.fn()
+    
+    // Track mount for the tab terminal and register focus spy
+    useEffect(() => {
+      mountCount.set(terminalId, (mountCount.get(terminalId) || 0) + 1)
+      focusSpies.set(terminalId, focus) // Register focus spy directly
+      return () => {
+        unmountCount.set(terminalId, (unmountCount.get(terminalId) || 0) + 1)
+        focusSpies.delete(terminalId)
+      }
+    }, [terminalId, focus])
+
+    useImperativeHandle(ref, () => ({ focus }), [focus])
+
+    return (
+      <div data-testid={`terminal-tabs-${baseTerminalId}`}>
+        <div
+          data-testid={`terminal-${terminalId}`}
+          className="h-full w-full"
+        >
+          Mock Terminal Tab {terminalId}
+        </div>
+      </div>
+    )
+  })
+  
+  return {
+    TerminalTabs: TerminalTabsMock
+  }
+})
+
 // Mock Tauri core invoke used by SelectionContext (providers in tests)
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -125,7 +161,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   mountCount.clear()
   unmountCount.clear()
-  focusSpies.clear()
+  // Don't clear focusSpies here - let components register them after mounting
   vi.clearAllMocks()
 
   mockInvoke.mockImplementation((command: string, args?: any) => {
@@ -155,6 +191,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
+  bridge = null
+  focusSpies.clear()
 })
 
 function renderGrid() {
@@ -185,7 +223,8 @@ describe('TerminalGrid', () => {
     // Terminal components should use the actual IDs from the context
     if (!bridge) throw new Error('Bridge not initialized')
     expect(screen.getByTestId(`terminal-${bridge.terminals.top}`)).toBeInTheDocument()
-    expect(screen.getByTestId(`terminal-${bridge.terminals.bottom}`)).toBeInTheDocument()
+    // Bottom terminal is now inside TerminalTabs with -0 suffix
+    expect(screen.getByTestId(`terminal-${bridge.terminals.bottomBase}-0`)).toBeInTheDocument()
   })
 
   it('respects split view proportions and layout props', async () => {
@@ -227,17 +266,18 @@ describe('TerminalGrid', () => {
     fireEvent.click(screen.getByText('Terminal — main'))
     await new Promise(r => setTimeout(r, 120))
     const bottomFocusSpy = (await import('./Terminal')) as any
-    expect(bottomFocusSpy.__getFocusSpy(bridge!.terminals.bottom)).toHaveBeenCalled()
+    const bottomTerminalId = `${bridge!.terminals.bottomBase}-0`
+    expect(bottomFocusSpy.__getFocusSpy(bottomTerminalId)).toHaveBeenCalled()
 
     // Also clicking bodies should focus
     const topBody = screen.getByTestId(`terminal-${bridge!.terminals.top}`).parentElement as HTMLElement
-    const bottomBody = screen.getByTestId(`terminal-${bridge!.terminals.bottom}`).parentElement as HTMLElement
+    const bottomBody = screen.getByTestId(`terminal-${bottomTerminalId}`).parentElement as HTMLElement
     fireEvent.click(topBody)
     await new Promise(r => setTimeout(r, 120))
     expect(topFocus.__getFocusSpy(bridge!.terminals.top)).toHaveBeenCalled()
     fireEvent.click(bottomBody)
     await new Promise(r => setTimeout(r, 120))
-    expect(bottomFocusSpy.__getFocusSpy(bridge!.terminals.bottom)).toHaveBeenCalled()
+    expect(bottomFocusSpy.__getFocusSpy(bottomTerminalId)).toHaveBeenCalled()
   })
 
   it('switches terminals when session changes and focuses according to session focus state', async () => {
@@ -264,13 +304,17 @@ describe('TerminalGrid', () => {
 
     // New terminal ids mounted (remounted due to key change)
     expect(screen.getByTestId('terminal-session-dev-top')).toBeInTheDocument()
-    expect(screen.getByTestId('terminal-session-dev-bottom')).toBeInTheDocument()
+    // Bottom terminal is now in tabs with -0 suffix, wait for it to be created
+    await waitFor(() => {
+      expect(screen.getByTestId('terminal-session-dev-bottom-0')).toBeInTheDocument()
+    }, { timeout: 3000 })
 
     // Click headers to drive focus
     const m = (await import('./Terminal')) as any
     fireEvent.click(screen.getByText('Terminal — dev'))
     await new Promise(r => setTimeout(r, 120))
-    expect(m.__getFocusSpy('session-dev-bottom')).toHaveBeenCalled()
+    // Focus is now on the tab terminal with -0 suffix
+    expect(m.__getFocusSpy('session-dev-bottom-0')).toHaveBeenCalled()
     fireEvent.click(screen.getByText('Session — dev'))
     await new Promise(r => setTimeout(r, 120))
     expect(m.__getFocusSpy('session-dev-top')).toHaveBeenCalled()
@@ -289,10 +333,14 @@ describe('TerminalGrid', () => {
 
     const m = (await import('./Terminal')) as any
     const topId = bridge!.terminals.top
-    const bottomId = bridge!.terminals.bottom
+    const bottomId = bridge!.terminals.bottomBase + '-0' // Tab terminal has -0 suffix
     
     expect(m.__getMountCount(topId)).toBe(1)
-    expect(m.__getMountCount(bottomId)).toBe(1)
+    
+    // Wait for bottom terminal tab to be created asynchronously
+    await waitFor(() => {
+      expect(m.__getMountCount(bottomId)).toBe(1)
+    }, { timeout: 3000 })
 
     // Dispatch reset event -> key increments -> both terminals remount
     act(() => {

@@ -75,7 +75,7 @@ describe('SelectionContext', () => {
       // Terminal IDs are now based on project path hash
       // For /test/project path, verify the pattern
       expect(result.current.terminals.top).toMatch(/^orchestrator-project-[a-f0-9]+-top$/)
-      expect(result.current.terminals.bottom).toMatch(/^orchestrator-project-[a-f0-9]+-bottom$/)
+      expect(result.current.terminals.bottomBase).toMatch(/^orchestrator-project-[a-f0-9]+-bottom$/)
     })
 
     it('should map session selection to session-specific terminals', async () => {
@@ -96,7 +96,8 @@ describe('SelectionContext', () => {
       await waitFor(() => {
         expect(result.current.terminals).toEqual({
           top: 'session-test-session-top',
-          bottom: 'session-test-session-bottom'
+          bottomBase: 'session-test-session-bottom',
+          workingDirectory: '/test/path'
         })
       })
     })
@@ -119,7 +120,8 @@ describe('SelectionContext', () => {
       await waitFor(() => {
         expect(result.current.terminals).toEqual({
           top: 'session-my-test_session.123-top',
-          bottom: 'session-my-test_session.123-bottom'
+          bottomBase: 'session-my-test_session.123-bottom',
+          workingDirectory: '/test/path'
         })
       })
     })
@@ -139,14 +141,12 @@ describe('SelectionContext', () => {
       
       // Find the actual terminal creation calls
       const terminalCalls = mockInvoke.mock.calls.filter(call => call[0] === 'create_terminal')
-      expect(terminalCalls.length).toBeGreaterThanOrEqual(2)
+      expect(terminalCalls.length).toBeGreaterThanOrEqual(1)
       
-      // Verify we have top and bottom terminals created
+      // Verify we have top terminal created (bottom terminals now managed by tab system)
       const terminalIds = terminalCalls.map(call => (call[1] as any)?.id as string)
       const hasTop = terminalIds.some(id => id?.includes('-top'))
-      const hasBottom = terminalIds.some(id => id?.includes('-bottom'))
       expect(hasTop).toBe(true)
-      expect(hasBottom).toBe(true)
       
       // Verify cwd is from projectPath
       terminalCalls.forEach(call => {
@@ -167,10 +167,6 @@ describe('SelectionContext', () => {
 
       expect(mockInvoke).toHaveBeenCalledWith('create_terminal', {
         id: 'session-test-session-top',
-        cwd: '/custom/worktree/path'
-      })
-      expect(mockInvoke).toHaveBeenCalledWith('create_terminal', {
-        id: 'session-test-session-bottom',
         cwd: '/custom/worktree/path'
       })
     })
@@ -248,17 +244,12 @@ describe('SelectionContext', () => {
         })
       })
 
-      // Should check existence for both terminals
+      // Should check existence for top terminal only (bottom handled by tab system)
       expect(mockInvoke).toHaveBeenCalledWith('terminal_exists', { id: 'session-test-top' })
-      expect(mockInvoke).toHaveBeenCalledWith('terminal_exists', { id: 'session-test-bottom' })
       
-      // Should create bottom but not top (since top exists)
+      // Should not create top terminal since it already exists
       expect(mockInvoke).not.toHaveBeenCalledWith('create_terminal', {
         id: 'session-test-top',
-        cwd: '/test/path'
-      })
-      expect(mockInvoke).toHaveBeenCalledWith('create_terminal', {
-        id: 'session-test-bottom',
         cwd: '/test/path'
       })
     })
@@ -309,7 +300,7 @@ describe('SelectionContext', () => {
       ))
 
       // Should only create terminals once per ID despite multiple calls
-      expect(createTerminalCalls).toBe(2) // top and bottom only
+      expect(createTerminalCalls).toBe(1) // top only (bottom handled by tab system)
     })
   })
 

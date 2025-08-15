@@ -1,4 +1,5 @@
 import { Terminal, TerminalHandle } from './Terminal'
+import { TerminalTabs, TerminalTabsHandle } from './TerminalTabs'
 import { DraftPlaceholder } from '../drafts/DraftPlaceholder'
 import Split from 'react-split'
 import { useSelection } from '../../contexts/SelectionContext'
@@ -11,7 +12,7 @@ export function TerminalGrid() {
     const [terminalKey, setTerminalKey] = useState(0)
     
     const claudeTerminalRef = useRef<TerminalHandle>(null)
-    const regularTerminalRef = useRef<TerminalHandle>(null)
+    const terminalTabsRef = useRef<TerminalTabsHandle>(null)
     
 
     const getSessionKey = () => {
@@ -40,8 +41,8 @@ export function TerminalGrid() {
         setTimeout(() => {
             if (focusArea === 'claude' && claudeTerminalRef.current) {
                 claudeTerminalRef.current.focus()
-            } else if (focusArea === 'terminal' && regularTerminalRef.current) {
-                regularTerminalRef.current.focus()
+            } else if (focusArea === 'terminal' && terminalTabsRef.current) {
+                terminalTabsRef.current.focus()
             }
             // TODO: Add diff focus handling when we implement it
         }, 150)
@@ -53,7 +54,7 @@ export function TerminalGrid() {
         if (currentFocus === 'claude') {
             claudeTerminalRef.current?.focus()
         } else if (currentFocus === 'terminal') {
-            regularTerminalRef.current?.focus()
+            terminalTabsRef.current?.focus()
         }
     }, [currentFocus, selection])
 
@@ -72,7 +73,7 @@ export function TerminalGrid() {
         const sessionKey = getSessionKey()
         setFocusForSession(sessionKey, 'terminal')
         setTimeout(() => {
-            regularTerminalRef.current?.focus()
+            terminalTabsRef.current?.focus()
         }, 100)
     }
 
@@ -114,7 +115,7 @@ export function TerminalGrid() {
                     <div className="session-header-ruler flex-shrink-0" />
                     <div className="flex-1 min-h-0" onClick={handleClaudeSessionClick}>
                         <Terminal 
-                            key={`${terminals.top}-${terminalKey}`}
+                            key={`top-terminal-${terminalKey}`}
                             ref={claudeTerminalRef}
                             terminalId={terminals.top} 
                             className="h-full w-full" 
@@ -133,12 +134,15 @@ export function TerminalGrid() {
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400 mr-1" title="Focus Terminal (⌘/)">⌘/</span>
                     </div>
-                    <div className="flex-1 min-h-0" onClick={handleTerminalClick}>
-                        <Terminal 
-                            key={`${terminals.bottom}-${terminalKey}`}
-                            ref={regularTerminalRef}
-                            terminalId={terminals.bottom} 
-                            className="h-full w-full" 
+                    <div className="flex-1 min-h-0">
+                        <TerminalTabs
+                            key={`terminal-tabs-${terminalKey}`}
+                            ref={terminalTabsRef}
+                            baseTerminalId={terminals.bottomBase}
+                            workingDirectory={terminals.workingDirectory}
+                            className="h-full"
+                            sessionName={selection.kind === 'session' ? selection.payload : undefined}
+                            isOrchestrator={selection.kind === 'orchestrator'}
                         />
                     </div>
                 </div>

@@ -758,7 +758,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 onClose={() => setSwitchOrchestratorModal(false)}
                 onSwitch={async (agentType) => {
                     // Get current orchestrator terminal IDs from the selection context
-                    const orchestratorTerminals = [terminals.top, terminals.bottom]
+                    const orchestratorTerminals = [terminals.top, `${terminals.bottomBase}-0`]
                     // Also try to close any 'right' terminal if it exists
                     const allTerminals = [...orchestratorTerminals]
                     if (terminals.top) {
