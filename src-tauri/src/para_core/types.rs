@@ -45,6 +45,7 @@ pub struct Session {
 pub enum SessionStatus {
     Active,
     Cancelled,
+    Draft,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -60,6 +61,7 @@ impl SessionStatus {
         match self {
             SessionStatus::Active => "active",
             SessionStatus::Cancelled => "cancelled",
+            SessionStatus::Draft => "draft",
         }
     }
 }
@@ -71,6 +73,7 @@ impl FromStr for SessionStatus {
         match s {
             "active" => Ok(SessionStatus::Active),
             "cancelled" => Ok(SessionStatus::Cancelled),
+            "draft" => Ok(SessionStatus::Draft),
             _ => Err(format!("Invalid session status: {s}")),
         }
     }

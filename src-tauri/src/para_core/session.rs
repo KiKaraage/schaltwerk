@@ -397,6 +397,7 @@ impl SessionManager {
             let status_type = match session.status {
                 SessionStatus::Active => SessionStatusType::Active,
                 SessionStatus::Cancelled => SessionStatusType::Archived,
+                SessionStatus::Draft => SessionStatusType::Active, // Drafts show as active in UI
             };
             
             let info = SessionInfo {
@@ -597,7 +598,7 @@ impl SessionManager {
             branch: branch.clone(),
             parent_branch: "main".to_string(),
             worktree_path: worktree_path.clone(),
-            status: SessionStatus::Active,
+            status: SessionStatus::Draft,
             created_at: now,
             updated_at: now,
             last_activity: None,
@@ -659,6 +660,8 @@ impl SessionManager {
             return Err(anyhow!("Failed to create worktree: {}", e));
         }
         
+        // Update both status and state when starting a draft
+        self.db.update_session_status(&session.id, SessionStatus::Active)?;
         self.db.update_session_state(&session.id, SessionState::Running)?;
         
         // Copy draft_content to initial_prompt so Claude/Cursor can use it

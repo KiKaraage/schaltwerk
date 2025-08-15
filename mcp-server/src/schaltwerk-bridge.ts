@@ -127,7 +127,7 @@ export class SchaltwerkBridge {
     
     const session = await this.db!.get<Session>(`
       SELECT * FROM sessions 
-      WHERE name = ? AND status IN ('active', 'paused')
+      WHERE name = ? AND status IN ('active', 'paused', 'draft')
     `, name)
     
     return session
