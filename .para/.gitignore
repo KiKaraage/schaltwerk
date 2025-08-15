@@ -1,8 +1,0 @@
-# Ignore all schaltwerk contents except configuration and setup scripts
-*
-!.gitignore
-!config.json
-!setup.sh
-!setup-docker.sh
-!setup-worktree.sh
-!Dockerfile.custom
