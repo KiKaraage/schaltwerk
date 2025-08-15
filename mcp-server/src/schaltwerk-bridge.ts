@@ -1,4 +1,8 @@
 import fetch from 'node-fetch'
+import * as path from 'path'
+import * as os from 'os'
+import * as fs from 'fs'
+import { execSync } from 'child_process'
 
 export interface Session {
   id: string
@@ -32,8 +36,17 @@ export interface GitStats {
   calculated_at: number
 }
 
+interface GitStatusResult {
+  hasUncommittedChanges: boolean
+  modifiedFiles: number
+  untrackedFiles: number
+  stagedFiles: number
+  changedFiles: string[]
+}
+
 export class SchaltwerkBridge {
   private apiUrl: string = 'http://127.0.0.1:8547'
+  private webhookUrl: string = 'http://127.0.0.1:8547'
 
   constructor() {
   }
@@ -445,64 +458,48 @@ export class SchaltwerkBridge {
   }
 
   async updateDraftContent(sessionName: string, content: string, append: boolean = false): Promise<void> {
-    if (!this.db) await this.connect()
-    
-    const session = await this.getSession(sessionName)
-    if (!session) {
-      throw new Error(`Session '${sessionName}' not found`)
+    try {
+      const response = await fetch(`${this.apiUrl}/api/drafts/${encodeURIComponent(sessionName)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content,
+          append
+        })
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to update draft content: ${response.statusText}`)
+      }
+    } catch (error) {
+      console.error('Failed to update draft content via API:', error)
+      throw error
     }
-    
-    if (session.status !== 'draft') {
-      throw new Error(`Session '${sessionName}' is not a draft`)
-    }
-    
-    const newContent = append && session.draft_content 
-      ? session.draft_content + '\n' + content 
-      : content
-    
-    await this.db!.run(`
-      UPDATE sessions 
-      SET draft_content = ?, updated_at = ?, last_activity = ?
-      WHERE name = ?
-    `, newContent, Date.now(), Date.now(), sessionName)
   }
 
   async startDraftSession(sessionName: string, agentType?: string, skipPermissions?: boolean, baseBranch?: string): Promise<void> {
-    if (!this.db) await this.connect()
-    
-    const session = await this.getSession(sessionName)
-    if (!session) {
-      throw new Error(`Session '${sessionName}' not found`)
-    }
-    
-    if (session.status !== 'draft') {
-      throw new Error(`Session '${sessionName}' is not a draft`)
-    }
-    
-    const parentBranch = baseBranch || session.parent_branch
-    
-    await this.createWorktree(session.repository_path, sessionName, session.branch, parentBranch)
-    
-    const now = Date.now()
-    await this.db!.run(`
-      UPDATE sessions 
-      SET status = 'active', 
-          session_state = 'Running',
-          updated_at = ?, 
-          last_activity = ?,
-          initial_prompt = draft_content,
-          original_agent_type = ?,
-          original_skip_permissions = ?
-      WHERE name = ?
-    `, now, now, agentType || session.original_agent_type, skipPermissions ? 1 : 0, sessionName)
-    
-    if (agentType || skipPermissions !== undefined) {
-      await this.updateAppConfig(agentType, skipPermissions)
-    }
-    
-    const updatedSession = await this.getSession(sessionName)
-    if (updatedSession) {
-      await this.notifySessionAdded(updatedSession)
+    try {
+      const response = await fetch(`${this.apiUrl}/api/drafts/${encodeURIComponent(sessionName)}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agent_type: agentType,
+          skip_permissions: skipPermissions,
+          base_branch: baseBranch
+        })
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to start draft session: ${response.statusText}`)
+      }
+      
+      const updatedSession = await this.getSession(sessionName)
+      if (updatedSession) {
+        await this.notifySessionAdded(updatedSession)
+      }
+    } catch (error) {
+      console.error('Failed to start draft session via API:', error)
+      throw error
     }
   }
 

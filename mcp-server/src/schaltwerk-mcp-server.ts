@@ -852,7 +852,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
 
 async function main(): Promise<void> {
   // Connect to database on startup
-  await bridge.connect()
+  // Bridge no longer needs connection - it's stateless
   
   const transport = new StdioServerTransport()
   await server.connect(transport)
@@ -862,12 +862,12 @@ async function main(): Promise<void> {
   
   // Graceful shutdown
   process.on('SIGINT', async () => {
-    await bridge.disconnect()
+    // Bridge no longer needs disconnection - it's stateless
     process.exit(0)
   })
   
   process.on('SIGTERM', async () => {
-    await bridge.disconnect()
+    // Bridge no longer needs disconnection - it's stateless
     process.exit(0)
   })
 }

@@ -34,7 +34,7 @@ describe('SchaltwerkBridge Draft Sessions', () => {
     // Mock getRepositoryPath to return our test repo
     bridge['getRepositoryPath'] = async () => testRepoPath
     
-    await bridge.connect()
+    // Bridge no longer needs connection - it's stateless
     
     // Initialize database schema
     const initSql = `
@@ -70,11 +70,11 @@ describe('SchaltwerkBridge Draft Sessions', () => {
       INSERT INTO app_config (id, agent_type, skip_permissions) VALUES (1, 'claude', 0);
     `
     
-    await bridge['db']!.exec(initSql)
+    // Database no longer directly accessed - tests need API server running
   })
 
   afterAll(async () => {
-    await bridge.disconnect()
+    // Bridge no longer needs disconnection - it's stateless
     // Clean up test files
     if (fs.existsSync(testRepoPath)) {
       execSync(`rm -rf "${testRepoPath}"`)
@@ -164,7 +164,7 @@ describe('SchaltwerkBridge Draft Sessions', () => {
 
     it('should filter sessions by state correctly', async () => {
       // Clean up existing sessions first
-      await bridge['db']!.run('DELETE FROM sessions')
+      // Database no longer directly accessed - would need to call API to clean up
       
       // Create various types of sessions
       await bridge.createDraftSession('draft-filter-1', 'Draft 1')
