@@ -325,6 +325,47 @@ grep -E "slow|WARN|ERROR" ~/Library/Application\ Support/schaltwerk/logs/schaltw
 5. **Check cleanup**: Ensure terminals in logs are properly closed
 
 
+## MCP Server Integration
+
+### Architecture Principles
+- **MCP server must use REST API calls only**: Never directly access the SQLite database
+- **Stateless design**: MCP server should be a stateless HTTP client to the Rust backend
+- **Database operations**: All session/draft operations must go through `src-tauri/src/mcp_api.rs` endpoints
+
+### MCP Development Workflow
+```bash
+# After making changes to MCP server TypeScript code:
+cd mcp-server
+npm run build          # Rebuild MCP server
+# Then restart your MCP client/application to pick up changes
+```
+
+### Key API Endpoints
+- `POST /api/drafts` - Create draft session
+- `PATCH /api/drafts/{name}` - Update draft content (supports append=true)
+- `POST /api/drafts/{name}/start` - Start draft as active session
+- `DELETE /api/drafts/{name}` - Delete draft session
+
+### Performance Patterns
+- **Use atomic operations**: For draft content updates, use `append_draft_content()` instead of get-then-update pattern
+- **Avoid double database calls**: All operations should be single transactions where possible
+
+### Webhook Integration
+MCP server notifies Rust backend via webhooks:
+- `POST /webhook/draft-created` - When draft is created
+- `POST /webhook/session-added` - When session becomes active
+- `POST /webhook/session-removed` - When session is deleted
+
+### Testing MCP Changes
+```bash
+# Test MCP draft creation
+echo '{"name": "test-draft", "content": "# Test Draft"}' | json_pp
+# Verify draft appears in UI drafts section, not running sessions
+
+# Test API endpoints directly
+curl -X POST http://127.0.0.1:8547/api/drafts -H "Content-Type: application/json" -d '{"name":"test","content":"test"}'
+```
+
 ### Code Quality
 
 - Do not write comments, ensure we have self-documenting code.

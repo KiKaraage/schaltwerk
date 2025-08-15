@@ -181,11 +181,16 @@ body,
 html,
 body,
 #root {
-  height: 100%;
+  height: 100vh;
+  overflow: hidden;
 }
 
 body {
   @apply bg-slate-950 text-slate-100 antialiased;
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  padding: 0;
 }
 
 /* Session frame highlighting (use actual box-shadow on the element for better overflow handling) */
