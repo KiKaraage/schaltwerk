@@ -776,6 +776,23 @@ impl Database {
         
         Ok(())
     }
+
+    pub fn append_draft_content(&self, id: &str, content: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        
+        conn.execute(
+            "UPDATE sessions
+             SET draft_content = CASE 
+                 WHEN draft_content IS NULL OR draft_content = '' THEN ?1
+                 ELSE draft_content || char(10) || ?1
+             END,
+             updated_at = ?2
+             WHERE id = ?3",
+            params![content, Utc::now().timestamp(), id],
+        )?;
+        
+        Ok(())
+    }
     
     pub fn update_session_initial_prompt(&self, id: &str, prompt: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
@@ -958,5 +975,81 @@ mod database_tests {
         assert_eq!(db.get_agent_type().unwrap(), "claude");
         db.set_agent_type("cursor").unwrap();
         assert_eq!(db.get_agent_type().unwrap(), "cursor");
+    }
+
+    #[test]
+    fn test_append_draft_content_sql_logic() {
+        use tempfile::NamedTempFile;
+        
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_str().unwrap();
+        let db = Database::new(Some(db_path.into())).unwrap();
+        
+        // Test the SQL logic directly by creating a session first 
+        let conn = db.conn.lock().unwrap();
+        
+        // Create a test session
+        conn.execute(
+            "INSERT INTO sessions (id, name, repository_path, repository_name, branch, parent_branch, worktree_path, status, created_at, updated_at, draft_content) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                "test_id",
+                "test_session", 
+                "/test/repo",
+                "test-repo",
+                "test-branch",
+                "main",
+                "/test/worktree",
+                "draft",
+                chrono::Utc::now().timestamp(),
+                chrono::Utc::now().timestamp(),
+                "initial content"
+            ],
+        ).unwrap();
+        
+        // Test append functionality
+        conn.execute(
+            "UPDATE sessions
+             SET draft_content = CASE 
+                 WHEN draft_content IS NULL OR draft_content = '' THEN ?1
+                 ELSE draft_content || char(10) || ?1
+             END,
+             updated_at = ?2
+             WHERE id = ?3",
+            params!["appended content", chrono::Utc::now().timestamp(), "test_id"],
+        ).unwrap();
+        
+        // Verify the result
+        let content: String = conn.query_row(
+            "SELECT draft_content FROM sessions WHERE id = ?1",
+            params!["test_id"],
+            |row| row.get(0)
+        ).unwrap();
+        
+        assert_eq!(content, "initial content\nappended content");
+        
+        // Test appending to empty content
+        conn.execute(
+            "UPDATE sessions SET draft_content = NULL WHERE id = ?1",
+            params!["test_id"],
+        ).unwrap();
+        
+        conn.execute(
+            "UPDATE sessions
+             SET draft_content = CASE 
+                 WHEN draft_content IS NULL OR draft_content = '' THEN ?1
+                 ELSE draft_content || char(10) || ?1
+             END
+             WHERE id = ?2",
+            params!["first content", "test_id"],
+        ).unwrap();
+        
+        let content: String = conn.query_row(
+            "SELECT draft_content FROM sessions WHERE id = ?1",
+            params!["test_id"],
+            |row| row.get(0)
+        ).unwrap();
+        
+        assert_eq!(content, "first content");
     }
 }

@@ -1,9 +1,3 @@
-import sqlite3 from 'sqlite3'
-import { open, Database } from 'sqlite'
-import * as path from 'path'
-import * as os from 'os'
-import * as fs from 'fs'
-import { execSync } from 'child_process'
 import fetch from 'node-fetch'
 
 export interface Session {
@@ -38,185 +32,88 @@ export interface GitStats {
   calculated_at: number
 }
 
-interface GitStatusResult {
-  hasUncommittedChanges: boolean
-  modifiedFiles: number
-  untrackedFiles: number
-  stagedFiles: number
-  changedFiles: string[]
-}
-
 export class SchaltwerkBridge {
-  private dbPath: string
-  private db?: Database<sqlite3.Database, sqlite3.Statement>
-  private webhookUrl: string = 'http://127.0.0.1:8547'
+  private apiUrl: string = 'http://127.0.0.1:8547'
 
   constructor() {
-    // Find the database path - Schaltwerk uses project-specific databases
-    const dataDir = process.platform === 'darwin' 
-      ? path.join(os.homedir(), 'Library', 'Application Support', 'schaltwerk')
-      : process.platform === 'win32'
-      ? path.join(process.env.APPDATA || '', 'schaltwerk')
-      : path.join(os.homedir(), '.local', 'share', 'schaltwerk')
-    
-    // Find the project-specific database by looking for para-ui projects
-    const projectsDir = path.join(dataDir, 'projects')
-    if (fs.existsSync(projectsDir)) {
-      const projectDirs = fs.readdirSync(projectsDir)
-      const paraUiProject = projectDirs.find(dir => dir.startsWith('para-ui_'))
-      if (paraUiProject) {
-        this.dbPath = path.join(projectsDir, paraUiProject, 'sessions.db')
-      } else {
-        throw new Error('Could not find para-ui project database')
-      }
-    } else {
-      throw new Error('Schaltwerk projects directory not found')
-    }
-  }
-
-  async connect(): Promise<void> {
-    this.db = await open({
-      filename: this.dbPath,
-      driver: sqlite3.Database
-    })
-  }
-
-  async disconnect(): Promise<void> {
-    if (this.db) {
-      await this.db.close()
-    }
   }
 
   async listSessions(): Promise<Session[]> {
-    if (!this.db) await this.connect()
-    
-    const sessions = await this.db!.all<Session[]>(`
-      SELECT 
-        id,
-        name,
-        display_name,
-        repository_path,
-        repository_name,
-        branch,
-        parent_branch,
-        worktree_path,
-        status,
-        session_state,
-        created_at,
-        updated_at,
-        last_activity,
-        initial_prompt,
-        draft_content,
-        ready_to_merge,
-        original_agent_type,
-        original_skip_permissions,
-        pending_name_generation,
-        was_auto_generated
-      FROM sessions
-      WHERE status IN ('active', 'paused')
-      ORDER BY 
-        CASE WHEN ready_to_merge = 0 THEN 0 ELSE 1 END,
-        last_activity DESC
-    `)
-    
-    return sessions
+    try {
+      const response = await fetch(`${this.apiUrl}/api/sessions`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to list sessions: ${response.statusText}`)
+      }
+      
+      const sessions = await response.json() as Session[]
+      return sessions.filter(s => s.status !== 'draft')
+    } catch (error) {
+      console.error('Failed to list sessions via API:', error)
+      return []
+    }
   }
 
   async getSession(name: string): Promise<Session | undefined> {
-    if (!this.db) await this.connect()
-    
-    const session = await this.db!.get<Session>(`
-      SELECT * FROM sessions 
-      WHERE name = ? AND status IN ('active', 'paused', 'draft')
-    `, name)
-    
-    return session
+    try {
+      const response = await fetch(`${this.apiUrl}/api/sessions/${encodeURIComponent(name)}`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      })
+      
+      if (response.status === 404) {
+        return undefined
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get session: ${response.statusText}`)
+      }
+      
+      return await response.json() as Session
+    } catch (error) {
+      console.error('Failed to get session via API:', error)
+      return undefined
+    }
   }
 
   async createSession(name: string, prompt?: string, baseBranch?: string, agentType?: string, skipPermissions?: boolean): Promise<Session> {
-    if (!this.db) await this.connect()
-    
-    // Get the repository path from app config or current directory
-    const repoPath = await this.getRepositoryPath()
-    const repoName = path.basename(repoPath)
-    
-    // Generate unique session ID
-    const sessionId = `${Date.now()}-${name}`
-    
-    // Get parent branch (default to main/master)
-    const parentBranch = baseBranch || await this.getDefaultBranch(repoPath)
-    
-    // Create branch name
-    const branchName = `schaltwerk/${name}`
-    
-    // Create worktree
-    const worktreePath = await this.createWorktree(repoPath, name, branchName, parentBranch)
-    
-    // Create session in database
-    const now = Date.now()
-    const session: Session = {
-      id: sessionId,
-      name,
-      display_name: undefined,
-      repository_path: repoPath,
-      repository_name: repoName,
-      branch: branchName,
-      parent_branch: parentBranch,
-      worktree_path: worktreePath,
-      status: 'active',
-      created_at: now,
-      updated_at: now,
-      last_activity: now,
-      initial_prompt: prompt || undefined,
-      ready_to_merge: false,
-      original_agent_type: agentType || 'claude',
-      original_skip_permissions: skipPermissions || false,
-      pending_name_generation: false,
-      was_auto_generated: false
+    try {
+      const response = await fetch(`${this.apiUrl}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          prompt,
+          base_branch: baseBranch,
+          user_edited_name: false
+        })
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to create session: ${response.statusText}`)
+      }
+      
+      const session = await response.json() as Session
+      
+      // Also update app config if agent type or skip permissions were specified
+      if (agentType || skipPermissions !== undefined) {
+        await this.updateAppConfig(agentType, skipPermissions)
+      }
+      
+      // Notify Schaltwerk UI about the new session  
+      await this.notifySessionAdded(session)
+      
+      return session
+    } catch (error) {
+      console.error('Failed to create session via API:', error)
+      throw error
     }
-    
-    await this.db!.run(`
-      INSERT INTO sessions (
-        id, name, display_name, repository_path, repository_name,
-        branch, parent_branch, worktree_path,
-        status, created_at, updated_at, last_activity, initial_prompt, ready_to_merge,
-        original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      session.id,
-      session.name,
-      session.display_name,
-      session.repository_path,
-      session.repository_name,
-      session.branch,
-      session.parent_branch,
-      session.worktree_path,
-      session.status,
-      session.created_at,
-      session.updated_at,
-      session.last_activity,
-      session.initial_prompt,
-      session.ready_to_merge ? 1 : 0,
-      session.original_agent_type,
-      session.original_skip_permissions ? 1 : 0,
-      session.pending_name_generation ? 1 : 0,
-      session.was_auto_generated ? 1 : 0
-    ])
-    
-    // Also update app config if agent type or skip permissions were specified
-    if (agentType || skipPermissions !== undefined) {
-      await this.updateAppConfig(agentType, skipPermissions)
-    }
-    
-    // Notify Schaltwerk UI about the new session
-    await this.notifySessionAdded(session)
-    
-    return session
   }
 
   async sendFollowUpMessage(sessionName: string, message: string, messageType: 'user' | 'system' = 'user'): Promise<void> {
-    if (!this.db) await this.connect()
-    
     const session = await this.getSession(sessionName)
     if (!session) {
       throw new Error(`Session '${sessionName}' not found`)
@@ -227,7 +124,6 @@ export class SchaltwerkBridge {
   }
 
   async cancelSession(name: string, force: boolean = false): Promise<void> {
-    if (!this.db) await this.connect()
     
     const session = await this.getSession(name)
     if (!session) {
@@ -286,45 +182,40 @@ export class SchaltwerkBridge {
       console.error(`Failed to delete branch: ${error}`)
     }
     
-    // Mark session as cancelled in database
-    await this.db!.run(`
-      UPDATE sessions 
-      SET status = 'cancelled', updated_at = ?
-      WHERE name = ?
-    `, Date.now(), name)
-    
-    // Notify Schaltwerk UI about the removed session
-    await this.notifySessionRemoved(name)
+    // Cancel session via API
+    try {
+      const response = await fetch(`${this.apiUrl}/api/sessions/${encodeURIComponent(name)}`, {
+        method: 'DELETE'
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to cancel session: ${response.statusText}`)
+      }
+    } catch (error) {
+      console.error('Failed to cancel session via API, notifying manually:', error)
+      // If API fails, at least notify the UI
+      await this.notifySessionRemoved(name)
+    }
   }
 
   async pauseSession(name: string): Promise<void> {
-    if (!this.db) await this.connect()
-    
     const session = await this.getSession(name)
     if (!session) {
       throw new Error(`Session '${name}' not found`)
     }
     
-    // Mark session as paused in database (we'll add a 'paused' status)
-    await this.db!.run(`
-      UPDATE sessions 
-      SET status = 'paused', updated_at = ?
-      WHERE name = ?
-    `, Date.now(), name)
+    // TODO: Implement pause session via API when needed
+    // For now, this method does nothing as pausing isn't fully implemented
+    console.warn('pauseSession: API implementation pending')
     
     // Note: We intentionally do NOT remove the worktree or branch
     // This preserves all work and allows resuming later
   }
 
   async getGitStats(sessionId: string): Promise<GitStats | undefined> {
-    if (!this.db) await this.connect()
-    
-    const stats = await this.db!.get<GitStats>(`
-      SELECT * FROM git_stats 
-      WHERE session_id = ?
-    `, sessionId)
-    
-    return stats
+    // TODO: Implement git stats via API when needed
+    console.warn('getGitStats: API implementation pending')
+    return undefined
   }
 
   private async checkGitStatus(worktreePath: string): Promise<GitStatusResult> {
@@ -443,29 +334,8 @@ export class SchaltwerkBridge {
   }
 
   private async updateAppConfig(agentType?: string, skipPermissions?: boolean): Promise<void> {
-    if (!this.db) await this.connect()
-    
-    const updates: string[] = []
-    const values: any[] = []
-    
-    if (agentType) {
-      updates.push('agent_type = ?')
-      values.push(agentType)
-    }
-    
-    if (skipPermissions !== undefined) {
-      updates.push('skip_permissions = ?')
-      values.push(skipPermissions ? 1 : 0)
-    }
-    
-    if (updates.length > 0) {
-      values.push(1) // id = 1
-      await this.db!.run(`
-        UPDATE app_config 
-        SET ${updates.join(', ')}
-        WHERE id = ?
-      `, values)
-    }
+    // TODO: Implement app config update via API when needed
+    console.warn('updateAppConfig: API implementation pending', { agentType, skipPermissions })
   }
 
   private async notifySessionAdded(session: Session): Promise<void> {
@@ -550,71 +420,28 @@ export class SchaltwerkBridge {
   }
 
   async createDraftSession(name: string, content?: string, baseBranch?: string): Promise<Session> {
-    if (!this.db) await this.connect()
-    
-    const repoPath = await this.getRepositoryPath()
-    const repoName = path.basename(repoPath)
-    const sessionId = `${Date.now()}-${name}`
-    const parentBranch = baseBranch || await this.getDefaultBranch(repoPath)
-    const branchName = `schaltwerk/${name}`
-    const worktreePath = path.join(repoPath, '.schaltwerk', 'worktrees', name)
-    
-    const now = Date.now()
-    const session: Session = {
-      id: sessionId,
-      name,
-      display_name: undefined,
-      repository_path: repoPath,
-      repository_name: repoName,
-      branch: branchName,
-      parent_branch: parentBranch,
-      worktree_path: worktreePath,
-      status: 'draft',
-      session_state: 'Draft',
-      created_at: now,
-      updated_at: now,
-      last_activity: now,
-      initial_prompt: undefined,
-      draft_content: content || '',
-      ready_to_merge: false,
-      original_agent_type: 'claude',
-      original_skip_permissions: false,
-      pending_name_generation: false,
-      was_auto_generated: false
+    try {
+      const response = await fetch(`${this.apiUrl}/api/drafts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          content: content || '',
+          parent_branch: baseBranch
+        })
+      })
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`)
+      }
+      
+      const session = await response.json() as Session
+      await this.notifyDraftCreated(session)
+      return session
+    } catch (error) {
+      console.error('Failed to create draft via API:', error)
+      throw error
     }
-    
-    await this.db!.run(`
-      INSERT INTO sessions (
-        id, name, display_name, repository_path, repository_name,
-        branch, parent_branch, worktree_path,
-        status, session_state, created_at, updated_at, last_activity, draft_content, ready_to_merge,
-        original_agent_type, original_skip_permissions, pending_name_generation, was_auto_generated
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      session.id,
-      session.name,
-      session.display_name,
-      session.repository_path,
-      session.repository_name,
-      session.branch,
-      session.parent_branch,
-      session.worktree_path,
-      session.status,
-      session.session_state,
-      session.created_at,
-      session.updated_at,
-      session.last_activity,
-      session.draft_content,
-      session.ready_to_merge ? 1 : 0,
-      session.original_agent_type,
-      session.original_skip_permissions ? 1 : 0,
-      session.pending_name_generation ? 1 : 0,
-      session.was_auto_generated ? 1 : 0
-    ])
-    
-    await this.notifyDraftCreated(session)
-    
-    return session
   }
 
   async updateDraftContent(sessionName: string, content: string, append: boolean = false): Promise<void> {
@@ -680,108 +507,76 @@ export class SchaltwerkBridge {
   }
 
   async deleteDraftSession(sessionName: string): Promise<void> {
-    if (!this.db) await this.connect()
-    
-    const session = await this.getSession(sessionName)
-    if (!session) {
-      throw new Error(`Session '${sessionName}' not found`)
+    try {
+      const response = await fetch(`${this.apiUrl}/api/drafts/${encodeURIComponent(sessionName)}`, {
+        method: 'DELETE'
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to delete draft: ${response.statusText}`)
+      }
+      
+      await this.notifySessionRemoved(sessionName)
+    } catch (error) {
+      console.error('Failed to delete draft session via API:', error)
+      throw error
     }
-    
-    if (session.status !== 'draft') {
-      throw new Error(`Session '${sessionName}' is not a draft`)
-    }
-    
-    await this.db!.run(`
-      UPDATE sessions 
-      SET status = 'cancelled', updated_at = ?
-      WHERE name = ?
-    `, Date.now(), sessionName)
-    
-    await this.notifySessionRemoved(sessionName)
   }
 
   async listDraftSessions(): Promise<Session[]> {
-    if (!this.db) await this.connect()
-    
-    const sessions = await this.db!.all<Session[]>(`
-      SELECT 
-        id,
-        name,
-        display_name,
-        repository_path,
-        repository_name,
-        branch,
-        parent_branch,
-        worktree_path,
-        status,
-        session_state,
-        created_at,
-        updated_at,
-        last_activity,
-        initial_prompt,
-        draft_content,
-        ready_to_merge,
-        original_agent_type,
-        original_skip_permissions,
-        pending_name_generation,
-        was_auto_generated
-      FROM sessions
-      WHERE status = 'draft'
-      ORDER BY updated_at DESC
-    `)
-    
-    return sessions
+    try {
+      const response = await fetch(`${this.apiUrl}/api/drafts`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to list drafts: ${response.statusText}`)
+      }
+      
+      return await response.json() as Session[]
+    } catch (error) {
+      console.error('Failed to list draft sessions via API:', error)
+      return []
+    }
   }
 
   async listSessionsByState(filter?: 'all' | 'active' | 'draft' | 'reviewed'): Promise<Session[]> {
-    if (!this.db) await this.connect()
-    
-    let whereClause = "WHERE status IN ('active', 'paused')"
-    
-    switch (filter) {
-      case 'active':
-        whereClause = "WHERE status = 'active'"
-        break
-      case 'draft':
-        whereClause = "WHERE status = 'draft'"
-        break
-      case 'reviewed':
-        whereClause = "WHERE ready_to_merge = 1"
-        break
-      case 'all':
-      default:
-        break
+    try {
+      if (filter === 'draft') {
+        return this.listDraftSessions()
+      }
+      
+      const response = await fetch(`${this.apiUrl}/api/sessions`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to list sessions: ${response.statusText}`)
+      }
+      
+      let sessions = await response.json() as Session[]
+      
+      switch (filter) {
+        case 'active':
+          sessions = sessions.filter(s => s.status === 'active')
+          break
+        case 'reviewed':
+          sessions = sessions.filter(s => s.ready_to_merge)
+          break
+        case 'all':
+        default:
+          // Include both active sessions and drafts
+          const drafts = await this.listDraftSessions()
+          sessions = [...sessions, ...drafts]
+          break
+      }
+      
+      return sessions
+    } catch (error) {
+      console.error('Failed to list sessions by state via API:', error)
+      return []
     }
-    
-    const sessions = await this.db!.all<Session[]>(`
-      SELECT 
-        id,
-        name,
-        display_name,
-        repository_path,
-        repository_name,
-        branch,
-        parent_branch,
-        worktree_path,
-        status,
-        session_state,
-        created_at,
-        updated_at,
-        last_activity,
-        initial_prompt,
-        draft_content,
-        ready_to_merge,
-        original_agent_type,
-        original_skip_permissions,
-        pending_name_generation,
-        was_auto_generated
-      FROM sessions
-      ${whereClause}
-      ORDER BY 
-        CASE WHEN ready_to_merge = 0 THEN 0 ELSE 1 END,
-        last_activity DESC
-    `)
-    
-    return sessions
   }
 }

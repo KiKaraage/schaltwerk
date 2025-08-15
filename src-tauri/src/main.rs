@@ -16,6 +16,7 @@ mod open_apps;
 mod projects;
 mod project_manager;
 mod settings;
+mod mcp_api;
 
 use std::sync::Arc;
 use project_manager::ProjectManager;
@@ -574,6 +575,10 @@ async fn start_webhook_server(app: tauri::AppHandle) {
                 }
                 
                 Ok(Response::new("OK".to_string()))
+            }
+            // Delegate all MCP API endpoints to the mcp_api module
+            (_, path) if path.starts_with("/api/") => {
+                mcp_api::handle_mcp_request(req, app).await
             }
             _ => {
                 let mut response = Response::new("Not Found".to_string());
@@ -1289,6 +1294,7 @@ fn main() {
             para_core_start_draft_session,
             para_core_update_session_state,
             para_core_update_draft_content,
+            para_core_append_draft_content,
             para_core_list_sessions_by_state,
             open_in_vscode,
             open_apps::get_default_open_app,
@@ -1558,6 +1564,18 @@ async fn para_core_update_draft_content(name: String, content: String) -> Result
     
     manager.update_draft_content(&name, &content)
         .map_err(|e| format!("Failed to update draft content: {e}"))
+}
+
+#[tauri::command]
+async fn para_core_append_draft_content(name: String, content: String) -> Result<(), String> {
+    log::info!("Appending to draft content for session: {name}");
+    
+    let core = get_para_core().await?;
+    let core_lock = core.lock().await;
+    let manager = core_lock.session_manager();
+    
+    manager.append_draft_content(&name, &content)
+        .map_err(|e| format!("Failed to append draft content: {e}"))
 }
 
 #[tauri::command]

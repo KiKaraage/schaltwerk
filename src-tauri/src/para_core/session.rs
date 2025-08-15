@@ -692,6 +692,12 @@ impl SessionManager {
         Ok(())
     }
 
+    pub fn append_draft_content(&self, session_name: &str, content: &str) -> Result<()> {
+        let session = self.db.get_session_by_name(&self.repo_path, session_name)?;
+        self.db.append_draft_content(&session.id, content)?;
+        Ok(())
+    }
+
     pub fn list_sessions_by_state(&self, state: SessionState) -> Result<Vec<Session>> {
         let sessions = self.db.list_sessions_by_state(&self.repo_path, state)?;
         Ok(sessions.into_iter()

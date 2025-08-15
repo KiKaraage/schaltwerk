@@ -12,22 +12,19 @@ interface RightPanelTabsProps {
 
 export function RightPanelTabs({ onFileSelect }: RightPanelTabsProps) {
   const { selection, isDraft } = useSelection()
-  const [activeTab, setActiveTab] = useState<'changes' | 'task'>('changes')
+  const [userSelectedTab, setUserSelectedTab] = useState<'changes' | 'task' | null>(null)
   const [previewDraftName, setPreviewDraftName] = useState<string | null>(null)
+
+  // Determine active tab based on user selection or smart defaults
+  const activeTab = userSelectedTab || (
+    selection.kind === 'orchestrator' ? 'task' :
+    selection.kind === 'session' && isDraft ? 'task' : 'changes'
+  )
 
   // Reset preview when leaving orchestrator
   useEffect(() => {
     if (selection.kind !== 'orchestrator') setPreviewDraftName(null)
   }, [selection])
-
-  // Default tab per mode: orchestrator -> task (drafts list), draft session -> task, running session -> changes
-  useEffect(() => {
-    if (selection.kind === 'orchestrator') {
-      setActiveTab('task')
-    } else if (selection.kind === 'session') {
-      setActiveTab(isDraft ? 'task' : 'changes')
-    }
-  }, [selection, isDraft])
 
   // Note: removed Cmd+D toggle to reserve shortcut for New Draft
 
@@ -40,7 +37,7 @@ export function RightPanelTabs({ onFileSelect }: RightPanelTabsProps) {
     <div className="h-full flex flex-col bg-panel">
       <div className="flex items-center border-b border-slate-800">
         <button
-          onClick={() => setActiveTab('changes')}
+          onClick={() => setUserSelectedTab('changes')}
           className={clsx(
             'flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
             activeTab === 'changes' ? 'text-slate-200 bg-slate-800/50 border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
@@ -51,7 +48,7 @@ export function RightPanelTabs({ onFileSelect }: RightPanelTabsProps) {
           <span>Changes</span>
         </button>
         <button
-          onClick={() => setActiveTab('task')}
+          onClick={() => setUserSelectedTab('task')}
           className={clsx(
             'flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
             activeTab === 'task' ? 'text-slate-200 bg-slate-800/50 border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
@@ -80,7 +77,7 @@ export function RightPanelTabs({ onFileSelect }: RightPanelTabsProps) {
 
       <div className="flex-1 overflow-hidden">
         {activeTab === 'changes' ? (
-          <div data-testid="diff-panel"><SimpleDiffPanel onFileSelect={onFileSelect} /></div>
+          <SimpleDiffPanel onFileSelect={onFileSelect} />
         ) : (
           // Task/Drafts tab content
           selection.kind === 'session' ? (
