@@ -41,7 +41,7 @@ describe('RightPanelTabs', () => {
     mockUseSelection.mockReturnValue({
       selection: { kind: 'session', payload: 'test' },
       isDraft: false,
-      terminals: { top: 'test-top', bottom: 'test-bottom' },
+      terminals: { top: 'test-top', bottomBase: 'test-bottom', workingDirectory: '/test' },
       setSelection: vi.fn(),
       clearTerminalTracking: vi.fn(),
       isReady: true
@@ -54,7 +54,7 @@ describe('RightPanelTabs', () => {
       mockUseSelection.mockReturnValue({
         selection: { kind: 'session', payload: 'session1' },
         isDraft: false,
-        terminals: { top: 'session1-top', bottom: 'session1-bottom' },
+        terminals: { top: 'session1-top', bottomBase: 'session1-bottom', workingDirectory: '/test' },
         setSelection: vi.fn(),
         clearTerminalTracking: vi.fn(),
         isReady: true
@@ -79,7 +79,7 @@ describe('RightPanelTabs', () => {
       mockUseSelection.mockReturnValue({
         selection: { kind: 'session', payload: 'session2' },
         isDraft: false,
-        terminals: { top: 'session2-top', bottom: 'session2-bottom' },
+        terminals: { top: 'session2-top', bottomBase: 'session2-bottom', workingDirectory: '/test' },
         setSelection: vi.fn(),
         clearTerminalTracking: vi.fn(),
         isReady: true
@@ -98,7 +98,7 @@ describe('RightPanelTabs', () => {
       mockUseSelection.mockReturnValue({
         selection: { kind: 'session', payload: 'session1' },
         isDraft: false,
-        terminals: { top: 'session1-top', bottom: 'session1-bottom' },
+        terminals: { top: 'session1-top', bottomBase: 'session1-bottom', workingDirectory: '/test' },
         setSelection: vi.fn(),
         clearTerminalTracking: vi.fn(),
         isReady: true
@@ -116,7 +116,7 @@ describe('RightPanelTabs', () => {
       mockUseSelection.mockReturnValue({
         selection: { kind: 'orchestrator' },
         isDraft: false,
-        terminals: { top: 'orchestrator-top', bottom: 'orchestrator-bottom' },
+        terminals: { top: 'orchestrator-top', bottomBase: 'orchestrator-bottom', workingDirectory: '/test' },
         setSelection: vi.fn(),
         clearTerminalTracking: vi.fn(),
         isReady: true
@@ -137,7 +137,7 @@ describe('RightPanelTabs', () => {
       mockUseSelection.mockReturnValue({
         selection: { kind: 'orchestrator' },
         isDraft: false,
-        terminals: { top: 'orchestrator-top', bottom: 'orchestrator-bottom' },
+        terminals: { top: 'orchestrator-top', bottomBase: 'orchestrator-bottom', workingDirectory: '/test' },
         setSelection: vi.fn(),
         clearTerminalTracking: vi.fn(),
         isReady: true
@@ -154,7 +154,7 @@ describe('RightPanelTabs', () => {
       mockUseSelection.mockReturnValue({
         selection: { kind: 'session', payload: 'draft1' },
         isDraft: true,
-        terminals: { top: 'draft1-top', bottom: 'draft1-bottom' },
+        terminals: { top: 'draft1-top', bottomBase: 'draft1-bottom', workingDirectory: '/test' },
         setSelection: vi.fn(),
         clearTerminalTracking: vi.fn(),
         isReady: true
@@ -171,7 +171,7 @@ describe('RightPanelTabs', () => {
       mockUseSelection.mockReturnValue({
         selection: { kind: 'session', payload: 'session1' },
         isDraft: false,
-        terminals: { top: 'session1-top', bottom: 'session1-bottom' },
+        terminals: { top: 'session1-top', bottomBase: 'session1-bottom', workingDirectory: '/test' },
         setSelection: vi.fn(),
         clearTerminalTracking: vi.fn(),
         isReady: true
@@ -189,7 +189,7 @@ describe('RightPanelTabs', () => {
       mockUseSelection.mockReturnValue({
         selection: { kind: 'orchestrator' },
         isDraft: false,
-        terminals: { top: 'orchestrator-top', bottom: 'orchestrator-bottom' },
+        terminals: { top: 'orchestrator-top', bottomBase: 'orchestrator-bottom', workingDirectory: '/test' },
         setSelection: vi.fn(),
         clearTerminalTracking: vi.fn(),
         isReady: true
@@ -210,7 +210,7 @@ describe('RightPanelTabs', () => {
       mockUseSelection.mockReturnValue({
         selection: { kind: 'session', payload: 'session1' },
         isDraft: false,
-        terminals: { top: 'session1-top', bottom: 'session1-bottom' },
+        terminals: { top: 'session1-top', bottomBase: 'session1-bottom', workingDirectory: '/test' },
         setSelection: vi.fn(),
         clearTerminalTracking: vi.fn(),
         isReady: true
@@ -230,7 +230,7 @@ describe('RightPanelTabs', () => {
       mockUseSelection.mockReturnValue({
         selection: { kind: 'orchestrator' },
         isDraft: false,
-        terminals: { top: 'orchestrator-top', bottom: 'orchestrator-bottom' },
+        terminals: { top: 'orchestrator-top', bottomBase: 'orchestrator-bottom', workingDirectory: '/test' },
         setSelection: vi.fn(),
         clearTerminalTracking: vi.fn(),
         isReady: true
@@ -250,7 +250,7 @@ describe('RightPanelTabs', () => {
       mockUseSelection.mockReturnValue({
         selection: { kind: 'session', payload: 'session1' },
         isDraft: false,
-        terminals: { top: 'session1-top', bottom: 'session1-bottom' },
+        terminals: { top: 'session1-top', bottomBase: 'session1-bottom', workingDirectory: '/test' },
         setSelection: vi.fn(),
         clearTerminalTracking: vi.fn(),
         isReady: true
