@@ -3690,6 +3690,7 @@ dependencies = [
  "mimalloc",
  "mockall",
  "portable-pty",
+ "rand 0.8.5",
  "rusqlite",
  "serde",
  "serde_json",

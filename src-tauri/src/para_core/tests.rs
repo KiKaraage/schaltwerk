@@ -164,9 +164,14 @@ struct TestEnvironment {
         let session1 = manager.create_session("duplicate", None, None).unwrap();
         assert_eq!(session1.name, "duplicate");
         
-        // Try to create session with same name - should auto-increment
+        // Try to create session with same name - should get unique suffix
         let session2 = manager.create_session("duplicate", None, None).unwrap();
-        assert_eq!(session2.name, "duplicate-1");
+        assert_ne!(session2.name, "duplicate");
+        assert!(session2.name.starts_with("duplicate-"));
+        let suffix = session2.name.strip_prefix("duplicate-").unwrap();
+        let is_random_suffix = suffix.len() == 2 && suffix.chars().all(|c| c.is_ascii_lowercase());
+        let is_incremental = suffix.parse::<u32>().is_ok();
+        assert!(is_random_suffix || is_incremental, "Expected random suffix or incremental number, got: {}", suffix);
         
         // Verify both sessions exist
         let sessions = manager.list_sessions().unwrap();
@@ -292,15 +297,22 @@ struct TestEnvironment {
         assert_eq!(session1.name, "test-conflict");
         assert_eq!(session1.branch, "schaltwerk/test-conflict");
         
-        // Try to create another session with same name - should auto-increment
+        // Try to create another session with same name - should get unique suffix
         let session2 = manager.create_session("test-conflict", None, None).unwrap();
-        assert_eq!(session2.name, "test-conflict-1");
-        assert_eq!(session2.branch, "schaltwerk/test-conflict-1");
+        assert_ne!(session2.name, "test-conflict");
+        assert!(session2.name.starts_with("test-conflict-"));
+        assert_eq!(session2.branch, format!("schaltwerk/{}", session2.name));
+        let suffix = session2.name.strip_prefix("test-conflict-").unwrap();
+        let is_random_suffix = suffix.len() == 2 && suffix.chars().all(|c| c.is_ascii_lowercase());
+        let is_incremental = suffix.parse::<u32>().is_ok();
+        assert!(is_random_suffix || is_incremental, "Expected random suffix or incremental number, got: {}", suffix);
         
-        // And another one
+        // And another one - should also get unique suffix
         let session3 = manager.create_session("test-conflict", None, None).unwrap();
-        assert_eq!(session3.name, "test-conflict-2");
-        assert_eq!(session3.branch, "schaltwerk/test-conflict-2");
+        assert_ne!(session3.name, "test-conflict");
+        assert!(session3.name.starts_with("test-conflict-"));
+        assert_ne!(session3.name, session2.name); // Should be different from session2
+        assert_eq!(session3.branch, format!("schaltwerk/{}", session3.name));
         
         // Verify all worktrees exist
         assert!(session1.worktree_path.exists());
@@ -331,7 +343,12 @@ struct TestEnvironment {
         let session2 = manager.create_session("reuse-test", None, None).unwrap();
         
         // Due to conflict resolution, it should have a different name
-        assert_eq!(session2.name, "reuse-test-1");
+        assert_ne!(session2.name, "reuse-test");
+        assert!(session2.name.starts_with("reuse-test-"));
+        let suffix = session2.name.strip_prefix("reuse-test-").unwrap();
+        let is_random_suffix = suffix.len() == 2 && suffix.chars().all(|c| c.is_ascii_lowercase());
+        let is_incremental = suffix.parse::<u32>().is_ok();
+        assert!(is_random_suffix || is_incremental, "Expected random suffix or incremental number, got: {}", suffix);
         
         // The new worktree should be clean
         assert!(session2.worktree_path.exists());
@@ -358,8 +375,13 @@ struct TestEnvironment {
         // Now try to create a session with that name
         let session = manager.create_session("corrupted", Some("test prompt"), None).unwrap();
         
-        // Should get an incremented name due to branch conflict
-        assert_eq!(session.name, "corrupted-1");
+        // Should get a unique suffix due to branch conflict
+        assert_ne!(session.name, "corrupted");
+        assert!(session.name.starts_with("corrupted-"));
+        let suffix = session.name.strip_prefix("corrupted-").unwrap();
+        let is_random_suffix = suffix.len() == 2 && suffix.chars().all(|c| c.is_ascii_lowercase());
+        let is_incremental = suffix.parse::<u32>().is_ok();
+        assert!(is_random_suffix || is_incremental, "Expected random suffix or incremental number, got: {}", suffix);
         assert!(session.worktree_path.exists());
         assert!(!session.worktree_path.join("leftover.txt").exists());
     }

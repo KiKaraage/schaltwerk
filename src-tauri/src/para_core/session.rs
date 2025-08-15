@@ -4,6 +4,7 @@ use std::sync::{OnceLock, Mutex as StdMutex, Arc};
 use anyhow::{Result, anyhow};
 use uuid::Uuid;
 use chrono::Utc;
+use rand::Rng;
 use crate::para_core::{
     database::Database,
     git,
@@ -50,47 +51,100 @@ impl SessionManager {
         lock
     }
     
+    fn generate_random_suffix(len: usize) -> String {
+        let mut rng = rand::thread_rng();
+        (0..len)
+            .map(|_| rng.gen_range(b'a'..=b'z') as char)
+            .collect()
+    }
+    
+    fn check_name_availability(&self, name: &str) -> Result<bool> {
+        let branch = format!("schaltwerk/{name}");
+        let worktree_path = self.repo_path
+            .join(".schaltwerk")
+            .join("worktrees")
+            .join(name);
+        
+        let branch_exists = git::branch_exists(&self.repo_path, &branch)?;
+        let worktree_exists = worktree_path.exists();
+        let session_exists = self.db.get_session_by_name(&self.repo_path, name).is_ok();
+        
+        let is_available = !branch_exists && !worktree_exists && !session_exists;
+        
+        if !is_available {
+            log::debug!("Session name '{name}' conflicts (branch: {branch_exists}, worktree: {worktree_exists}, db: {session_exists})");
+        }
+        
+        Ok(is_available)
+    }
+    
     fn find_unique_session_paths(&self, base_name: &str) -> Result<(String, String, PathBuf)> {
-        let mut counter = 0;
-        loop {
-            let name = if counter == 0 {
-                base_name.to_string()
-            } else {
-                format!("{base_name}-{counter}")
-            };
-            
-            let branch = format!("schaltwerk/{name}");
+        // First, try the base name as-is
+        if self.check_name_availability(base_name)? {
+            let branch = format!("schaltwerk/{base_name}");
             let worktree_path = self.repo_path
                 .join(".schaltwerk")
                 .join("worktrees")
-                .join(&name);
+                .join(base_name);
+            log::info!("Found unique session name: {base_name}");
+            return Ok((base_name.to_string(), branch, worktree_path));
+        }
+        
+        // If collision, use random 2-letter suffix (26*26 = 676 possibilities)
+        // This gives nice names like "fix-bug-ax", "fix-bug-mz"
+        for attempt in 0..10 {  // Try 10 times with random suffixes
+            let suffix = Self::generate_random_suffix(2);
+            let candidate = format!("{base_name}-{suffix}");
             
-            // Check if this combination is available
-            let branch_exists = git::branch_exists(&self.repo_path, &branch)?;
-            let worktree_exists = worktree_path.exists();
-            let session_exists = self.db.get_session_by_name(&self.repo_path, &name).is_ok();
-            
-            if !branch_exists && !worktree_exists && !session_exists {
-                log::info!("Found unique session name: {name}");
-                return Ok((name, branch, worktree_path));
-            }
-            
-            log::warn!("Session name '{name}' conflicts (branch: {branch_exists}, worktree: {worktree_exists}, db: {session_exists}), trying next");
-            
-            counter += 1;
-            if counter > 100 {
-                return Err(anyhow!("Could not find unique session name after 100 attempts"));
+            if self.check_name_availability(&candidate)? {
+                let branch = format!("schaltwerk/{candidate}");
+                let worktree_path = self.repo_path
+                    .join(".schaltwerk")
+                    .join("worktrees")
+                    .join(&candidate);
+                log::info!("Found unique session name with random suffix: {candidate} (attempt {})", attempt + 1);
+                return Ok((candidate, branch, worktree_path));
             }
         }
+        
+        // Fallback to incremental only if random fails (very unlikely)
+        for counter in 1..=20 {
+            let candidate = format!("{base_name}-{counter}");
+            
+            if self.check_name_availability(&candidate)? {
+                let branch = format!("schaltwerk/{candidate}");
+                let worktree_path = self.repo_path
+                    .join(".schaltwerk")
+                    .join("worktrees")
+                    .join(&candidate);
+                log::info!("Found unique session name with incremental suffix: {candidate}");
+                return Ok((candidate, branch, worktree_path));
+            }
+        }
+        
+        Err(anyhow!("Could not find unique session name after trying random and incremental suffixes"))
     }
     
     fn cleanup_existing_worktree(&self, worktree_path: &Path) -> Result<()> {
-        // First try to remove as git worktree
-        if let Err(e) = git::remove_worktree(&self.repo_path, worktree_path) {
-            log::debug!("Git worktree removal returned: {e}");
+        log::info!("Cleaning up existing worktree: {}", worktree_path.display());
+        
+        // 1. First prune dead worktrees globally (safe - only removes broken references)
+        if let Err(e) = git::prune_worktrees(&self.repo_path) {
+            log::debug!("Worktree prune returned: {e}");
         }
         
-        // Then remove directory if it still exists
+        // 2. Check if this specific worktree is registered with git
+        let worktree_registered = git::is_worktree_registered(&self.repo_path, worktree_path)?;
+        
+        // 3. If registered, remove properly through git (this handles all git state)
+        if worktree_registered {
+            log::info!("Removing registered worktree: {}", worktree_path.display());
+            if let Err(e) = git::remove_worktree(&self.repo_path, worktree_path) {
+                log::warn!("Git worktree removal failed: {e}, continuing with directory cleanup");
+            }
+        }
+        
+        // 4. If directory still exists, remove it (covers non-git directories)
         if worktree_path.exists() {
             log::info!("Removing worktree directory: {}", worktree_path.display());
             std::fs::remove_dir_all(worktree_path)?;
@@ -860,6 +914,93 @@ mod session_tests {
         assert!(result.contains("cd"));
         assert!(result.contains("claude"));
         assert!(!result.contains("--dangerously-skip-permissions"));
+    }
+    
+    #[test]
+    fn test_generate_random_suffix() {
+        let suffix = SessionManager::generate_random_suffix(2);
+        assert_eq!(suffix.len(), 2);
+        assert!(suffix.chars().all(|c| c.is_ascii_lowercase()));
+        
+        let suffix_5 = SessionManager::generate_random_suffix(5);
+        assert_eq!(suffix_5.len(), 5);
+        assert!(suffix_5.chars().all(|c| c.is_ascii_lowercase()));
+        
+        // Test that repeated calls produce different results (probabilistically)
+        let suffixes: Vec<String> = (0..10).map(|_| SessionManager::generate_random_suffix(2)).collect();
+        let unique_count = suffixes.iter().collect::<std::collections::HashSet<_>>().len();
+        // Should be likely that at least 8 out of 10 are unique with 676 possibilities
+        assert!(unique_count >= 8, "Expected at least 8 unique suffixes, got {}", unique_count);
+    }
+    
+    #[test]
+    fn test_check_name_availability() {
+        let (manager, _temp_dir, _session) = create_test_session_manager();
+        
+        // Should return false for existing session name
+        let available = manager.check_name_availability("test-session").unwrap();
+        assert!(!available, "Should detect existing session name as unavailable");
+        
+        // Should return true for non-existing session name
+        let available = manager.check_name_availability("non-existing-session").unwrap();
+        assert!(available, "Should detect non-existing session name as available");
+    }
+    
+    #[test]
+    fn test_find_unique_session_paths_no_collision() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db = Database::new(Some(db_path)).unwrap();
+        let manager = SessionManager::new(db, temp_dir.path().to_path_buf());
+        
+        let (name, branch, worktree_path) = manager.find_unique_session_paths("unique-name").unwrap();
+        
+        assert_eq!(name, "unique-name");
+        assert_eq!(branch, "schaltwerk/unique-name");
+        assert_eq!(worktree_path, temp_dir.path().join(".schaltwerk/worktrees/unique-name"));
+    }
+    
+    #[test]
+    fn test_find_unique_session_paths_with_collision() {
+        let (manager, temp_dir, _session) = create_test_session_manager();
+        
+        // Try to create session with same name as existing one
+        let (name, branch, worktree_path) = manager.find_unique_session_paths("test-session").unwrap();
+        
+        // Should get a different name due to collision
+        assert_ne!(name, "test-session");
+        assert!(name.starts_with("test-session-"));
+        assert_eq!(branch, format!("schaltwerk/{}", name));
+        assert_eq!(worktree_path, temp_dir.path().join(".schaltwerk/worktrees").join(&name));
+        
+        // Name should be either random suffix (2 chars) or incremental
+        let suffix = name.strip_prefix("test-session-").unwrap();
+        let is_random_suffix = suffix.len() == 2 && suffix.chars().all(|c| c.is_ascii_lowercase());
+        let is_incremental = suffix.parse::<u32>().is_ok();
+        assert!(is_random_suffix || is_incremental, "Expected random suffix or incremental number, got: {}", suffix);
+    }
+    
+    #[test] 
+    fn test_find_unique_session_paths_multiple_collisions() {
+        let (manager, _temp_dir, _session) = create_test_session_manager();
+        
+        // Create multiple sessions with similar names to force multiple collisions
+        let mut created_names = vec!["test-session".to_string()]; // existing session
+        
+        for _i in 0..5 {
+            let (name, _branch, _worktree_path) = manager.find_unique_session_paths("test-session").unwrap();
+            assert!(!created_names.contains(&name), "Generated duplicate name: {}", name);
+            created_names.push(name);
+        }
+        
+        // All names should be unique and follow pattern
+        for name in &created_names[1..] { // Skip the original
+            assert!(name.starts_with("test-session-"));
+            let suffix = name.strip_prefix("test-session-").unwrap();
+            let is_valid = suffix.len() == 2 && suffix.chars().all(|c| c.is_ascii_lowercase()) ||
+                          suffix.parse::<u32>().is_ok();
+            assert!(is_valid, "Invalid suffix format: {}", suffix);
+        }
     }
     
     #[test]
