@@ -544,6 +544,47 @@ async fn start_webhook_server(app: tauri::AppHandle) {
                 
                 Ok(Response::new("OK".to_string()))
             }
+            (&hyper::Method::POST, "/webhook/draft-created") => {
+                // Parse the JSON body for draft creation notification
+                let body = req.into_body();
+                let body_bytes = body.collect().await?.to_bytes();
+                
+                if let Ok(body_str) = String::from_utf8(body_bytes.to_vec()) {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&body_str) {
+                        log::info!("Received draft-created webhook: {payload}");
+                        
+                        if let Some(draft_name) = payload.get("session_name").and_then(|v| v.as_str()) {
+                            log::info!("Draft created via MCP: {draft_name}");
+                            
+                            // Get the para core and emit the updated sessions list
+                            if let Ok(core) = get_para_core().await {
+                                let core_lock = core.lock().await;
+                                let manager = core_lock.session_manager();
+                                
+                                // Get enriched sessions list (which includes drafts)
+                                if let Ok(sessions) = manager.list_enriched_sessions() {
+                                    log::info!("Emitting sessions-refreshed event after MCP draft creation");
+                                    if let Err(e) = app.emit("schaltwerk:sessions-refreshed", &sessions) {
+                                        log::error!("Failed to emit sessions-refreshed event: {e}");
+                                    }
+                                } else {
+                                    log::warn!("Could not get enriched sessions list after draft creation");
+                                }
+                            } else {
+                                log::warn!("Could not get para core for draft-created webhook");
+                            }
+                        } else {
+                            log::warn!("Draft-created webhook payload missing 'name' field");
+                        }
+                    } else {
+                        log::warn!("Failed to parse draft-created webhook JSON payload");
+                    }
+                } else {
+                    log::warn!("Failed to convert draft-created webhook body to UTF-8");
+                }
+                
+                Ok(Response::new("OK".to_string()))
+            }
             _ => {
                 let mut response = Response::new("Not Found".to_string());
                 *response.status_mut() = StatusCode::NOT_FOUND;
