@@ -31,22 +31,18 @@ describe('TabBar', () => {
   it('marks correct tab as active', () => {
     render(<TabBar {...mockProps} activeTabPath="/Users/test/project2" />)
     
-    const tabs = screen.getAllByRole('button').filter(btn => 
-      btn.title && btn.title.includes('/Users/test/project')
-    )
+    const tabs = screen.getAllByTitle(/\/Users\/test\/project/)
     
-    expect(tabs[0].className).toContain('bg-slate-800/40')
-    expect(tabs[1].className).toContain('bg-cyan-900/30')
-    expect(tabs[2].className).toContain('bg-slate-800/40')
+    expect(tabs[0].className).toContain('bg-slate-950')
+    expect(tabs[1].className).toContain('bg-slate-900')
+    expect(tabs[2].className).toContain('bg-slate-950')
   })
 
   it('calls onSelectTab with correct path when tab clicked', () => {
     const onSelectTab = vi.fn()
     render(<TabBar {...mockProps} onSelectTab={onSelectTab} />)
     
-    const tabs = screen.getAllByRole('button').filter(btn => 
-      btn.title && btn.title.includes('/Users/test/project')
-    )
+    const tabs = screen.getAllByTitle(/\/Users\/test\/project/)
     fireEvent.click(tabs[1])
     
     expect(onSelectTab).toHaveBeenCalledWith('/Users/test/project2')
@@ -65,24 +61,20 @@ describe('TabBar', () => {
   it('renders tabs in provided order', () => {
     render(<TabBar {...mockProps} />)
     
-    const tabs = screen.getAllByRole('button').filter(btn => 
-      btn.title && btn.title.includes('/Users/test/project')
-    )
+    const tabs = screen.getAllByTitle(/\/Users\/test\/project/)
     
-    expect(tabs[0].title).toContain('/Users/test/project1')
-    expect(tabs[1].title).toContain('/Users/test/project2')
-    expect(tabs[2].title).toContain('/Users/test/project3')
+    expect(tabs[0].title).toBe('/Users/test/project1')
+    expect(tabs[1].title).toBe('/Users/test/project2')
+    expect(tabs[2].title).toBe('/Users/test/project3')
   })
 
   it('handles no active tab gracefully', () => {
     render(<TabBar {...mockProps} activeTabPath={null} />)
     
-    const tabs = screen.getAllByRole('button').filter(btn => 
-      btn.title && btn.title.includes('/Users/test/project')
-    )
+    const tabs = screen.getAllByTitle(/\/Users\/test\/project/)
     
     tabs.forEach(tab => {
-      expect(tab.className).toContain('bg-slate-800/40')
+      expect(tab.className).toContain('bg-slate-950')
     })
   })
 

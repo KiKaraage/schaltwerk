@@ -16,7 +16,7 @@ export function TabBar({ tabs, activeTabPath, onSelectTab, onCloseTab }: TabBarP
   if (tabs.length === 0) return null
   
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center h-full">
       {tabs.map((tab) => (
         <Tab
           key={tab.projectPath}

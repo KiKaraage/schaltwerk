@@ -11,9 +11,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from './contexts/SelectionContext'
 import { useProject } from './contexts/ProjectContext'
 import { useFontSize } from './contexts/FontSizeContext'
-import { VscHome } from 'react-icons/vsc'
 import { HomeScreen } from './components/home/HomeScreen'
-import { ProjectTab, TabBar } from './components/TabBar'
+import { ProjectTab } from './components/TabBar'
+import { TopBar } from './components/TopBar'
 
 export interface SessionActionEvent {
   action: 'cancel' | 'cancel-immediate'
@@ -375,52 +375,50 @@ export default function App() {
   }, [selection])
   
   if (showHome && openTabs.length === 0) {
-    return <HomeScreen onOpenProject={handleOpenProject} />
+    return (
+      <>
+        <TopBar
+          tabs={[]}
+          activeTabPath={null}
+          onGoHome={() => {}}
+          onSelectTab={() => {}}
+          onCloseTab={() => {}}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
+        <div className="pt-[28px] h-full">
+          <HomeScreen onOpenProject={handleOpenProject} />
+        </div>
+        <SettingsModal
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+        />
+      </>
+    )
   }
   
   return (
     <>
+      {/* Show TopBar always */}
+      <TopBar
+        tabs={openTabs}
+        activeTabPath={activeTabPath}
+        onGoHome={handleGoHome}
+        onSelectTab={handleSelectTab}
+        onCloseTab={handleCloseTab}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+      
       {/* Show home screen if requested, or no active tab */}
       {showHome && (
-        <HomeScreen onOpenProject={handleOpenProject} />
+        <div className="pt-[28px] h-full">
+          <HomeScreen onOpenProject={handleOpenProject} />
+        </div>
       )}
       
       {/* Show project content when a tab is active */}
       {!showHome && activeTabPath && (
         <>
-          {/* Global top bar */}
-          <div className="absolute top-0 right-0 left-0 h-9 flex items-center justify-between px-3 z-20 pointer-events-none">
-            <div className="flex items-center gap-2 pointer-events-auto">
-              <button
-                onClick={handleGoHome}
-                className="h-7 w-7 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 bg-slate-800/40 hover:bg-slate-700/50 border border-slate-700/60"
-                title="Home"
-                aria-label="Home"
-              >
-                <VscHome className="text-[15px]" />
-              </button>
-              <TabBar
-                tabs={openTabs}
-                activeTabPath={activeTabPath}
-                onSelectTab={handleSelectTab}
-                onCloseTab={handleCloseTab}
-              />
-            </div>
-            <div className="flex items-center gap-2 pointer-events-auto">
-              <button
-                onClick={() => setSettingsOpen(true)}
-                className="px-3 py-1.5 bg-slate-800/40 hover:bg-slate-700/60 border border-slate-700/60 rounded-lg transition-colors flex items-center gap-2 text-sm text-slate-300"
-                title="Settings"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <Split className="h-full w-full flex pt-9" sizes={[20, 80]} minSize={[240, 400]} gutterSize={6}>
+          <Split className="h-full w-full flex pt-[28px]" sizes={[20, 80]} minSize={[240, 400]} gutterSize={6}>
             <div className="h-full bg-panel border-r border-slate-800 overflow-y-auto" data-testid="sidebar">
               <div className="h-full flex flex-col">
                 <div className="flex-1 overflow-y-auto">

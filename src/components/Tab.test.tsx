@@ -25,14 +25,14 @@ describe('Tab', () => {
   it('applies active styles when active', () => {
     render(<Tab {...mockProps} isActive={true} />)
     const button = screen.getByTitle('/Users/test/project')
-    expect(button.className).toContain('bg-cyan-900/30')
-    expect(button.className).toContain('text-cyan-300')
+    expect(button.className).toContain('bg-slate-900')
+    expect(button.className).toContain('text-slate-100')
   })
 
   it('applies inactive styles when not active', () => {
     render(<Tab {...mockProps} isActive={false} />)
     const button = screen.getByTitle('/Users/test/project')
-    expect(button.className).toContain('bg-slate-800/40')
+    expect(button.className).toContain('bg-slate-950')
     expect(button.className).toContain('text-slate-400')
   })
 
@@ -59,6 +59,6 @@ describe('Tab', () => {
     render(<Tab {...mockProps} projectName={longName} />)
     const nameSpan = screen.getByText(longName)
     expect(nameSpan.className).toContain('truncate')
-    expect(nameSpan.className).toContain('max-w-[120px]')
+    expect(nameSpan.className).toContain('flex-1')
   })
 })

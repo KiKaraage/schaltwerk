@@ -16,33 +16,40 @@ export function Tab({ projectPath, projectName, isActive, onSelect, onClose }: T
   }
   
   return (
-    <button
+    <div
       className={`
-        h-7 px-2 inline-flex items-center gap-1.5 rounded-lg border transition-all duration-150 group relative
+        h-full px-2.5 inline-flex items-center gap-1.5 cursor-pointer group relative transition-colors
         ${isActive 
-          ? 'bg-cyan-900/30 text-cyan-300 border-cyan-700/50' 
-          : 'bg-slate-800/40 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 border-slate-700/60'
+          ? 'bg-slate-900 text-slate-100' 
+          : 'bg-slate-950 text-slate-400 hover:bg-slate-900/50'
         }
       `}
       onClick={onSelect}
       title={projectPath}
+      style={{ 
+        minWidth: '100px', 
+        maxWidth: '180px',
+        borderRight: '1px solid rgba(30, 41, 59, 0.5)',
+        borderTop: isActive ? '1px solid #06b6d4' : '1px solid transparent',
+        WebkitAppRegion: 'no-drag'
+      } as React.CSSProperties}
     >
-      <span className="text-xs font-medium truncate max-w-[120px]">
+      <span className="text-[11px] truncate flex-1">
         {projectName}
       </span>
       <button
         onClick={handleClose}
         className={`
-          rounded hover:bg-slate-700/60 transition-colors p-0.5
+          rounded hover:bg-slate-700/60 transition-all p-0.5
           ${isActive 
-            ? 'text-cyan-400 hover:text-cyan-200' 
-            : 'text-slate-500 hover:text-red-400'
+            ? 'opacity-60 hover:opacity-100 text-slate-300 hover:text-slate-100' 
+            : 'opacity-0 group-hover:opacity-60 hover:!opacity-100 text-slate-400 hover:text-slate-200'
           }
         `}
         aria-label={`Close ${projectName}`}
       >
         <VscClose className="text-[10px]" />
       </button>
-    </button>
+    </div>
   )
 }

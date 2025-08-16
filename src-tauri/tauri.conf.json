@@ -16,7 +16,10 @@
         "title": "Schaltwerk",
         "maximized": true,
         "width": 1920,
-        "height": 1080
+        "height": 1080,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "dragDropEnabled": false
       }
     ],
     "security": {
