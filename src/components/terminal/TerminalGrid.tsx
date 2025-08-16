@@ -11,7 +11,7 @@ import { useRef, useEffect, useState } from 'react'
 export function TerminalGrid() {
     const { selection, terminals, isReady, isDraft } = useSelection()
     const { getFocusForSession, setFocusForSession, currentFocus } = useFocus()
-    const { isCollapsed, setCollapsed } = useTerminalUIPreferences()
+    const { isCollapsed } = useTerminalUIPreferences()
     const [terminalKey, setTerminalKey] = useState(0)
     const [localFocus, setLocalFocus] = useState<'claude' | 'terminal' | null>(null)
     const containerRef = useRef<HTMLDivElement>(null)
@@ -46,6 +46,10 @@ export function TerminalGrid() {
 
     const getSessionKey = () => {
         return selection.kind === 'orchestrator' ? 'orchestrator' : selection.payload || 'unknown'
+    }
+
+    const toggleTerminalCollapsed = () => {
+        setIsBottomCollapsed(!isBottomCollapsed)
     }
     
     // Listen for terminal reset events
@@ -268,7 +272,7 @@ export function TerminalGrid() {
                 {claudeSection}
                 <div className="mt-2 flex justify-center">
                     <button
-                        onClick={() => setCollapsed(!isCollapsed)}
+                        onClick={toggleTerminalCollapsed}
                         className="px-3 py-1 text-xs bg-slate-700/50 text-slate-400 hover:bg-slate-600/50 rounded border border-slate-600 transition-colors flex items-center gap-1"
                         title="Show Terminal (⌘B)"
                     >

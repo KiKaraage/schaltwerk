@@ -25,7 +25,7 @@ interface SessionInfo {
     worktree_path: string
     base_branch: string
     merge_mode: string
-    status: 'active' | 'dirty' | 'missing' | 'archived'
+    status: 'active' | 'dirty' | 'missing' | 'archived' | 'draft'
     created_at?: string
     last_modified?: string
     has_uncommitted_changes?: boolean
@@ -143,9 +143,9 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     const sortedSessions = useMemo(() => {
         let filtered = sessions
         if (filterMode === 'draft') {
-            filtered = sessions.filter(s => s.info.session_state === 'draft')
+            filtered = sessions.filter(s => s.info.session_state === 'draft' || s.info.status === 'draft')
         } else if (filterMode === 'running') {
-            filtered = sessions.filter(s => !s.info.ready_to_merge && s.info.session_state !== 'draft')
+            filtered = sessions.filter(s => !s.info.ready_to_merge && s.info.session_state !== 'draft' && s.info.status !== 'draft')
         } else if (filterMode === 'reviewed') {
             filtered = sessions.filter(s => !!s.info.ready_to_merge)
         }
@@ -332,7 +332,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 // Load both regular sessions and drafts
                 const [regularSessions, draftSessions] = await Promise.all([
                     invoke<EnrichedSession[]>('para_core_list_enriched_sessions'),
-                    invoke<any[]>('para_core_list_sessions_by_state', { state: 'Draft' })
+                    invoke<any[]>('para_core_list_sessions_by_state', { state: 'draft' })
                 ])
                 
                 // Convert draft sessions to EnrichedSession format
@@ -342,18 +342,18 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                         session_id: draft.name,
                         display_name: draft.display_name || draft.name,
                         branch: draft.branch,
-                        worktree_path: draft.worktree_path,
+                        worktree_path: draft.worktree_path || '',
                         base_branch: draft.parent_branch,
                         merge_mode: 'rebase',
-                        status: 'active' as any,
-                        session_state: 'Draft',
+                        status: 'draft' as any,
+                        session_state: 'draft',
                         created_at: new Date(draft.created_at).toISOString(),
                         last_modified: draft.updated_at ? new Date(draft.updated_at).toISOString() : new Date(draft.created_at).toISOString(),
-                        has_uncommitted: false,
+                        has_uncommitted_changes: false,
                         ready_to_merge: false,
                         diff_stats: undefined,
                         is_current: false,
-                        session_type: 'work' as any,
+                        session_type: 'worktree' as any,
                     },
                     terminals: [
                         `session-${draft.name}-top`,
@@ -391,7 +391,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                         // Reload both regular sessions and drafts
                         const [regularSessions, draftSessions] = await Promise.all([
                             invoke<EnrichedSession[]>('para_core_list_enriched_sessions'),
-                            invoke<any[]>('para_core_list_sessions_by_state', { state: 'Draft' })
+                            invoke<any[]>('para_core_list_sessions_by_state', { state: 'draft' })
                         ])
                         
                         // Convert draft sessions to EnrichedSession format
@@ -401,18 +401,18 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                                 session_id: draft.name,
                                 display_name: draft.display_name || draft.name,
                                 branch: draft.branch,
-                                worktree_path: draft.worktree_path,
+                                worktree_path: draft.worktree_path || '',
                                 base_branch: draft.parent_branch,
                                 merge_mode: 'rebase',
-                                status: 'active' as any,
-                                session_state: 'Draft',
+                                status: 'draft' as any,
+                                session_state: 'draft',
                                 created_at: new Date(draft.created_at).toISOString(),
                                 last_modified: draft.updated_at ? new Date(draft.updated_at).toISOString() : new Date(draft.created_at).toISOString(),
-                                has_uncommitted: false,
+                                has_uncommitted_changes: false,
                                 ready_to_merge: false,
                                 diff_stats: undefined,
                                 is_current: false,
-                                session_type: 'work' as any,
+                                session_type: 'worktree' as any,
                             },
                             terminals: [
                                 `session-${draft.name}-top`,
@@ -703,7 +703,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                             onClick={() => setFilterMode('draft')}
                             title="Show draft tasks"
                         >
-                            Drafts <span className="text-slate-400">({sessions.filter(s => s.info.session_state === 'draft').length})</span>
+                            Drafts <span className="text-slate-400">({sessions.filter(s => s.info.session_state === 'draft' || s.info.status === 'draft').length})</span>
                         </button>
                         <button
                             className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 
@@ -711,7 +711,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                             onClick={() => setFilterMode('running')}
                             title="Show running tasks"
                         >
-                            Running <span className="text-slate-400">({sessions.filter(s => !s.info.ready_to_merge && s.info.session_state !== 'draft').length})</span>
+                            Running <span className="text-slate-400">({sessions.filter(s => !s.info.ready_to_merge && s.info.session_state !== 'draft' && s.info.status !== 'draft').length})</span>
                         </button>
                         <button
                             className={clsx('text-[10px] px-2 py-0.5 rounded flex items-center gap-1', 

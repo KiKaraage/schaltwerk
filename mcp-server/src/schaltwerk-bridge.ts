@@ -576,4 +576,20 @@ export class SchaltwerkBridge {
       return []
     }
   }
+
+  async getCurrentTasks(): Promise<Session[]> {
+    try {
+      // Get all sessions and drafts
+      const [activeSessions, draftSessions] = await Promise.all([
+        this.listSessions(),
+        this.listDraftSessions()
+      ])
+      
+      // Combine and return all current tasks
+      return [...activeSessions, ...draftSessions]
+    } catch (error) {
+      console.error('Failed to get current tasks via API:', error)
+      return []
+    }
+  }
 }

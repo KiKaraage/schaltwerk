@@ -200,15 +200,6 @@ async fn update_draft_content(
                 error!("Failed to emit sessions-refreshed event: {e}");
             }
             
-            // Emit selection event to show the updated draft
-            let selection = serde_json::json!({
-                "kind": "session",
-                "payload": name
-            });
-            if let Err(e) = app.emit("schaltwerk:selection", &selection) {
-                error!("Failed to emit selection event: {e}");
-            }
-            
             Ok(Response::new("OK".to_string()))
         },
         Err(e) => {

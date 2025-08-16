@@ -491,6 +491,32 @@ schaltwerk_draft_delete(session_name: "old-draft")
           },
           required: ["session_name"]
         }
+      },
+      {
+        name: "schaltwerk_get_current_tasks",
+        description: `Get all current tasks (both active sessions and drafts).
+
+🎯 PURPOSE: Retrieve a comprehensive list of all current work including both active sessions and drafts.
+
+📊 OUTPUT: Returns JSON array with essential task information:
+- name: Task identifier
+- display_name: Human-readable name
+- status: 'active' | 'draft' | 'cancelled' | 'paused'
+- session_state: 'Draft' | 'Running' | 'Reviewed'
+- created_at: ISO timestamp
+- last_activity: ISO timestamp or null
+- initial_prompt: Original task description
+- draft_content: Draft content (for drafts only)
+
+📋 USAGE:
+schaltwerk_get_current_tasks()
+
+💡 Use this to get a complete overview of all current work items across the system.`,
+        inputSchema: {
+          type: "object",
+          properties: {},
+          additionalProperties: false
+        }
       }
     ]
   }
@@ -717,6 +743,28 @@ ${session.initial_prompt ? `- Initial Prompt: ${session.initial_prompt}` : ''}`
         await bridge.deleteDraftSession(draftDeleteArgs.session_name)
         
         result = `Draft session '${draftDeleteArgs.session_name}' has been deleted permanently`
+        break
+      }
+
+      case "schaltwerk_get_current_tasks": {
+        const tasks = await bridge.getCurrentTasks()
+        
+        // Return essential task information
+        const essentialTasks = tasks.map(t => ({
+          name: t.name,
+          display_name: t.display_name || t.name,
+          status: t.status,
+          session_state: t.session_state,
+          created_at: new Date(t.created_at).toISOString(),
+          last_activity: t.last_activity ? new Date(t.last_activity).toISOString() : null,
+          initial_prompt: t.initial_prompt || null,
+          draft_content: t.draft_content || null,
+          ready_to_merge: t.ready_to_merge || false,
+          branch: t.branch,
+          worktree_path: t.worktree_path
+        }))
+        
+        result = JSON.stringify(essentialTasks, null, 2)
         break
       }
 
