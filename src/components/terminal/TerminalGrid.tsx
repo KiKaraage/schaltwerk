@@ -11,7 +11,7 @@ import { useRef, useEffect, useState } from 'react'
 export function TerminalGrid() {
     const { selection, terminals, isReady, isDraft } = useSelection()
     const { getFocusForSession, setFocusForSession, currentFocus } = useFocus()
-    const { isCollapsed, dividerPosition, setCollapsed, setDividerPosition } = useTerminalUIPreferences()
+    const { isCollapsed, setCollapsed } = useTerminalUIPreferences()
     const [terminalKey, setTerminalKey] = useState(0)
     const [localFocus, setLocalFocus] = useState<'claude' | 'terminal' | null>(null)
     const containerRef = useRef<HTMLDivElement>(null)
@@ -261,42 +261,6 @@ export function TerminalGrid() {
         </div>
     )
 
-    const terminalSection = (
-        <div className={`bg-panel rounded border border-slate-800 overflow-hidden min-h-0 flex flex-col ${isCollapsed ? 'hidden' : ''}`}>
-            <div 
-                className="h-8 px-3 text-xs text-slate-400 border-b border-slate-800 cursor-pointer hover:bg-slate-800 flex-shrink-0 flex items-center justify-between"
-                onClick={handleTerminalClick}
-            >
-                <span className="flex-1 text-center">
-                    Terminal — {selection.kind === 'orchestrator' ? 'main' : selection.payload}
-                </span>
-                <div className="flex items-center gap-1">
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation()
-                            toggleTerminalCollapsed()
-                        }}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400 hover:bg-slate-600/50 transition-colors"
-                        title="Toggle Terminal (⌘B)"
-                    >
-                        ▲
-                    </button>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400" title="Focus Terminal (⌘/)">⌘/</span>
-                </div>
-            </div>
-            <div className="flex-1 min-h-0" onClick={handleTerminalClick}>
-                <TerminalTabs
-                    key={`terminal-tabs-${terminalKey}`}
-                    ref={terminalTabsRef}
-                    baseTerminalId={terminals.bottomBase}
-                    workingDirectory={terminals.workingDirectory}
-                    className="h-full"
-                    sessionName={selection.kind === 'session' ? selection.payload : undefined}
-                    isOrchestrator={selection.kind === 'orchestrator'}
-                />
-            </div>
-        </div>
-    )
 
     if (isCollapsed) {
         return (
@@ -304,7 +268,7 @@ export function TerminalGrid() {
                 {claudeSection}
                 <div className="mt-2 flex justify-center">
                     <button
-                        onClick={toggleTerminalCollapsed}
+                        onClick={() => setCollapsed(!isCollapsed)}
                         className="px-3 py-1 text-xs bg-slate-700/50 text-slate-400 hover:bg-slate-600/50 rounded border border-slate-600 transition-colors flex items-center gap-1"
                         title="Show Terminal (⌘B)"
                     >
@@ -371,20 +335,32 @@ export function TerminalGrid() {
                         />
                     </div>
                 </div>
-                <div className="bg-panel rounded border border-slate-800 overflow-hidden min-h-0 flex flex-col">
+                <div className={`bg-panel rounded overflow-hidden min-h-0 flex flex-col ${isDraggingSplit ? '' : 'transition-all duration-200'} ${localFocus === 'terminal' && !isDraggingSplit ? 'border-2 border-blue-500/60 shadow-lg shadow-blue-500/20' : 'border border-slate-800'}`}>
                     <div 
                         data-bottom-header
-                        className="h-8 px-3 text-xs text-slate-400 border-b border-slate-800 cursor-pointer hover:bg-slate-800 flex-shrink-0 flex items-center"
+                        className={`h-8 px-3 text-xs border-b cursor-pointer flex-shrink-0 flex items-center ${isDraggingSplit ? '' : 'transition-colors duration-200'} ${
+                            localFocus === 'terminal'
+                                ? 'bg-blue-900/30 text-blue-200 border-blue-800/50 hover:bg-blue-900/40'
+                                : 'text-slate-400 border-slate-800 hover:bg-slate-800'
+                        }`}
                         onClick={handleTerminalClick}
                     >
                         <span className="absolute left-0 right-0 text-center pointer-events-none">
                             Terminal — {selection.kind === 'orchestrator' ? 'main' : selection.payload}
                         </span>
-                        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-400 mr-1" title="Focus Terminal (⌘/)">⌘/</span>
+                        <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded mr-1 transition-colors duration-200 ${
+                            localFocus === 'terminal'
+                                ? 'bg-blue-600/40 text-blue-200'
+                                : 'bg-slate-700/50 text-slate-400'
+                        }`} title="Focus Terminal (⌘/)">⌘/</span>
                         <button
                             onClick={toggleBottomCollapse}
                             title={isBottomCollapsed ? 'Expand terminal panel' : 'Collapse terminal panel'}
-                            className="w-7 h-7 ml-1 flex items-center justify-center rounded hover:bg-slate-700/50 text-slate-300 hover:text-slate-100"
+                            className={`w-7 h-7 ml-1 flex items-center justify-center rounded transition-colors ${
+                                localFocus === 'terminal'
+                                    ? 'hover:bg-blue-600/50 text-blue-200 hover:text-blue-100'
+                                    : 'hover:bg-slate-700/50 text-slate-300 hover:text-slate-100'
+                            }`}
                             aria-label={isBottomCollapsed ? 'Expand terminal panel' : 'Collapse terminal panel'}
                         >
                             {isBottomCollapsed ? (
@@ -394,6 +370,11 @@ export function TerminalGrid() {
                             )}
                         </button>
                     </div>
+                    <div className={`h-[2px] flex-shrink-0 ${isDraggingSplit ? '' : 'transition-opacity duration-200'} ${
+                        localFocus === 'terminal' && !isDraggingSplit
+                            ? 'bg-gradient-to-r from-transparent via-blue-500/50 to-transparent'
+                            : 'bg-gradient-to-r from-transparent via-slate-600/30 to-transparent'
+                    }`} />
                     <div className="flex-1 min-h-0" onClick={handleTerminalClick}>
                         <TerminalTabs
                             key={`terminal-tabs-${terminalKey}`}
