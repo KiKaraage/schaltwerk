@@ -9,8 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "tsc --noEmit",
-    "lint:rust": "cd src-tauri && cargo clippy -- -D warnings",
-    "test:frontend": "vitest run",
+    "lint:rust": "cd src-tauri && CARGO_TERM_COLOR=never cargo clippy -q -- -D warnings",
+    "test:frontend": "FORCE_COLOR=0 vitest run --silent --reporter=dot",
     "test:frontend:coverage": "vitest run --coverage",
     "coverage:report": "node scripts/coverage-report.js",
     "coverage:rust:run": "mkdir -p coverage && (cd src-tauri && rustup component add llvm-tools-preview && cargo install cargo-llvm-cov --locked -q) && (cd src-tauri && cargo llvm-cov --lcov --output-path ../coverage/rust-lcov.info)",
@@ -18,10 +18,10 @@
     "coverage:rust": "npm run coverage:rust:run && npm run coverage:rust:report",
     "coverage:all": "npm run test:frontend:coverage && npm run coverage:report && npm run coverage:rust",
     "test:frontend:watch": "vitest",
-    "test:rust": "cd src-tauri && cargo test",
+    "test:rust": "cd src-tauri && CARGO_TERM_COLOR=never RUST_LOG=warn cargo test -q",
     "test": "npm run lint && npm run lint:rust && npm run test:frontend && npm run test:rust && npm run build:rust",
     "coverage": "npm run test:frontend:coverage && npm run coverage:report",
-    "build:rust": "cd src-tauri && cargo build",
+    "build:rust": "cd src-tauri && CARGO_TERM_COLOR=never cargo build -q",
     "check": "npm run test"
   },
   "dependencies": {
