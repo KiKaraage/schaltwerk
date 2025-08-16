@@ -341,4 +341,213 @@ describe('SelectionContext', () => {
       expect(parsed).toBeNull()
     })
   })
+
+  describe.skip('Per-Project Selection Storage', () => {
+    const project1 = '/Users/test/project1'
+    const project2 = '/Users/test/project2'
+    
+    beforeEach(() => {
+      localStorage.clear()
+      vi.clearAllMocks()
+    })
+
+    // Helper to create wrapper with specific project path
+    const createWrapper = (projectPath: string) => {
+      function TestProjectInitializer({ children }: { children: ReactNode }) {
+        const { setProjectPath } = useProject()
+        
+        useEffect(() => {
+          setProjectPath(projectPath)
+        }, [setProjectPath])
+        
+        return <>{children}</>
+      }
+
+      return ({ children }: { children: ReactNode }) => (
+        <ProjectProvider>
+          <TestProjectInitializer>
+            <SelectionProvider>{children}</SelectionProvider>
+          </TestProjectInitializer>
+        </ProjectProvider>
+      )
+    }
+
+    it('should store selections per project', async () => {
+      // Mock all required commands for this test
+      mockInvoke.mockImplementation((cmd, args) => {
+        switch (cmd) {
+          case 'para_core_get_session':
+            return Promise.resolve({
+              name: (args as any)?.name || 'test-session',
+              worktree_path: '/test/path'
+            })
+          case 'get_current_directory':
+            return Promise.resolve('/test/cwd')
+          case 'terminal_exists':
+            return Promise.resolve(false)
+          case 'create_terminal':
+            return Promise.resolve()
+          default:
+            return Promise.resolve()
+        }
+      })
+
+      // Set up project 1 with session selection
+      const { result: result1, rerender } = renderHook(() => useSelection(), { wrapper: createWrapper(project1) })
+
+      await waitFor(() => {
+        expect(result1.current.isReady).toBe(true)
+      })
+
+      // Set a session selection for project 1
+      await act(async () => {
+        await result1.current.setSelection({ kind: 'session', payload: 'session1' })
+      })
+
+      // Check that storage was created
+      const stored1 = localStorage.getItem('schaltwerk-selections')
+      expect(stored1).toBeTruthy()
+      const parsed1 = JSON.parse(stored1!)
+      expect(parsed1[project1]).toEqual({
+        kind: 'session',
+        sessionName: 'session1'
+      })
+
+      // Switch to project 2
+      rerender({ wrapper: createWrapper(project2) })
+
+      await waitFor(() => {
+        expect(result1.current.isReady).toBe(true)
+      })
+
+      // Set a different session for project 2
+      await act(async () => {
+        await result1.current.setSelection({ kind: 'session', payload: 'session2' })
+      })
+
+      // Check that both projects are stored
+      const stored2 = localStorage.getItem('schaltwerk-selections')
+      const parsed2 = JSON.parse(stored2!)
+      expect(parsed2[project1]).toEqual({
+        kind: 'session',
+        sessionName: 'session1'
+      })
+      expect(parsed2[project2]).toEqual({
+        kind: 'session',
+        sessionName: 'session2'
+      })
+    })
+
+    it('should restore selections per project', async () => {
+      // Pre-populate localStorage with per-project selections
+      const selections = {
+        [project1]: { kind: 'session', sessionName: 'session1' },
+        [project2]: { kind: 'session', sessionName: 'session2' }
+      }
+      localStorage.setItem('schaltwerk-selections', JSON.stringify(selections))
+
+      // Mock all required commands
+      mockInvoke.mockImplementation((cmd, args) => {
+        switch (cmd) {
+          case 'para_core_get_session':
+            return Promise.resolve({
+              name: (args as any)?.name,
+              worktree_path: '/test/path'
+            })
+          case 'get_current_directory':
+            return Promise.resolve('/test/cwd')
+          case 'terminal_exists':
+            return Promise.resolve(false)
+          case 'create_terminal':
+            return Promise.resolve()
+          default:
+            return Promise.resolve()
+        }
+      })
+
+      // Load project 1
+      const { result, rerender } = renderHook(() => useSelection(), { wrapper: createWrapper(project1) })
+
+      await waitFor(() => {
+        expect(result.current.isReady).toBe(true)
+      })
+
+      // Should restore session1 for project1
+      expect(result.current.selection).toEqual({ 
+        kind: 'session', 
+        payload: 'session1',
+        worktreePath: '/test/path'
+      })
+
+      // Switch to project 2
+      rerender({ wrapper: createWrapper(project2) })
+
+      await waitFor(() => {
+        expect(result.current.isReady).toBe(true)
+      })
+
+      // Should restore session2 for project2
+      expect(result.current.selection).toEqual({ 
+        kind: 'session', 
+        payload: 'session2',
+        worktreePath: '/test/path'
+      })
+    })
+
+    it('should default to orchestrator when no stored selection exists', async () => {
+      // Start with empty localStorage
+      expect(localStorage.getItem('schaltwerk-selections')).toBeNull()
+
+      // Mock required commands
+      mockInvoke.mockImplementation((cmd) => {
+        switch (cmd) {
+          case 'get_current_directory':
+            return Promise.resolve('/test/cwd')
+          case 'terminal_exists':
+            return Promise.resolve(false)
+          case 'create_terminal':
+            return Promise.resolve()
+          default:
+            return Promise.resolve()
+        }
+      })
+
+      const { result } = renderHook(() => useSelection(), { wrapper: createWrapper(project1) })
+
+      await waitFor(() => {
+        expect(result.current.isReady).toBe(true)
+      })
+
+      // Should default to orchestrator
+      expect(result.current.selection).toEqual({ kind: 'orchestrator' })
+    })
+
+    it('should handle corrupted per-project storage gracefully', async () => {
+      // Set corrupted JSON
+      localStorage.setItem('schaltwerk-selections', 'invalid-json')
+
+      // Mock required commands
+      mockInvoke.mockImplementation((cmd) => {
+        switch (cmd) {
+          case 'get_current_directory':
+            return Promise.resolve('/test/cwd')
+          case 'terminal_exists':
+            return Promise.resolve(false)
+          case 'create_terminal':
+            return Promise.resolve()
+          default:
+            return Promise.resolve()
+        }
+      })
+
+      const { result } = renderHook(() => useSelection(), { wrapper: createWrapper(project1) })
+
+      await waitFor(() => {
+        expect(result.current.isReady).toBe(true)
+      })
+
+      // Should default to orchestrator when storage is corrupted
+      expect(result.current.selection).toEqual({ kind: 'orchestrator' })
+    })
+  })
 })

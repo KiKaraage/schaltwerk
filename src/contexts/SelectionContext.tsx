@@ -155,60 +155,31 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     }, [getTerminalIds, createTerminal, projectPath])
     
     // Helper to restore selection from localStorage for current project
-    const restoreSelectionFromStorage = useCallback(async (): Promise<Selection | null> => {
-        if (!projectPath) return null
-        
-        // Try new per-project storage first
-        let allSelections = localStorage.getItem('schaltwerk-selections')
-        
-        // Migration: if no new storage but old storage exists, migrate it
-        if (!allSelections) {
-            const oldSelection = localStorage.getItem('schaltwerk-selection')
-            if (oldSelection) {
-                try {
-                    const parsed = JSON.parse(oldSelection)
-                    // Migrate old selection to new format for current project
-                    const newSelections = { [projectPath]: parsed }
-                    localStorage.setItem('schaltwerk-selections', JSON.stringify(newSelections))
-                    // Remove old storage
-                    localStorage.removeItem('schaltwerk-selection')
-                    allSelections = JSON.stringify(newSelections)
-                } catch (e) {
-                    console.warn('Failed to migrate old selection storage:', e)
-                }
-            }
-        }
-        
-        if (!allSelections) return null
+    const restoreSelectionFromStorage = useCallback(async (): Promise<Selection> => {
+        if (!projectPath) return { kind: 'orchestrator' }
         
         try {
-            const parsed = JSON.parse(allSelections)
-            const projectSelection = parsed[projectPath]
+            const selections = JSON.parse(localStorage.getItem('schaltwerk-selections') || '{}')
+            const stored = selections[projectPath]
             
-            if (!projectSelection || projectSelection.kind !== 'session' || !projectSelection.sessionName) {
-                return { kind: 'orchestrator' }
-            }
-            
-            // Try to get session data
-            const sessionData = await invoke('para_core_get_session', { 
-                name: projectSelection.sessionName 
-            }) as any
-            
-            if (sessionData?.worktree_path) {
-                return {
-                    kind: 'session',
-                    payload: projectSelection.sessionName,
-                    worktreePath: sessionData.worktree_path
+            if (stored?.kind === 'session' && stored.sessionName) {
+                const sessionData = await invoke('para_core_get_session', { 
+                    name: stored.sessionName 
+                }) as any
+                
+                if (sessionData?.worktree_path) {
+                    return {
+                        kind: 'session',
+                        payload: stored.sessionName,
+                        worktreePath: sessionData.worktree_path
+                    }
                 }
             }
-            
-            console.warn('Session data missing worktree_path, using orchestrator')
-            return { kind: 'orchestrator' }
-            
         } catch (e) {
             console.warn('Failed to restore selection from storage:', e)
-            return { kind: 'orchestrator' }
         }
+        
+        return { kind: 'orchestrator' }
     }, [projectPath])
     
     // Clear terminal tracking and close terminals to prevent orphaned processes
@@ -256,12 +227,12 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             // Persist to localStorage per project
             if (projectPath) {
                 try {
-                    const allSelections = JSON.parse(localStorage.getItem('schaltwerk-selections') || '{}')
-                    allSelections[projectPath] = {
+                    const selections = JSON.parse(localStorage.getItem('schaltwerk-selections') || '{}')
+                    selections[projectPath] = {
                         kind: newSelection.kind,
                         sessionName: newSelection.payload
                     }
-                    localStorage.setItem('schaltwerk-selections', JSON.stringify(allSelections))
+                    localStorage.setItem('schaltwerk-selections', JSON.stringify(selections))
                 } catch (e) {
                     console.warn('Failed to save selection to localStorage:', e)
                 }
@@ -275,7 +246,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             // Stay on current selection if we fail
             setIsReady(true)
         }
-    }, [ensureTerminals, getTerminalIds, clearTerminalTracking, isReady, selection])
+    }, [ensureTerminals, getTerminalIds, clearTerminalTracking, isReady, selection, projectPath])
 
     // React to backend session refreshes (e.g., draft -> running)
     useEffect(() => {
@@ -330,22 +301,13 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             hasInitialized.current = true
             previousProjectPath.current = projectPath
             
-            // Determine target selection
-            let targetSelection: Selection
+            // Determine target selection - if project changed, reset to orchestrator, otherwise restore from storage
+            const targetSelection = projectChanged 
+                ? { kind: 'orchestrator' as const }
+                : await restoreSelectionFromStorage()
             
-            if (projectChanged) {
-                // When switching projects, always reset to orchestrator for the new project
-                targetSelection = { kind: 'orchestrator' }
-            } else {
-                // Only try to restore from localStorage if not a project change
-                targetSelection = await restoreSelectionFromStorage() || { kind: 'orchestrator' }
-            }
-            
-            // Force recreate if project changed and we're on orchestrator
-            const shouldForceRecreate = projectChanged && targetSelection.kind === 'orchestrator'
-            
-            // Set the selection (force recreate if needed)
-            await setSelection(targetSelection, shouldForceRecreate)
+            // Set the selection (force recreate if project changed)
+            await setSelection(targetSelection, projectChanged)
         }
         
         // Only run if not currently initializing
