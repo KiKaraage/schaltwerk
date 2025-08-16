@@ -90,6 +90,13 @@ Sessions:
 
 Never consider a task complete unless `npm run test` passes without errors.
 
+**CRITICAL**: Test failures are NEVER unrelated. All tests must be green before:
+- Committing any changes
+- Merging any branches
+- Considering any task complete
+
+If tests are failing, they must be fixed immediately. Do not assume test failures are from previous changes or unrelated work. Every test failure indicates a real problem that must be resolved.
+
 ### Common Issues to Check
 - Unused imports (both TypeScript and Rust)
 - Missing JSX configuration in tsconfig.json

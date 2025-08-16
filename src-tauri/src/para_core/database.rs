@@ -97,7 +97,8 @@ impl Database {
                 agent_type TEXT DEFAULT 'claude',
                 default_open_app TEXT DEFAULT 'finder',
                 default_base_branch TEXT,
-                font_size INTEGER DEFAULT 13
+                terminal_font_size INTEGER DEFAULT 13,
+                ui_font_size INTEGER DEFAULT 12
             )",
             [],
         )?;
@@ -139,19 +140,44 @@ impl Database {
             let _ = conn.execute("ALTER TABLE app_config ADD COLUMN default_base_branch TEXT", []);
         }
         
-        // Migration: Add font_size column if it doesn't exist
-        let font_size_exists = {
-            let result = conn.prepare("SELECT font_size FROM app_config LIMIT 1");
+        // Migration: Add terminal_font_size and ui_font_size columns if they don't exist
+        let terminal_font_size_exists = {
+            let result = conn.prepare("SELECT terminal_font_size FROM app_config LIMIT 1");
             result.is_ok()
         };
         
-        if !font_size_exists {
-            log::info!("Adding font_size column to app_config table");
-            let _ = conn.execute("ALTER TABLE app_config ADD COLUMN font_size INTEGER DEFAULT 13", []);
+        if !terminal_font_size_exists {
+            // Check if old font_size column exists and migrate
+            let old_font_size_exists = {
+                let result = conn.prepare("SELECT font_size FROM app_config LIMIT 1");
+                result.is_ok()
+            };
+            
+            if old_font_size_exists {
+                // Migrate from old font_size to new columns
+                let old_size: SqlResult<i32> = conn.query_row(
+                    "SELECT font_size FROM app_config WHERE id = 1",
+                    [],
+                    |row| row.get(0),
+                );
+                
+                let font_value = old_size.unwrap_or(13);
+                let ui_value = if font_value == 13 { 12 } else { font_value - 1 };
+                
+                conn.execute("ALTER TABLE app_config ADD COLUMN terminal_font_size INTEGER", [])?;
+                conn.execute("ALTER TABLE app_config ADD COLUMN ui_font_size INTEGER", [])?;
+                conn.execute(
+                    "UPDATE app_config SET terminal_font_size = ?1, ui_font_size = ?2 WHERE id = 1",
+                    params![font_value, ui_value],
+                )?;
+            } else {
+                conn.execute("ALTER TABLE app_config ADD COLUMN terminal_font_size INTEGER DEFAULT 13", [])?;
+                conn.execute("ALTER TABLE app_config ADD COLUMN ui_font_size INTEGER DEFAULT 12", [])?;
+            }
         }
         
         conn.execute(
-            "INSERT OR IGNORE INTO app_config (id, skip_permissions, agent_type, default_open_app, font_size) VALUES (1, FALSE, 'claude', 'finder', 13)",
+            "INSERT OR IGNORE INTO app_config (id, skip_permissions, agent_type, default_open_app, terminal_font_size, ui_font_size) VALUES (1, FALSE, 'claude', 'finder', 13, 12)",
             [],
         )?;
         
@@ -619,27 +645,43 @@ impl Database {
         Ok(())
     }
     
-    pub fn get_font_size(&self) -> Result<i32> {
+    pub fn get_font_sizes(&self) -> Result<(i32, i32)> {
         let conn = self.conn.lock().unwrap();
         
-        let result: SqlResult<i32> = conn.query_row(
-            "SELECT font_size FROM app_config WHERE id = 1",
+        // Try new columns first
+        let result: SqlResult<(i32, i32)> = conn.query_row(
+            "SELECT terminal_font_size, ui_font_size FROM app_config WHERE id = 1",
             [],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         );
         
         match result {
             Ok(value) => Ok(value),
-            Err(_) => Ok(13),
+            Err(_) => {
+                // Fallback to old font_size column if new ones don't exist
+                let old_result: SqlResult<i32> = conn.query_row(
+                    "SELECT font_size FROM app_config WHERE id = 1",
+                    [],
+                    |row| row.get(0),
+                );
+                
+                match old_result {
+                    Ok(size) => {
+                        let ui_size = if size == 13 { 12 } else { size - 1 };
+                        Ok((size, ui_size))
+                    },
+                    Err(_) => Ok((13, 12)),
+                }
+            }
         }
     }
     
-    pub fn set_font_size(&self, font_size: i32) -> Result<()> {
+    pub fn set_font_sizes(&self, terminal_font_size: i32, ui_font_size: i32) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         
         conn.execute(
-            "UPDATE app_config SET font_size = ?1 WHERE id = 1",
-            params![font_size],
+            "UPDATE app_config SET terminal_font_size = ?1, ui_font_size = ?2 WHERE id = 1",
+            params![terminal_font_size, ui_font_size],
         )?;
         
         Ok(())

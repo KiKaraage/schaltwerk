@@ -1134,21 +1134,21 @@ async fn para_core_get_agent_type() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn para_core_get_font_size() -> Result<i32, String> {
+async fn para_core_get_font_sizes() -> Result<(i32, i32), String> {
     let core = get_para_core().await?;
     let core = core.lock().await;
     
-    core.db.get_font_size()
-        .map_err(|e| format!("Failed to get font size: {e}"))
+    core.db.get_font_sizes()
+        .map_err(|e| format!("Failed to get font sizes: {e}"))
 }
 
 #[tauri::command]
-async fn para_core_set_font_size(font_size: i32) -> Result<(), String> {
+async fn para_core_set_font_sizes(terminal_font_size: i32, ui_font_size: i32) -> Result<(), String> {
     let core = get_para_core().await?;
     let core = core.lock().await;
     
-    core.db.set_font_size(font_size)
-        .map_err(|e| format!("Failed to set font size: {e}"))
+    core.db.set_font_sizes(terminal_font_size, ui_font_size)
+        .map_err(|e| format!("Failed to set font sizes: {e}"))
 }
 
 #[tauri::command]
@@ -1318,8 +1318,8 @@ fn main() {
             para_core_unmark_session_ready,
             para_core_set_agent_type,
             para_core_get_agent_type,
-            para_core_get_font_size,
-            para_core_set_font_size,
+            para_core_get_font_sizes,
+            para_core_set_font_sizes,
             para_core_create_draft_session,
             para_core_start_draft_session,
             para_core_update_session_state,

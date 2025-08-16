@@ -5,10 +5,10 @@ import { FontSizeProvider, useFontSize } from './FontSizeContext'
 // Mock Tauri API
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn((cmd: string, _args?: any) => {
-    if (cmd === 'para_core_get_font_size') {
-      return Promise.resolve(13)
+    if (cmd === 'para_core_get_font_sizes') {
+      return Promise.resolve([13, 12])
     }
-    if (cmd === 'para_core_set_font_size') {
+    if (cmd === 'para_core_set_font_sizes') {
       return Promise.resolve()
     }
     return Promise.reject(new Error(`Unknown command: ${cmd}`))
@@ -16,15 +16,16 @@ vi.mock('@tauri-apps/api/core', () => ({
 }))
 
 const TestComponent = () => {
-  const { baseFontSize, terminalFontSize, uiFontSize, increaseFontSize, decreaseFontSize, resetFontSize } = useFontSize()
+  const { terminalFontSize, uiFontSize, setTerminalFontSize, setUiFontSize, increaseFontSizes, decreaseFontSizes, resetFontSizes } = useFontSize()
   return (
     <div>
-      <div data-testid="base-font-size">{baseFontSize}</div>
       <div data-testid="terminal-font-size">{terminalFontSize}</div>
       <div data-testid="ui-font-size">{uiFontSize}</div>
-      <button onClick={increaseFontSize} data-testid="increase">+</button>
-      <button onClick={decreaseFontSize} data-testid="decrease">-</button>
-      <button onClick={resetFontSize} data-testid="reset">Reset</button>
+      <button onClick={increaseFontSizes} data-testid="increase">+</button>
+      <button onClick={decreaseFontSizes} data-testid="decrease">-</button>
+      <button onClick={resetFontSizes} data-testid="reset">Reset</button>
+      <button onClick={() => setTerminalFontSize(15)} data-testid="set-terminal">Set Terminal</button>
+      <button onClick={() => setUiFontSize(14)} data-testid="set-ui">Set UI</button>
     </div>
   )
 }
@@ -46,13 +47,12 @@ describe('FontSizeContext', () => {
     )
 
     await waitFor(() => {
-      expect(getByTestId('base-font-size')).toHaveTextContent('13')
       expect(getByTestId('terminal-font-size')).toHaveTextContent('13')
       expect(getByTestId('ui-font-size')).toHaveTextContent('12')
     })
   })
 
-  it('increases font size when increase function is called', () => {
+  it('increases font sizes when increase function is called', () => {
     const { getByTestId } = render(
       <FontSizeProvider>
         <TestComponent />
@@ -63,10 +63,11 @@ describe('FontSizeContext', () => {
       getByTestId('increase').click()
     })
 
-    expect(getByTestId('base-font-size')).toHaveTextContent('14')
+    expect(getByTestId('terminal-font-size')).toHaveTextContent('14')
+    expect(getByTestId('ui-font-size')).toHaveTextContent('13')
   })
 
-  it('decreases font size when decrease function is called', () => {
+  it('decreases font sizes when decrease function is called', () => {
     const { getByTestId } = render(
       <FontSizeProvider>
         <TestComponent />
@@ -77,10 +78,11 @@ describe('FontSizeContext', () => {
       getByTestId('decrease').click()
     })
 
-    expect(getByTestId('base-font-size')).toHaveTextContent('12')
+    expect(getByTestId('terminal-font-size')).toHaveTextContent('12')
+    expect(getByTestId('ui-font-size')).toHaveTextContent('11')
   })
 
-  it('resets font size when reset function is called', () => {
+  it('resets font sizes when reset function is called', () => {
     const { getByTestId } = render(
       <FontSizeProvider>
         <TestComponent />
@@ -92,16 +94,18 @@ describe('FontSizeContext', () => {
       getByTestId('increase').click()
     })
 
-    expect(getByTestId('base-font-size')).toHaveTextContent('15')
+    expect(getByTestId('terminal-font-size')).toHaveTextContent('15')
+    expect(getByTestId('ui-font-size')).toHaveTextContent('14')
 
     act(() => {
       getByTestId('reset').click()
     })
 
-    expect(getByTestId('base-font-size')).toHaveTextContent('13')
+    expect(getByTestId('terminal-font-size')).toHaveTextContent('13')
+    expect(getByTestId('ui-font-size')).toHaveTextContent('12')
   })
 
-  it('persists font size to database', async () => {
+  it('persists font sizes to database', async () => {
     const mockInvoke = vi.mocked((await import('@tauri-apps/api/core')).invoke)
     
     const { getByTestId } = render(
@@ -111,7 +115,7 @@ describe('FontSizeContext', () => {
     )
 
     await waitFor(() => {
-      expect(getByTestId('base-font-size')).toHaveTextContent('13')
+      expect(getByTestId('terminal-font-size')).toHaveTextContent('13')
     })
 
     act(() => {
@@ -119,7 +123,10 @@ describe('FontSizeContext', () => {
     })
 
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('para_core_set_font_size', { fontSize: 14 })
+      expect(mockInvoke).toHaveBeenCalledWith('para_core_set_font_sizes', { 
+        terminalFontSize: 14,
+        uiFontSize: 13
+      })
     })
   })
 
@@ -136,7 +143,8 @@ describe('FontSizeContext', () => {
         getByTestId('decrease').click()
       })
     }
-    expect(getByTestId('base-font-size')).toHaveTextContent('8')
+    expect(getByTestId('terminal-font-size')).toHaveTextContent('8')
+    expect(getByTestId('ui-font-size')).toHaveTextContent('8')
 
     // Reset and test maximum limit
     act(() => {
@@ -148,6 +156,27 @@ describe('FontSizeContext', () => {
         getByTestId('increase').click()
       })
     }
-    expect(getByTestId('base-font-size')).toHaveTextContent('24')
+    expect(getByTestId('terminal-font-size')).toHaveTextContent('24')
+    expect(getByTestId('ui-font-size')).toHaveTextContent('24')
+  })
+
+  it('allows setting individual font sizes', () => {
+    const { getByTestId } = render(
+      <FontSizeProvider>
+        <TestComponent />
+      </FontSizeProvider>
+    )
+
+    act(() => {
+      getByTestId('set-terminal').click()
+    })
+    expect(getByTestId('terminal-font-size')).toHaveTextContent('15')
+    expect(getByTestId('ui-font-size')).toHaveTextContent('12')
+
+    act(() => {
+      getByTestId('set-ui').click()
+    })
+    expect(getByTestId('terminal-font-size')).toHaveTextContent('15')
+    expect(getByTestId('ui-font-size')).toHaveTextContent('14')
   })
 })

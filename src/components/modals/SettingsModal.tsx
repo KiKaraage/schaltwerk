@@ -1,5 +1,6 @@
 import { useState, useEffect, ReactElement } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { useFontSize } from '../../contexts/FontSizeContext'
 
 interface Props {
     open: boolean
@@ -8,7 +9,7 @@ interface Props {
 
 type AgentType = 'claude' | 'cursor' | 'opencode'
 type EnvVars = Record<string, string>
-type SettingsCategory = 'environment' | 'projects' // Add more categories here as needed: 'general' | 'appearance' | 'shortcuts' etc.
+type SettingsCategory = 'appearance' | 'environment' | 'projects'
 
 interface CategoryConfig {
     id: SettingsCategory
@@ -17,6 +18,15 @@ interface CategoryConfig {
 }
 
 const CATEGORIES: CategoryConfig[] = [
+    {
+        id: 'appearance',
+        label: 'Appearance',
+        icon: (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+            </svg>
+        )
+    },
     {
         id: 'environment',
         label: 'Environment Variables',
@@ -42,7 +52,8 @@ interface ProjectSettings {
 }
 
 export function SettingsModal({ open, onClose }: Props) {
-    const [activeCategory, setActiveCategory] = useState<SettingsCategory>('environment')
+    const { terminalFontSize, uiFontSize, setTerminalFontSize, setUiFontSize } = useFontSize()
+    const [activeCategory, setActiveCategory] = useState<SettingsCategory>('appearance')
     const [activeAgentTab, setActiveAgentTab] = useState<AgentType>('claude')
     const [projectSettings, setProjectSettings] = useState<ProjectSettings>({
         setupScript: ''
@@ -329,14 +340,92 @@ fi`}
         </div>
     )
 
+    const renderAppearanceSettings = () => (
+        <div className="flex flex-col h-full">
+            <div className="flex-1 overflow-y-auto p-6">
+                <div className="space-y-6">
+                    <div>
+                        <h3 className="text-sm font-medium text-slate-200 mb-4">Font Sizes</h3>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="flex items-center justify-between mb-2">
+                                    <span className="text-sm text-slate-300">Terminal Font Size</span>
+                                    <span className="text-sm text-slate-400">{terminalFontSize}px</span>
+                                </label>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="range"
+                                        min="8"
+                                        max="24"
+                                        value={terminalFontSize}
+                                        onChange={(e) => setTerminalFontSize(Number(e.target.value))}
+                                        className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider"
+                                        style={{
+                                            background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((terminalFontSize - 8) / 16) * 100}%, #475569 ${((terminalFontSize - 8) / 16) * 100}%, #475569 100%)`
+                                        }}
+                                    />
+                                    <button
+                                        onClick={() => setTerminalFontSize(13)}
+                                        className="px-3 py-1 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded transition-colors text-slate-400"
+                                    >
+                                        Reset
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="flex items-center justify-between mb-2">
+                                    <span className="text-sm text-slate-300">UI Font Size</span>
+                                    <span className="text-sm text-slate-400">{uiFontSize}px</span>
+                                </label>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="range"
+                                        min="8"
+                                        max="24"
+                                        value={uiFontSize}
+                                        onChange={(e) => setUiFontSize(Number(e.target.value))}
+                                        className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider"
+                                        style={{
+                                            background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((uiFontSize - 8) / 16) * 100}%, #475569 ${((uiFontSize - 8) / 16) * 100}%, #475569 100%)`
+                                        }}
+                                    />
+                                    <button
+                                        onClick={() => setUiFontSize(12)}
+                                        className="px-3 py-1 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded transition-colors text-slate-400"
+                                    >
+                                        Reset
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="mt-6 p-3 bg-slate-800/50 border border-slate-700 rounded">
+                            <div className="text-xs text-slate-400">
+                                <strong>Keyboard shortcuts:</strong>
+                                <ul className="mt-2 space-y-1 list-disc list-inside">
+                                    <li><kbd className="px-1 py-0.5 bg-slate-700 rounded text-xs">Cmd/Ctrl</kbd> + <kbd className="px-1 py-0.5 bg-slate-700 rounded text-xs">+</kbd> Increase both font sizes</li>
+                                    <li><kbd className="px-1 py-0.5 bg-slate-700 rounded text-xs">Cmd/Ctrl</kbd> + <kbd className="px-1 py-0.5 bg-slate-700 rounded text-xs">-</kbd> Decrease both font sizes</li>
+                                    <li><kbd className="px-1 py-0.5 bg-slate-700 rounded text-xs">Cmd/Ctrl</kbd> + <kbd className="px-1 py-0.5 bg-slate-700 rounded text-xs">0</kbd> Reset both font sizes</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+
     const renderSettingsContent = () => {
         switch (activeCategory) {
+            case 'appearance':
+                return renderAppearanceSettings()
             case 'environment':
                 return renderEnvironmentSettings()
             case 'projects':
                 return renderProjectSettings()
             default:
-                return renderEnvironmentSettings()
+                return renderAppearanceSettings()
         }
     }
 

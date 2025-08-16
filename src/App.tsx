@@ -34,7 +34,7 @@ function getBasename(path: string): string {
 export default function App() {
   const { selection, setSelection } = useSelection()
   const { setProjectPath } = useProject()
-  const { increaseFontSize, decreaseFontSize, resetFontSize } = useFontSize()
+  const { increaseFontSizes, decreaseFontSizes, resetFontSizes } = useFontSize()
   const [newSessionOpen, setNewSessionOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
@@ -104,15 +104,15 @@ export default function App() {
       // Font size shortcuts
       if (modifierKey && (e.key === '+' || e.key === '=')) {
         e.preventDefault()
-        increaseFontSize()
+        increaseFontSizes()
       }
       if (modifierKey && e.key === '-') {
         e.preventDefault()
-        decreaseFontSize()
+        decreaseFontSizes()
       }
       if (modifierKey && e.key === '0') {
         e.preventDefault()
-        resetFontSize()
+        resetFontSizes()
       }
       
     }

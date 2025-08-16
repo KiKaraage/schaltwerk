@@ -2,80 +2,100 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { invoke } from '@tauri-apps/api/core'
 
 interface FontSizeContextType {
-  baseFontSize: number
   terminalFontSize: number
   uiFontSize: number
-  increaseFontSize: () => void
-  decreaseFontSize: () => void
-  resetFontSize: () => void
+  setTerminalFontSize: (size: number) => void
+  setUiFontSize: (size: number) => void
+  increaseFontSizes: () => void
+  decreaseFontSizes: () => void
+  resetFontSizes: () => void
 }
 
 const FontSizeContext = createContext<FontSizeContextType | undefined>(undefined)
 
-const DEFAULT_BASE_FONT_SIZE = 13
+const DEFAULT_TERMINAL_FONT_SIZE = 13
+const DEFAULT_UI_FONT_SIZE = 12
 const MIN_FONT_SIZE = 8
 const MAX_FONT_SIZE = 24
 const FONT_SIZE_STEP = 1
 
 export function FontSizeProvider({ children }: { children: ReactNode }) {
-  const [baseFontSize, setBaseFontSize] = useState(DEFAULT_BASE_FONT_SIZE)
+  const [terminalFontSize, setTerminalFontSize] = useState(DEFAULT_TERMINAL_FONT_SIZE)
+  const [uiFontSize, setUiFontSize] = useState(DEFAULT_UI_FONT_SIZE)
   const [initialized, setInitialized] = useState(false)
 
-  // Load font size from database on mount
+  // Load font sizes from database on mount
   useEffect(() => {
-    invoke<number>('para_core_get_font_size')
-      .then(size => {
-        if (size >= MIN_FONT_SIZE && size <= MAX_FONT_SIZE) {
-          setBaseFontSize(size)
+    invoke<[number, number]>('para_core_get_font_sizes')
+      .then(([terminal, ui]) => {
+        if (terminal >= MIN_FONT_SIZE && terminal <= MAX_FONT_SIZE) {
+          setTerminalFontSize(terminal)
+        }
+        if (ui >= MIN_FONT_SIZE && ui <= MAX_FONT_SIZE) {
+          setUiFontSize(ui)
         }
         setInitialized(true)
       })
       .catch(err => {
-        console.error('Failed to load font size:', err)
+        console.error('Failed to load font sizes:', err)
         setInitialized(true)
       })
   }, [])
 
-  const terminalFontSize = baseFontSize
-  // Keep original sizing: UI was 12px when terminal was 13px
-  const uiFontSize = baseFontSize === DEFAULT_BASE_FONT_SIZE ? 12 : Math.max(Math.round(baseFontSize * 0.92), 10)
-
-  // Save font size to database when it changes
+  // Save font sizes to database when they change
   useEffect(() => {
     if (!initialized) return
     
-    invoke('para_core_set_font_size', { fontSize: baseFontSize })
-      .catch(err => console.error('Failed to save font size:', err))
+    invoke('para_core_set_font_sizes', { 
+      terminalFontSize, 
+      uiFontSize 
+    })
+      .catch(err => console.error('Failed to save font sizes:', err))
     
     document.documentElement.style.setProperty('--terminal-font-size', `${terminalFontSize}px`)
     document.documentElement.style.setProperty('--ui-font-size', `${uiFontSize}px`)
-    document.documentElement.style.setProperty('--base-font-size', `${baseFontSize}px`)
     
     window.dispatchEvent(new CustomEvent('font-size-changed', { 
-      detail: { baseFontSize, terminalFontSize, uiFontSize } 
+      detail: { terminalFontSize, uiFontSize } 
     }))
-  }, [baseFontSize, terminalFontSize, uiFontSize, initialized])
+  }, [terminalFontSize, uiFontSize, initialized])
 
-  const increaseFontSize = () => {
-    setBaseFontSize(prev => Math.min(prev + FONT_SIZE_STEP, MAX_FONT_SIZE))
+  const handleSetTerminalFontSize = (size: number) => {
+    if (size >= MIN_FONT_SIZE && size <= MAX_FONT_SIZE) {
+      setTerminalFontSize(size)
+    }
   }
 
-  const decreaseFontSize = () => {
-    setBaseFontSize(prev => Math.max(prev - FONT_SIZE_STEP, MIN_FONT_SIZE))
+  const handleSetUiFontSize = (size: number) => {
+    if (size >= MIN_FONT_SIZE && size <= MAX_FONT_SIZE) {
+      setUiFontSize(size)
+    }
   }
 
-  const resetFontSize = () => {
-    setBaseFontSize(DEFAULT_BASE_FONT_SIZE)
+  const increaseFontSizes = () => {
+    setTerminalFontSize(prev => Math.min(prev + FONT_SIZE_STEP, MAX_FONT_SIZE))
+    setUiFontSize(prev => Math.min(prev + FONT_SIZE_STEP, MAX_FONT_SIZE))
+  }
+
+  const decreaseFontSizes = () => {
+    setTerminalFontSize(prev => Math.max(prev - FONT_SIZE_STEP, MIN_FONT_SIZE))
+    setUiFontSize(prev => Math.max(prev - FONT_SIZE_STEP, MIN_FONT_SIZE))
+  }
+
+  const resetFontSizes = () => {
+    setTerminalFontSize(DEFAULT_TERMINAL_FONT_SIZE)
+    setUiFontSize(DEFAULT_UI_FONT_SIZE)
   }
 
   return (
     <FontSizeContext.Provider value={{
-      baseFontSize,
       terminalFontSize,
       uiFontSize,
-      increaseFontSize,
-      decreaseFontSize,
-      resetFontSize
+      setTerminalFontSize: handleSetTerminalFontSize,
+      setUiFontSize: handleSetUiFontSize,
+      increaseFontSizes,
+      decreaseFontSizes,
+      resetFontSizes
     }}>
       {children}
     </FontSizeContext.Provider>
