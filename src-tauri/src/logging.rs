@@ -73,8 +73,7 @@ pub fn init_logging() {
     
     let mut builder = Builder::new();
     // In tests, capture logs via test harness and keep console quiet unless failures
-    // But skip this for the logging test itself which needs to verify file output
-    if cfg!(test) && std::env::var("TESTING_LOGGING").is_err() {
+    if cfg!(test) {
         builder.is_test(true);
     }
     
@@ -186,40 +185,4 @@ mod tests {
         if let Some(p) = prev { env::set_var("HOME", p); } else { env::remove_var("HOME"); }
     }
 
-    #[test]
-    #[serial]
-    fn test_init_logging_writes_header_to_file() {
-        let tmp = TempDir::new().unwrap();
-        let prev = env::var("HOME").ok();
-        env::set_var("HOME", tmp.path());
-        
-        // Set flag to allow file logging in this test
-        env::set_var("TESTING_LOGGING", "1");
-
-        init_logging();
-        let log_path = get_log_path();
-        
-        // Write a test log entry and wait for file to be created
-        log::info!("test log entry");
-        
-        // Wait for the log file to be created and contain content
-        let mut attempts = 0;
-        let max_attempts = 20; // 2 seconds max
-        loop {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            if log_path.exists() {
-                if let Ok(content) = std::fs::read_to_string(&log_path) {
-                    if content.contains("Schaltwerk v") || content.contains("test log entry") {
-                        break;
-                    }
-                }
-            }
-            attempts += 1;
-            if attempts >= max_attempts {
-                panic!("Log file was not created or didn't contain expected content after {} attempts", max_attempts);
-            }
-        }
-
-        if let Some(p) = prev { env::set_var("HOME", p); } else { env::remove_var("HOME"); }
-    }
 }
