@@ -41,8 +41,16 @@ export const TerminalTabs = forwardRef<TerminalTabsHandle, TerminalTabsProps>(({
     }
   }), [activeTab])
 
-  const handleTabClick = (tabIndex: number) => {
+  const handleTabClick = (e: React.MouseEvent, tabIndex: number) => {
+    e.stopPropagation()
     setActiveTab(tabIndex)
+    // Focus the terminal after a brief delay
+    setTimeout(() => {
+      const activeTerminalRef = terminalRefs.current.get(tabIndex)
+      if (activeTerminalRef) {
+        activeTerminalRef.focus()
+      }
+    }, 50)
   }
 
   const handleTabClose = (e: React.MouseEvent, tabIndex: number) => {
@@ -53,19 +61,19 @@ export const TerminalTabs = forwardRef<TerminalTabsHandle, TerminalTabsProps>(({
 
   return (
     <div className={`h-full flex flex-col ${className}`}>
-      <div className="flex-shrink-0 border-b border-slate-800 bg-slate-900/50">
+      <div className="flex-shrink-0 bg-slate-900/50">
         <div className="flex items-center overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <div
               key={tab.index}
               className={`
-                flex items-center px-3 py-1.5 text-xs cursor-pointer border-r border-slate-800/50 min-w-0 max-w-32
+                relative flex items-center px-3 py-1.5 text-xs cursor-pointer border-r border-slate-800/50 min-w-0 max-w-32 transition-all duration-200
                 ${tab.index === activeTab 
-                  ? 'bg-panel text-slate-300' 
+                  ? 'bg-blue-900/30 text-blue-200' 
                   : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
                 }
               `}
-              onClick={() => handleTabClick(tab.index)}
+              onClick={(e) => handleTabClick(e, tab.index)}
             >
               <span className="truncate flex-1">{tab.label}</span>
               {tabs.length > 1 && (
@@ -76,6 +84,9 @@ export const TerminalTabs = forwardRef<TerminalTabsHandle, TerminalTabsProps>(({
                 >
                   ×
                 </button>
+              )}
+              {tab.index === activeTab && (
+                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-blue-500/80" />
               )}
             </div>
           ))}
