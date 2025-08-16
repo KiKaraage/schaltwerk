@@ -80,6 +80,27 @@ Sessions:
 
 ## Testing Requirements
 
+### Test-Driven Development (TDD)
+
+**MANDATORY**: Follow red-green-refactor cycle for all new code:
+
+1. **Red**: Write a failing test first that defines the expected behavior
+2. **Green**: Write minimal code to make the test pass
+3. **Refactor**: Improve code while keeping tests green
+
+**TDD Rules**:
+- Never write production code without a failing test
+- Write only enough test code to make it fail
+- Write only enough production code to make the test pass
+- All tests must remain green after each implementation step
+- No workarounds or skipped tests - fix issues immediately
+
+**Benefits**:
+- Ensures complete test coverage through red-green cycle
+- Provides immediate feedback on implementation correctness
+- Prevents untested code from entering the codebase
+- Creates a safety net for future refactoring
+
 ### Before ANY Commit
 
 **MANDATORY**: Run `npm run test` and ensure it passes completely. This command runs:
