@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { useProject } from './ProjectContext'
 
 export interface Selection {
@@ -298,6 +299,26 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             setIsReady(true)
         })
     }, [projectPath, setSelection]) // Re-run when projectPath changes
+    
+    // Listen for selection events from backend (e.g., when MCP creates/updates drafts)
+    useEffect(() => {
+        const setupSelectionListener = async () => {
+            const unlisten = await listen<Selection>('schaltwerk:selection', async (event) => {
+                console.log('Received selection event from backend:', event.payload)
+                // Set the selection to the requested session/draft
+                await setSelection(event.payload)
+            })
+            
+            return () => {
+                unlisten()
+            }
+        }
+        
+        const cleanup = setupSelectionListener()
+        return () => {
+            cleanup.then(fn => fn())
+        }
+    }, [setSelection])
     
     return (
         <SelectionContext.Provider value={{ 

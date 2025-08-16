@@ -564,6 +564,16 @@ async fn start_webhook_server(app: tauri::AppHandle) {
                             if let Err(e) = app.emit("schaltwerk:sessions-refreshed", &Vec::<para_core::EnrichedSession>::new()) {
                                 log::error!("Failed to emit sessions-refreshed event: {e}");
                             }
+                            
+                            // Emit selection event to automatically open the draft
+                            log::info!("Emitting selection event to open draft: {draft_name}");
+                            let selection = serde_json::json!({
+                                "kind": "session",
+                                "payload": draft_name
+                            });
+                            if let Err(e) = app.emit("schaltwerk:selection", &selection) {
+                                log::error!("Failed to emit selection event: {e}");
+                            }
                         } else {
                             log::warn!("Draft-created webhook payload missing 'name' field");
                         }

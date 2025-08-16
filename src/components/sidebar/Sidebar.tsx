@@ -327,20 +327,50 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
 
     // Initial load only; push updates keep it fresh thereafter
     useEffect(() => {
-        const addTimestamps = (arr: EnrichedSession[]): EnrichedSession[] => {
-            return arr.map(s => ({
-                ...s,
-                info: {
-                    ...s.info,
-                    last_modified_ts: s.info.last_modified ? Date.parse(s.info.last_modified) : undefined,
-                }
-            }))
-        }
-
         const loadSessions = async () => {
             try {
-                const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                setSessions(addTimestamps(result))
+                // Load both regular sessions and drafts
+                const [regularSessions, draftSessions] = await Promise.all([
+                    invoke<EnrichedSession[]>('para_core_list_enriched_sessions'),
+                    invoke<any[]>('para_core_list_sessions_by_state', { state: 'Draft' })
+                ])
+                
+                // Convert draft sessions to EnrichedSession format
+                const enrichedDrafts: EnrichedSession[] = draftSessions.map(draft => ({
+                    id: draft.id,
+                    info: {
+                        session_id: draft.name,
+                        display_name: draft.display_name || draft.name,
+                        branch: draft.branch,
+                        worktree_path: draft.worktree_path,
+                        base_branch: draft.parent_branch,
+                        merge_mode: 'rebase',
+                        status: 'active' as any,
+                        session_state: 'Draft',
+                        created_at: new Date(draft.created_at).toISOString(),
+                        last_modified: draft.updated_at ? new Date(draft.updated_at).toISOString() : new Date(draft.created_at).toISOString(),
+                        has_uncommitted: false,
+                        ready_to_merge: false,
+                        diff_stats: undefined,
+                        is_current: false,
+                        session_type: 'work' as any,
+                    },
+                    terminals: [
+                        `session-${draft.name}-top`,
+                        `session-${draft.name}-bottom`,
+                        `session-${draft.name}-right`
+                    ]
+                }))
+                
+                // Combine and set all sessions
+                const allSessions = [...regularSessions, ...enrichedDrafts]
+                setSessions(allSessions.map(s => ({
+                    ...s,
+                    info: {
+                        ...s.info,
+                        last_modified_ts: s.info.last_modified ? Date.parse(s.info.last_modified) : undefined,
+                    }
+                })))
             } catch (err) {
                 console.error('Failed to load sessions:', err)
             } finally {
@@ -354,14 +384,65 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     // Listen for sessions-refreshed events (e.g., after name generation)
     useEffect(() => {
         const setupRefreshListener = async () => {
-            const unlisten = await listen<EnrichedSession[]>('schaltwerk:sessions-refreshed', (event) => {
-                setSessions(event.payload.map(s => ({
-                    ...s,
-                    info: {
-                        ...s.info,
-                        last_modified_ts: s.info.last_modified ? Date.parse(s.info.last_modified) : undefined,
+            const unlisten = await listen<EnrichedSession[]>('schaltwerk:sessions-refreshed', async (event) => {
+                // If payload is empty (from webhook), reload all sessions including drafts
+                if (!event.payload || event.payload.length === 0) {
+                    try {
+                        // Reload both regular sessions and drafts
+                        const [regularSessions, draftSessions] = await Promise.all([
+                            invoke<EnrichedSession[]>('para_core_list_enriched_sessions'),
+                            invoke<any[]>('para_core_list_sessions_by_state', { state: 'Draft' })
+                        ])
+                        
+                        // Convert draft sessions to EnrichedSession format
+                        const enrichedDrafts: EnrichedSession[] = draftSessions.map(draft => ({
+                            id: draft.id,
+                            info: {
+                                session_id: draft.name,
+                                display_name: draft.display_name || draft.name,
+                                branch: draft.branch,
+                                worktree_path: draft.worktree_path,
+                                base_branch: draft.parent_branch,
+                                merge_mode: 'rebase',
+                                status: 'active' as any,
+                                session_state: 'Draft',
+                                created_at: new Date(draft.created_at).toISOString(),
+                                last_modified: draft.updated_at ? new Date(draft.updated_at).toISOString() : new Date(draft.created_at).toISOString(),
+                                has_uncommitted: false,
+                                ready_to_merge: false,
+                                diff_stats: undefined,
+                                is_current: false,
+                                session_type: 'work' as any,
+                            },
+                            terminals: [
+                                `session-${draft.name}-top`,
+                                `session-${draft.name}-bottom`,
+                                `session-${draft.name}-right`
+                            ]
+                        }))
+                        
+                        // Combine and set all sessions
+                        const allSessions = [...regularSessions, ...enrichedDrafts]
+                        setSessions(allSessions.map(s => ({
+                            ...s,
+                            info: {
+                                ...s.info,
+                                last_modified_ts: s.info.last_modified ? Date.parse(s.info.last_modified) : undefined,
+                            }
+                        })))
+                    } catch (err) {
+                        console.error('Failed to reload sessions:', err)
                     }
-                })))
+                } else {
+                    // Use the provided payload
+                    setSessions(event.payload.map(s => ({
+                        ...s,
+                        info: {
+                            ...s.info,
+                            last_modified_ts: s.info.last_modified ? Date.parse(s.info.last_modified) : undefined,
+                        }
+                    })))
+                }
             })
             
             return () => {

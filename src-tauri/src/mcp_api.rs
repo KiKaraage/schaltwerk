@@ -18,7 +18,7 @@ pub async fn handle_mcp_request(
         (&Method::GET, "/api/drafts") => list_drafts().await,
         (&Method::PATCH, path) if path.starts_with("/api/drafts/") && !path.ends_with("/start") => {
             let name = extract_draft_name(path, "/api/drafts/");
-            update_draft_content(req, &name).await
+            update_draft_content(req, &name, app).await
         }
         (&Method::POST, path) if path.starts_with("/api/drafts/") && path.ends_with("/start") => {
             let name = extract_draft_name_for_start(path);
@@ -155,6 +155,7 @@ async fn list_drafts() -> Result<Response<String>, hyper::Error> {
 async fn update_draft_content(
     req: Request<Incoming>,
     name: &str,
+    app: tauri::AppHandle,
 ) -> Result<Response<String>, hyper::Error> {
     let body = req.into_body();
     let body_bytes = body.collect().await?.to_bytes();
@@ -193,6 +194,21 @@ async fn update_draft_content(
     } {
         Ok(()) => {
             info!("Updated draft content via API: {name}");
+            
+            // Emit events to update UI
+            if let Err(e) = app.emit("schaltwerk:sessions-refreshed", &Vec::<serde_json::Value>::new()) {
+                error!("Failed to emit sessions-refreshed event: {e}");
+            }
+            
+            // Emit selection event to show the updated draft
+            let selection = serde_json::json!({
+                "kind": "session",
+                "payload": name
+            });
+            if let Err(e) = app.emit("schaltwerk:selection", &selection) {
+                error!("Failed to emit selection event: {e}");
+            }
+            
             Ok(Response::new("OK".to_string()))
         },
         Err(e) => {
