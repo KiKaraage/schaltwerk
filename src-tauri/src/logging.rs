@@ -73,7 +73,8 @@ pub fn init_logging() {
     
     let mut builder = Builder::new();
     // In tests, capture logs via test harness and keep console quiet unless failures
-    if cfg!(test) {
+    // But skip this for the logging test itself which needs to verify file output
+    if cfg!(test) && std::env::var("TESTING_LOGGING").is_err() {
         builder.is_test(true);
     }
     
@@ -191,6 +192,9 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let prev = env::var("HOME").ok();
         env::set_var("HOME", tmp.path());
+        
+        // Set flag to allow file logging in this test
+        env::set_var("TESTING_LOGGING", "1");
 
         init_logging();
         let log_path = get_log_path();
