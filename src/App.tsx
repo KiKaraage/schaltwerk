@@ -31,7 +31,7 @@ function getBasename(path: string): string {
 }
 
 export default function App() {
-  const { setSelection } = useSelection()
+  const { selection, setSelection } = useSelection()
   const { setProjectPath } = useProject()
   const { increaseFontSizes, decreaseFontSizes, resetFontSizes } = useFontSize()
   const [newSessionOpen, setNewSessionOpen] = useState(false)
