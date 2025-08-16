@@ -31,6 +31,14 @@ interface UnifiedDiffModalProps {
   onClose: () => void
 }
 
+interface FileDiffData {
+  file: ChangedFile
+  mainContent: string
+  worktreeContent: string
+  diffResult: ReturnType<typeof addCollapsibleSections>
+  splitDiffResult: ReturnType<typeof computeSplitDiff>
+}
+
 export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModalProps) {
   const { selection, setSelection } = useSelection()
   const { currentReview, startReview, addComment, getCommentsForFile, clearReview } = useReview()
@@ -41,9 +49,6 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
   
   const [files, setFiles] = useState<ChangedFile[]>([])
   const [selectedFile, setSelectedFile] = useState<string | null>(filePath)
-  const [mainContent, setMainContent] = useState<string>('')
-  const [worktreeContent, setWorktreeContent] = useState<string>('')
-  const [loading, setLoading] = useState(false)
   const [branchInfo, setBranchInfo] = useState<{ 
     currentBranch: string
     baseBranch: string
@@ -51,10 +56,14 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     headCommit: string 
   } | null>(null)
   const [selectedFileIndex, setSelectedFileIndex] = useState<number>(0)
+  const [allFileDiffs, setAllFileDiffs] = useState<Map<string, FileDiffData>>(new Map())
+  const [loadingAllFiles, setLoadingAllFiles] = useState(false)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const fileRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   
   const [viewMode, setViewMode] = useState<'unified' | 'split'>('unified')
   const [showCommentForm, setShowCommentForm] = useState(false)
-  const [expandedSections, setExpandedSections] = useState<Set<number>>(new Set())
+  const [expandedSections, setExpandedSections] = useState<Set<string | number>>(new Set())
   const [commentFormPosition, setCommentFormPosition] = useState<{ x: number, y: number } | null>(null)
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
   
@@ -91,10 +100,45 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     }
   }, [isOpen, sessionName, currentReview, startReview])
 
+  const loadAllFileDiffs = useCallback(async (fileList: ChangedFile[]) => {
+    setLoadingAllFiles(true)
+    const newDiffs = new Map<string, FileDiffData>()
+    
+    try {
+      for (const file of fileList) {
+        const [mainText, worktreeText] = await invoke<[string, string]>('get_file_diff_from_main', {
+          sessionName,
+          filePath: file.path
+        })
+        
+        const diffLines = computeUnifiedDiff(mainText, worktreeText)
+        const diffResult = addCollapsibleSections(diffLines)
+        const splitDiffResult = computeSplitDiff(mainText, worktreeText)
+        
+        newDiffs.set(file.path, {
+          file,
+          mainContent: mainText,
+          worktreeContent: worktreeText,
+          diffResult,
+          splitDiffResult
+        })
+      }
+      
+      setAllFileDiffs(newDiffs)
+    } catch (error) {
+      console.error('Failed to load all file diffs:', error)
+    } finally {
+      setLoadingAllFiles(false)
+    }
+  }, [sessionName])
+
   const loadChangedFiles = useCallback(async () => {
     try {
       const changedFiles = await invoke<ChangedFile[]>('get_changed_files_from_main', { sessionName })
       setFiles(changedFiles)
+      
+      // Load all file diffs for continuous scrolling
+      await loadAllFileDiffs(changedFiles)
       
       // Auto-select first file when opening
       if (changedFiles.length > 0 && !filePath) {
@@ -105,6 +149,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
         const index = changedFiles.findIndex(f => f.path === filePath)
         if (index >= 0) {
           setSelectedFileIndex(index)
+          setSelectedFile(filePath)
         }
       }
       
@@ -116,35 +161,65 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     } catch (error) {
       console.error('Failed to load changed files:', error)
     }
-  }, [sessionName, filePath])
+  }, [sessionName, filePath, loadAllFileDiffs])
 
-  const loadFileDiff = useCallback(async (path: string, index?: number) => {
-    if (!path) return
-    
-    setLoading(true)
+  const scrollToFile = useCallback((path: string, index?: number) => {
     setSelectedFile(path)
     if (index !== undefined) {
       setSelectedFileIndex(index)
     }
+    
+    // Scroll to the file section
+    const fileElement = fileRefs.current.get(path)
+    if (fileElement && scrollContainerRef.current) {
+      fileElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    
     lineSelectionRef.current.clearSelection()
     setShowCommentForm(false)
     setCommentFormPosition(null)
-    setExpandedSections(new Set())
+  }, [])
+
+  // Monitor scroll position to update selected file
+  useEffect(() => {
+    if (!scrollContainerRef.current || loadingAllFiles) return
     
-    try {
-      const [mainText, worktreeText] = await invoke<[string, string]>('get_file_diff_from_main', {
-        sessionName,
-        filePath: path
+    const handleScroll = () => {
+      const container = scrollContainerRef.current
+      if (!container) return
+      
+      const containerTop = container.getBoundingClientRect().top
+      
+      // Find which file is currently most visible
+      let currentFile: string | null = null
+      let currentIndex = 0
+      
+      files.forEach((file, index) => {
+        const element = fileRefs.current.get(file.path)
+        if (element) {
+          const rect = element.getBoundingClientRect()
+          const relativeTop = rect.top - containerTop
+          
+          if (relativeTop <= 100 && relativeTop > -rect.height) {
+            currentFile = file.path
+            currentIndex = index
+          }
+        }
       })
       
-      setMainContent(mainText)
-      setWorktreeContent(worktreeText)
-    } catch (error) {
-      console.error('Failed to load file diff:', error)
-    } finally {
-      setLoading(false)
+      if (currentFile && currentFile !== selectedFile) {
+        setSelectedFile(currentFile)
+        setSelectedFileIndex(currentIndex)
+      }
     }
-  }, [sessionName])
+    
+    const container = scrollContainerRef.current
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+    }
+  }, [files, selectedFile, loadingAllFiles])
 
   useEffect(() => {
     if (isOpen) {
@@ -153,10 +228,16 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
   }, [isOpen, loadChangedFiles])
 
   useEffect(() => {
-    if (selectedFile && isOpen) {
-      loadFileDiff(selectedFile)
+    if (selectedFile && isOpen && filePath) {
+      // Initial scroll to selected file
+      setTimeout(() => {
+        const fileElement = fileRefs.current.get(selectedFile)
+        if (fileElement && scrollContainerRef.current) {
+          fileElement.scrollIntoView({ behavior: 'auto', block: 'start' })
+        }
+      }, 100)
     }
-  }, [selectedFile, isOpen, loadFileDiff])
+  }, [selectedFile, isOpen, filePath])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -175,16 +256,14 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
           e.stopPropagation()
           if (selectedFileIndex > 0) {
             const newIndex = selectedFileIndex - 1
-            setSelectedFileIndex(newIndex)
-            loadFileDiff(files[newIndex].path, newIndex)
+            scrollToFile(files[newIndex].path, newIndex)
           }
         } else if (e.key === 'ArrowDown') {
           e.preventDefault()
           e.stopPropagation()
           if (selectedFileIndex < files.length - 1) {
             const newIndex = selectedFileIndex + 1
-            setSelectedFileIndex(newIndex)
-            loadFileDiff(files[newIndex].path, newIndex)
+            scrollToFile(files[newIndex].path, newIndex)
           }
         }
       }
@@ -192,16 +271,8 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     
     window.addEventListener('keydown', handleKeyDown, true) // Use capture phase to handle before other listeners
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [isOpen, showCommentForm, onClose, lineSelection, selectedFileIndex, files, loadFileDiff])
+  }, [isOpen, showCommentForm, onClose, lineSelection, selectedFileIndex, files, scrollToFile])
 
-  const diffResult = useMemo(() => {
-    const lines = computeUnifiedDiff(mainContent, worktreeContent)
-    return addCollapsibleSections(lines)
-  }, [mainContent, worktreeContent])
-
-  const splitDiffResult = useMemo(() => {
-    return computeSplitDiff(mainContent, worktreeContent)
-  }, [mainContent, worktreeContent])
 
   const language = useMemo(() => getFileLanguage(selectedFile || ''), [selectedFile])
 
@@ -267,13 +338,14 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     }
   }, [isDraggingSelection])
 
-  const toggleCollapsed = useCallback((idx: number) => {
+  const toggleCollapsed = useCallback((idx: string | number) => {
     setExpandedSections(prev => {
       const next = new Set(prev)
-      if (next.has(idx)) {
-        next.delete(idx)
+      const key = typeof idx === 'string' ? idx : idx
+      if (next.has(key)) {
+        next.delete(key)
       } else {
-        next.add(idx)
+        next.add(key)
       }
       return next
     })
@@ -283,9 +355,12 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
   const handleSubmitComment = useCallback((text: string) => {
     if (!lineSelection.selection || !selectedFile) return
     
+    const fileDiff = allFileDiffs.get(selectedFile)
+    if (!fileDiff) return
+    
     const lines = lineSelection.selection.side === 'old' 
-      ? mainContent.split('\n')
-      : worktreeContent.split('\n')
+      ? fileDiff.mainContent.split('\n')
+      : fileDiff.worktreeContent.split('\n')
     
     const selectedText = lines
       .slice(lineSelection.selection.startLine - 1, lineSelection.selection.endLine)
@@ -305,7 +380,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     setShowCommentForm(false)
     setCommentFormPosition(null)
     lineSelection.clearSelection()
-  }, [lineSelection, selectedFile, mainContent, worktreeContent, addComment])
+  }, [lineSelection, selectedFile, allFileDiffs, addComment])
 
   const formatReviewForPrompt = useCallback((comments: ReviewComment[]) => {
     let output = '\n# Code Review Comments\n\n'
@@ -442,7 +517,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
                         "flex items-center gap-2",
                         selectedFile === file.path && "bg-slate-800"
                       )}
-                      onClick={() => loadFileDiff(file.path, files.indexOf(file))}
+                      onClick={() => scrollToFile(file.path, files.indexOf(file))}
                     >
                       {getFileIcon(file.change_type)}
                       <div className="flex-1 min-w-0">
@@ -491,11 +566,11 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
 
             {/* Diff viewer */}
             <div className="flex-1 flex flex-col overflow-hidden">
-              {loading ? (
+              {loadingAllFiles ? (
                 <div className="flex-1 flex items-center justify-center">
-                  <div className="text-slate-500">Loading diff...</div>
+                  <div className="text-slate-500">Loading all diffs...</div>
                 </div>
-              ) : selectedFile && (
+              ) : (
                 <>
                   {branchInfo && (
                     <div className="px-4 py-2 text-xs text-slate-500 border-b border-slate-800 bg-slate-900/30">
@@ -504,118 +579,202 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
                   )}
                   
                   {viewMode === 'unified' ? (
-                    <div className="flex-1 overflow-auto font-mono text-sm">
-                      <table className="w-full" style={{ tableLayout: 'fixed' }}>
-                        <tbody>
-                          {diffResult.flatMap((line, idx) => {
-                            const isExpanded = expandedSections.has(idx)
-                            const lineNum = line.oldLineNumber || line.newLineNumber
-                            const side: 'old' | 'new' = line.type === 'removed' ? 'old' : 'new'
+                    <div className="flex-1 overflow-auto font-mono text-sm" ref={scrollContainerRef}>
+                      {files.map((file) => {
+                        const fileDiff = allFileDiffs.get(file.path)
+                        if (!fileDiff) return null
+                        
+                        const commentCount = getCommentsForFile(file.path).length
+                        const isCurrentFile = file.path === selectedFile
+                        
+                        return (
+                          <div 
+                            key={file.path} 
+                            ref={(el) => {
+                              if (el) fileRefs.current.set(file.path, el)
+                            }}
+                            className="border-b border-slate-800 last:border-b-0"
+                          >
+                            {/* File header */}
+                            <div 
+                              className={clsx(
+                                "sticky top-0 z-10 bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between",
+                                isCurrentFile && "bg-slate-800"
+                              )}
+                            >
+                              <div className="flex items-center gap-3">
+                                {getFileIcon(file.change_type)}
+                                <div>
+                                  <div className="font-medium text-sm">{file.path}</div>
+                                  <div className="text-xs text-slate-500">
+                                    {file.change_type === 'added' && 'New file'}
+                                    {file.change_type === 'deleted' && 'Deleted file'}
+                                    {file.change_type === 'modified' && 'Modified'}
+                                    {file.change_type === 'renamed' && 'Renamed'}
+                                  </div>
+                                </div>
+                              </div>
+                              {commentCount > 0 && (
+                                <div className="flex items-center gap-1 text-sm text-blue-400">
+                                  <VscComment />
+                                  <span>{commentCount} comment{commentCount > 1 ? 's' : ''}</span>
+                                </div>
+                              )}
+                            </div>
                             
-                            if (line.isCollapsible) {
-                              const rows = []
-                              rows.push(
-                                <DiffLineRow
-                                  key={idx}
-                                  line={line}
-                                  index={idx}
-                                  isSelected={false}
-                                  onLineMouseDown={handleLineMouseDown}
-                                  onLineMouseEnter={handleLineMouseEnter}
-                                  onLineMouseUp={handleLineMouseUp}
-                                  onToggleCollapse={() => toggleCollapsed(idx)}
-                                  isCollapsed={!isExpanded}
-                                  highlightedContent={undefined}
-                                />
-                              )
-                              
-                              if (isExpanded && line.collapsedLines) {
-                                line.collapsedLines.forEach((collapsedLine, collapsedIdx) => {
-                                  const collapsedLineNum = collapsedLine.oldLineNumber || collapsedLine.newLineNumber
-                                  const collapsedSide: 'old' | 'new' = collapsedLine.type === 'removed' ? 'old' : 'new'
-                                  const collapsedComment = getCommentForLine(collapsedLineNum, collapsedSide)
-                                  rows.push(
+                            {/* File diff content */}
+                            <table className="w-full" style={{ tableLayout: 'fixed' }}>
+                              <tbody>
+                                {fileDiff.diffResult.flatMap((line, idx) => {
+                                  const globalIdx = `${file.path}-${idx}`
+                                  const isExpanded = expandedSections.has(globalIdx)
+                                  const lineNum = line.oldLineNumber || line.newLineNumber
+                                  const side: 'old' | 'new' = line.type === 'removed' ? 'old' : 'new'
+                                  
+                                  if (line.isCollapsible) {
+                                    const rows = []
+                                    rows.push(
+                                      <DiffLineRow
+                                        key={globalIdx}
+                                        line={line}
+                                        index={globalIdx}
+                                        isSelected={false}
+                                        onLineMouseDown={handleLineMouseDown}
+                                        onLineMouseEnter={handleLineMouseEnter}
+                                        onLineMouseUp={handleLineMouseUp}
+                                        onToggleCollapse={() => toggleCollapsed(globalIdx)}
+                                        isCollapsed={!isExpanded}
+                                        highlightedContent={undefined}
+                                      />
+                                    )
+                                    
+                                    if (isExpanded && line.collapsedLines) {
+                                      line.collapsedLines.forEach((collapsedLine, collapsedIdx) => {
+                                        const collapsedLineNum = collapsedLine.oldLineNumber || collapsedLine.newLineNumber
+                                        const collapsedSide: 'old' | 'new' = collapsedLine.type === 'removed' ? 'old' : 'new'
+                                        const collapsedComment = getCommentForLine(collapsedLineNum, collapsedSide)
+                                        rows.push(
+                                          <DiffLineRow
+                                            key={`${globalIdx}-expanded-${collapsedIdx}`}
+                                            line={collapsedLine}
+                                            index={`${globalIdx}-${collapsedIdx}`}
+                                            isSelected={collapsedLineNum ? lineSelection.isLineSelected(collapsedLineNum, collapsedSide) : false}
+                                            onLineMouseDown={handleLineMouseDown}
+                                            onLineMouseEnter={handleLineMouseEnter}
+                                            onLineMouseUp={handleLineMouseUp}
+                                            highlightedContent={collapsedLine.content ? highlightCode(collapsedLine.content) : undefined}
+                                            hasComment={!!collapsedComment}
+                                            commentText={collapsedComment?.comment}
+                                          />
+                                        )
+                                      })
+                                    }
+                                    
+                                    return rows
+                                  }
+                                  
+                                  const comment = getCommentForLine(lineNum, side)
+                                  return (
                                     <DiffLineRow
-                                      key={`${idx}-expanded-${collapsedIdx}`}
-                                      line={collapsedLine}
-                                      index={idx * 1000 + collapsedIdx}
-                                      isSelected={collapsedLineNum ? lineSelection.isLineSelected(collapsedLineNum, collapsedSide) : false}
+                                      key={globalIdx}
+                                      line={line}
+                                      index={globalIdx}
+                                      isSelected={lineNum ? lineSelection.isLineSelected(lineNum, side) : false}
                                       onLineMouseDown={handleLineMouseDown}
                                       onLineMouseEnter={handleLineMouseEnter}
                                       onLineMouseUp={handleLineMouseUp}
-                                      highlightedContent={collapsedLine.content ? highlightCode(collapsedLine.content) : undefined}
-                                      hasComment={!!collapsedComment}
-                                      commentText={collapsedComment?.comment}
+                                      highlightedContent={line.content ? highlightCode(line.content) : undefined}
+                                      hasComment={!!comment}
+                                      commentText={comment?.comment}
                                     />
                                   )
-                                })
-                              }
-                              
-                              return rows
-                            }
-                            
-                            const comment = getCommentForLine(lineNum, side)
-                            return (
-                              <DiffLineRow
-                                key={idx}
-                                line={line}
-                                index={idx}
-                                isSelected={lineNum ? lineSelection.isLineSelected(lineNum, side) : false}
-                                onLineMouseDown={handleLineMouseDown}
-                                onLineMouseEnter={handleLineMouseEnter}
-                                onLineMouseUp={handleLineMouseUp}
-                                highlightedContent={line.content ? highlightCode(line.content) : undefined}
-                                hasComment={!!comment}
-                                commentText={comment?.comment}
-                              />
-                            )
-                          })}
-                        </tbody>
-                      </table>
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )
+                      })}
                     </div>
                   ) : (
                     <div className="flex-1 flex overflow-hidden">
-                      <div className="flex-1 overflow-auto font-mono text-sm border-r border-slate-800">
-                        <div className="sticky top-0 bg-slate-900 px-3 py-1 text-xs font-medium border-b border-slate-800">
+                      <div className="flex-1 overflow-auto font-mono text-sm border-r border-slate-800" ref={scrollContainerRef}>
+                        <div className="sticky top-0 bg-slate-900 px-3 py-1 text-xs font-medium border-b border-slate-800 z-20">
                           {branchInfo?.baseBranch || 'Base'}
                         </div>
-                        <table className="w-full" style={{ tableLayout: 'fixed' }}>
-                          <tbody>
-                            {splitDiffResult.leftLines.map((line, idx) => (
-                              <DiffLineRow
-                                key={idx}
-                                line={line}
-                                index={idx}
-                                isSelected={line.oldLineNumber ? lineSelection.isLineSelected(line.oldLineNumber, 'old') : false}
-                                onLineMouseDown={handleLineMouseDown}
-                                onLineMouseEnter={handleLineMouseEnter}
-                                onLineMouseUp={handleLineMouseUp}
-                                highlightedContent={line.content ? highlightCode(line.content) : undefined}
-                              />
-                            ))}
-                          </tbody>
-                        </table>
+                        {files.map((file) => {
+                          const fileDiff = allFileDiffs.get(file.path)
+                          if (!fileDiff) return null
+                          
+                          return (
+                            <div key={`${file.path}-left`} className="border-b border-slate-800 last:border-b-0">
+                              <div className="sticky top-7 z-10 bg-slate-900/95 border-b border-slate-800 px-3 py-2">
+                                <div className="text-xs text-slate-400">{file.path}</div>
+                              </div>
+                              <table className="w-full" style={{ tableLayout: 'fixed' }}>
+                                <tbody>
+                                  {fileDiff.splitDiffResult.leftLines.map((line, idx) => (
+                                    <DiffLineRow
+                                      key={`${file.path}-left-${idx}`}
+                                      line={line}
+                                      index={`${file.path}-left-${idx}`}
+                                      isSelected={line.oldLineNumber ? lineSelection.isLineSelected(line.oldLineNumber, 'old') : false}
+                                      onLineMouseDown={handleLineMouseDown}
+                                      onLineMouseEnter={handleLineMouseEnter}
+                                      onLineMouseUp={handleLineMouseUp}
+                                      highlightedContent={line.content ? highlightCode(line.content) : undefined}
+                                    />
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )
+                        })}
                       </div>
                       <div className="flex-1 overflow-auto font-mono text-sm">
-                        <div className="sticky top-0 bg-slate-900 px-3 py-1 text-xs font-medium border-b border-slate-800">
+                        <div className="sticky top-0 bg-slate-900 px-3 py-1 text-xs font-medium border-b border-slate-800 z-20">
                           {branchInfo?.currentBranch || 'Current'}
                         </div>
-                        <table className="w-full" style={{ tableLayout: 'fixed' }}>
-                          <tbody>
-                            {splitDiffResult.rightLines.map((line, idx) => (
-                              <DiffLineRow
-                                key={idx}
-                                line={line}
-                                index={idx}
-                                isSelected={line.newLineNumber ? lineSelection.isLineSelected(line.newLineNumber, 'new') : false}
-                                onLineMouseDown={handleLineMouseDown}
-                                onLineMouseEnter={handleLineMouseEnter}
-                                onLineMouseUp={handleLineMouseUp}
-                                highlightedContent={line.content ? highlightCode(line.content) : undefined}
-                              />
-                            ))}
-                          </tbody>
-                        </table>
+                        {files.map((file) => {
+                          const fileDiff = allFileDiffs.get(file.path)
+                          if (!fileDiff) return null
+                          const isCurrentFile = file.path === selectedFile
+                          
+                          return (
+                            <div 
+                              key={`${file.path}-right`} 
+                              ref={(el) => {
+                                if (el && viewMode === 'split') fileRefs.current.set(file.path, el)
+                              }}
+                              className="border-b border-slate-800 last:border-b-0"
+                            >
+                              <div className={clsx(
+                                "sticky top-7 z-10 bg-slate-900/95 border-b border-slate-800 px-3 py-2 flex items-center justify-between",
+                                isCurrentFile && "bg-slate-800"
+                              )}>
+                                <div className="flex items-center gap-2">
+                                  {getFileIcon(file.change_type)}
+                                  <div className="text-xs">{file.path}</div>
+                                </div>
+                              </div>
+                              <table className="w-full" style={{ tableLayout: 'fixed' }}>
+                                <tbody>
+                                  {fileDiff.splitDiffResult.rightLines.map((line, idx) => (
+                                    <DiffLineRow
+                                      key={`${file.path}-right-${idx}`}
+                                      line={line}
+                                      index={`${file.path}-right-${idx}`}
+                                      isSelected={line.newLineNumber ? lineSelection.isLineSelected(line.newLineNumber, 'new') : false}
+                                      onLineMouseDown={handleLineMouseDown}
+                                      onLineMouseEnter={handleLineMouseEnter}
+                                      onLineMouseUp={handleLineMouseUp}
+                                      highlightedContent={line.content ? highlightCode(line.content) : undefined}
+                                    />
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                   )}

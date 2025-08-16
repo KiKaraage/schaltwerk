@@ -4,7 +4,7 @@ import { LineInfo } from '../../utils/diff'
 
 interface DiffLineRowProps {
   line: LineInfo
-  index: number
+  index: number | string
   isSelected: boolean
   onLineMouseDown?: (lineNum: number, side: 'old' | 'new', event: React.MouseEvent) => void
   onLineMouseEnter?: (lineNum: number, side: 'old' | 'new') => void
