@@ -35,11 +35,11 @@ export function RightPanelTabs({ onFileSelect }: RightPanelTabsProps) {
 
   return (
     <div className="h-full flex flex-col bg-panel">
-      <div className="flex items-center border-b border-slate-800">
+      <div className="h-8 flex items-center border-b border-slate-800">
         <button
           onClick={() => setUserSelectedTab('changes')}
           className={clsx(
-            'flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
+            'h-full flex-1 px-3 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
             activeTab === 'changes' ? 'text-slate-200 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
           )}
           title="Changes"
@@ -50,7 +50,7 @@ export function RightPanelTabs({ onFileSelect }: RightPanelTabsProps) {
         <button
           onClick={() => setUserSelectedTab('task')}
           className={clsx(
-            'flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
+            'h-full flex-1 px-3 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
             activeTab === 'task' ? 'text-slate-200 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
           )}
           title={`${rightTabLabel}`}

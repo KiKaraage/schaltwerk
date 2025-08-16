@@ -115,7 +115,7 @@ export function TerminalGrid() {
     const claudeSection = (
         <div className={`bg-panel rounded overflow-hidden min-h-0 flex flex-col transition-all duration-200 ${localFocus === 'claude' ? 'border-2 border-blue-500/60 shadow-lg shadow-blue-500/20' : 'border border-slate-800'}`}>
             <div 
-                className={`px-2 py-1 text-xs border-b cursor-pointer flex-shrink-0 flex items-center justify-between transition-colors duration-200 ${
+                className={`h-8 px-3 text-xs border-b cursor-pointer flex-shrink-0 flex items-center justify-between transition-colors duration-200 ${
                     localFocus === 'claude' 
                         ? 'bg-blue-900/30 text-blue-200 border-blue-800/50 hover:bg-blue-900/40' 
                         : 'text-slate-400 border-slate-800 hover:bg-slate-800'
@@ -152,7 +152,7 @@ export function TerminalGrid() {
     const terminalSection = (
         <div className={`bg-panel rounded border border-slate-800 overflow-hidden min-h-0 flex flex-col ${isCollapsed ? 'hidden' : ''}`}>
             <div 
-                className="px-2 py-1 text-xs text-slate-400 border-b border-slate-800 cursor-pointer hover:bg-slate-800 flex-shrink-0 flex items-center justify-between"
+                className="h-8 px-3 text-xs text-slate-400 border-b border-slate-800 cursor-pointer hover:bg-slate-800 flex-shrink-0 flex items-center justify-between"
                 onClick={handleTerminalClick}
             >
                 <span className="flex-1 text-center">
@@ -188,7 +188,7 @@ export function TerminalGrid() {
 
     if (isCollapsed) {
         return (
-            <div className="h-full p-2 relative">
+            <div className="h-full px-2 pb-2 pt-0 relative">
                 {claudeSection}
                 <div className="mt-2 flex justify-center">
                     <button
@@ -205,7 +205,7 @@ export function TerminalGrid() {
     }
 
     return (
-        <div className="h-full p-2 relative">
+        <div className="h-full px-2 pb-2 pt-0 relative">
             <Split 
                 className="h-full flex flex-col" 
                 direction="vertical" 

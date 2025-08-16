@@ -61,13 +61,13 @@ export const TerminalTabs = forwardRef<TerminalTabsHandle, TerminalTabsProps>(({
 
   return (
     <div className={`h-full flex flex-col ${className}`}>
-      <div className="flex-shrink-0 bg-slate-900/50">
-        <div className="flex items-center overflow-x-auto scrollbar-hide">
+      <div className="h-8 flex-shrink-0 bg-slate-900/50">
+        <div className="h-full flex items-center overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <div
               key={tab.index}
               className={`
-                relative flex items-center px-3 py-1.5 text-xs cursor-pointer border-r border-slate-800/50 min-w-0 max-w-32 transition-all duration-200
+                relative h-full flex items-center px-3 text-xs cursor-pointer border-r border-slate-800/50 min-w-0 max-w-32 transition-all duration-200
                 ${tab.index === activeTab 
                   ? 'bg-blue-900/30 text-blue-200' 
                   : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'

@@ -655,7 +655,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
 
     return (
         <div ref={sidebarRef} className="h-full flex flex-col">
-            <div className="px-3 py-2 border-b border-slate-800 text-sm text-slate-300">Repository (Orchestrator)</div>
+            <div className="h-8 px-3 border-b border-slate-800 text-xs flex items-center text-slate-300">Repository (Orchestrator)</div>
             <div className="px-2 pt-2">
                 <button
                     onClick={handleSelectOrchestrator}
@@ -685,8 +685,8 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 </button>
             </div>
 
-            <div className="px-3 py-2 border-t border-b border-slate-800 text-sm text-slate-300">
-                <div className="flex items-center gap-2">
+            <div className="h-8 px-3 border-t border-b border-slate-800 text-xs text-slate-300 flex items-center">
+                <div className="flex items-center gap-2 w-full">
                     <span className="text-xs flex-shrink-0">Tasks</span>
                     <div className="flex items-center gap-1 ml-auto flex-nowrap overflow-x-auto">
                         <button
