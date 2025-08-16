@@ -343,7 +343,7 @@ export function TerminalGrid() {
                                 : 'bg-slate-700/50 text-slate-400'
                         }`} title="Focus Terminal (⌘/)">⌘/</span>
                         <button
-                            onClick={() => setCollapsed(!isCollapsed)}
+                            onClick={toggleTerminalCollapsed}
                             title={isBottomCollapsed ? 'Expand terminal panel' : 'Collapse terminal panel'}
                             className={`w-7 h-7 ml-1 flex items-center justify-center rounded transition-colors ${
                                 localFocus === 'terminal'
