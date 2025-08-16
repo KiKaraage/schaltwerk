@@ -190,21 +190,6 @@ export function TerminalGrid() {
         }, 100)
     }
 
-    const toggleBottomCollapse = (e?: React.MouseEvent) => {
-        e?.stopPropagation()
-        if (!sizes) return
-        if (isBottomCollapsed) {
-            const expanded = lastExpandedBottomPercent || 35
-            setSizes([100 - expanded, expanded])
-            setIsBottomCollapsed(false)
-            // focus when expanding
-            setTimeout(() => terminalTabsRef.current?.focus(), 100)
-        } else {
-            const pct = collapsedPercent
-            setSizes([100 - pct, pct])
-            setIsBottomCollapsed(true)
-        }
-    }
 
     // No prompt UI here anymore; moved to right panel dock
 
@@ -358,7 +343,7 @@ export function TerminalGrid() {
                                 : 'bg-slate-700/50 text-slate-400'
                         }`} title="Focus Terminal (⌘/)">⌘/</span>
                         <button
-                            onClick={toggleBottomCollapse}
+                            onClick={() => setCollapsed(!isCollapsed)}
                             title={isBottomCollapsed ? 'Expand terminal panel' : 'Collapse terminal panel'}
                             className={`w-7 h-7 ml-1 flex items-center justify-center rounded transition-colors ${
                                 localFocus === 'terminal'
