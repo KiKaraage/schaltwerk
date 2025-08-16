@@ -48,6 +48,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     baseCommit: string
     headCommit: string 
   } | null>(null)
+  const [selectedFileIndex, setSelectedFileIndex] = useState<number>(0)
   
   const [viewMode, setViewMode] = useState<'unified' | 'split'>('unified')
   const [showCommentForm, setShowCommentForm] = useState(false)
@@ -93,6 +94,18 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
       const changedFiles = await invoke<ChangedFile[]>('get_changed_files_from_main', { sessionName })
       setFiles(changedFiles)
       
+      // Auto-select first file when opening
+      if (changedFiles.length > 0 && !filePath) {
+        setSelectedFile(changedFiles[0].path)
+        setSelectedFileIndex(0)
+      } else if (filePath) {
+        // Find index of pre-selected file
+        const index = changedFiles.findIndex(f => f.path === filePath)
+        if (index >= 0) {
+          setSelectedFileIndex(index)
+        }
+      }
+      
       const currentBranch = await invoke<string>('get_current_branch_name', { sessionName })
       const baseBranch = await invoke<string>('get_base_branch_name', { sessionName })
       const [baseCommit, headCommit] = await invoke<[string, string]>('get_commit_comparison_info', { sessionName })
@@ -101,13 +114,16 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     } catch (error) {
       console.error('Failed to load changed files:', error)
     }
-  }, [sessionName])
+  }, [sessionName, filePath])
 
-  const loadFileDiff = useCallback(async (path: string) => {
+  const loadFileDiff = useCallback(async (path: string, index?: number) => {
     if (!path) return
     
     setLoading(true)
     setSelectedFile(path)
+    if (index !== undefined) {
+      setSelectedFileIndex(index)
+    }
     lineSelectionRef.current.clearSelection()
     setShowCommentForm(false)
     setCommentFormPosition(null)
@@ -150,12 +166,31 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
         } else if (isOpen) {
           onClose()
         }
+      } else if (isOpen && !showCommentForm) {
+        // Arrow key navigation for file list when modal is open and comment form is not shown
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          e.stopPropagation()
+          if (selectedFileIndex > 0) {
+            const newIndex = selectedFileIndex - 1
+            setSelectedFileIndex(newIndex)
+            loadFileDiff(files[newIndex].path, newIndex)
+          }
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          e.stopPropagation()
+          if (selectedFileIndex < files.length - 1) {
+            const newIndex = selectedFileIndex + 1
+            setSelectedFileIndex(newIndex)
+            loadFileDiff(files[newIndex].path, newIndex)
+          }
+        }
       }
     }
     
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, showCommentForm, onClose, lineSelection])
+    window.addEventListener('keydown', handleKeyDown, true) // Use capture phase to handle before other listeners
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [isOpen, showCommentForm, onClose, lineSelection, selectedFileIndex, files, loadFileDiff])
 
   const diffResult = useMemo(() => {
     const lines = computeUnifiedDiff(mainContent, worktreeContent)
@@ -397,7 +432,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
                         "flex items-center gap-2",
                         selectedFile === file.path && "bg-slate-800"
                       )}
-                      onClick={() => loadFileDiff(file.path)}
+                      onClick={() => loadFileDiff(file.path, files.indexOf(file))}
                     >
                       {getFileIcon(file.change_type)}
                       <div className="flex-1 min-w-0">
@@ -460,7 +495,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
                   
                   {viewMode === 'unified' ? (
                     <div className="flex-1 overflow-auto font-mono text-sm">
-                      <table className="w-full">
+                      <table className="w-full" style={{ tableLayout: 'fixed' }}>
                         <tbody>
                           {diffResult.flatMap((line, idx) => {
                             const isExpanded = expandedSections.has(idx)
@@ -534,7 +569,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
                         <div className="sticky top-0 bg-slate-900 px-3 py-1 text-xs font-medium border-b border-slate-800">
                           {branchInfo?.baseBranch || 'Base'}
                         </div>
-                        <table className="w-full">
+                        <table className="w-full" style={{ tableLayout: 'fixed' }}>
                           <tbody>
                             {splitDiffResult.leftLines.map((line, idx) => (
                               <DiffLineRow
@@ -555,7 +590,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
                         <div className="sticky top-0 bg-slate-900 px-3 py-1 text-xs font-medium border-b border-slate-800">
                           {branchInfo?.currentBranch || 'Current'}
                         </div>
-                        <table className="w-full">
+                        <table className="w-full" style={{ tableLayout: 'fixed' }}>
                           <tbody>
                             {splitDiffResult.rightLines.map((line, idx) => (
                               <DiffLineRow

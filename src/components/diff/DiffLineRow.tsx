@@ -108,7 +108,7 @@ export function DiffLineRow({
       </td>
       
       {/* Code content */}
-      <td className="px-2 py-0.5 font-mono text-sm relative">
+      <td className="px-2 py-0.5 font-mono text-sm relative whitespace-pre overflow-x-auto">
         {line.type === 'added' && (
           <div className="absolute left-0 top-0 w-1 h-full bg-green-400/50" />
         )}
@@ -118,11 +118,11 @@ export function DiffLineRow({
         <div className="flex items-start gap-2">
           {highlightedContent ? (
             <code
-              className="hljs flex-1"
+              className="hljs inline-block whitespace-pre"
               dangerouslySetInnerHTML={{ __html: highlightedContent }}
             />
           ) : (
-            <code className="text-slate-300 flex-1">{line.content}</code>
+            <code className="text-slate-300 inline-block whitespace-pre">{line.content}</code>
           )}
           {hasComment && (
             <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 rounded text-xs text-blue-400" title={commentText}>
