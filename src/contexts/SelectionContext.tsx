@@ -19,7 +19,7 @@ interface SelectionContextType {
     selection: Selection
     terminals: TerminalSet
     setSelection: (selection: Selection, forceRecreate?: boolean) => Promise<void>
-    clearTerminalTracking: (terminalIds: string[]) => void
+    clearTerminalTracking: (terminalIds: string[]) => Promise<void>
     isReady: boolean
     isDraft: boolean
 }
@@ -154,12 +154,79 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
         }
     }, [getTerminalIds, createTerminal, projectPath])
     
-    // Clear terminal tracking for specific terminals
-    const clearTerminalTracking = useCallback((terminalIds: string[]) => {
-        terminalIds.forEach(id => {
+    // Helper to restore selection from localStorage for current project
+    const restoreSelectionFromStorage = useCallback(async (): Promise<Selection | null> => {
+        if (!projectPath) return null
+        
+        // Try new per-project storage first
+        let allSelections = localStorage.getItem('schaltwerk-selections')
+        
+        // Migration: if no new storage but old storage exists, migrate it
+        if (!allSelections) {
+            const oldSelection = localStorage.getItem('schaltwerk-selection')
+            if (oldSelection) {
+                try {
+                    const parsed = JSON.parse(oldSelection)
+                    // Migrate old selection to new format for current project
+                    const newSelections = { [projectPath]: parsed }
+                    localStorage.setItem('schaltwerk-selections', JSON.stringify(newSelections))
+                    // Remove old storage
+                    localStorage.removeItem('schaltwerk-selection')
+                    allSelections = JSON.stringify(newSelections)
+                } catch (e) {
+                    console.warn('Failed to migrate old selection storage:', e)
+                }
+            }
+        }
+        
+        if (!allSelections) return null
+        
+        try {
+            const parsed = JSON.parse(allSelections)
+            const projectSelection = parsed[projectPath]
+            
+            if (!projectSelection || projectSelection.kind !== 'session' || !projectSelection.sessionName) {
+                return { kind: 'orchestrator' }
+            }
+            
+            // Try to get session data
+            const sessionData = await invoke('para_core_get_session', { 
+                name: projectSelection.sessionName 
+            }) as any
+            
+            if (sessionData?.worktree_path) {
+                return {
+                    kind: 'session',
+                    payload: projectSelection.sessionName,
+                    worktreePath: sessionData.worktree_path
+                }
+            }
+            
+            console.warn('Session data missing worktree_path, using orchestrator')
+            return { kind: 'orchestrator' }
+            
+        } catch (e) {
+            console.warn('Failed to restore selection from storage:', e)
+            return { kind: 'orchestrator' }
+        }
+    }, [projectPath])
+    
+    // Clear terminal tracking and close terminals to prevent orphaned processes
+    // Used when: 1) Switching projects (orchestrator IDs change), 2) Restarting orchestrator with new model
+    const clearTerminalTracking = useCallback(async (terminalIds: string[]) => {
+        for (const id of terminalIds) {
             terminalsCreated.current.delete(id)
             creationLock.current.delete(id)
-        })
+            // Close the actual terminal process to avoid orphaned processes
+            try {
+                const exists = await invoke<boolean>('terminal_exists', { id })
+                if (exists) {
+                    await invoke('close_terminal', { id })
+                }
+            } catch (e) {
+                console.warn(`[SelectionContext] Failed to close terminal ${id}:`, e)
+            }
+        }
     }, [])
     
     // Set selection atomically
@@ -173,10 +240,10 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
         setIsReady(false)
         
         try {
-            // If forcing recreate, clear terminal tracking first
+            // If forcing recreate, clear terminal tracking and close old terminals first
             if (forceRecreate) {
                 const ids = getTerminalIds(newSelection)
-                clearTerminalTracking([ids.top])
+                await clearTerminalTracking([ids.top])
             }
             
             // Ensure terminals exist BEFORE changing selection
@@ -186,11 +253,19 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             setSelectionState(newSelection)
             setTerminals(terminalIds)
             
-            // Persist to localStorage
-            localStorage.setItem('schaltwerk-selection', JSON.stringify({
-                kind: newSelection.kind,
-                sessionName: newSelection.payload
-            }))
+            // Persist to localStorage per project
+            if (projectPath) {
+                try {
+                    const allSelections = JSON.parse(localStorage.getItem('schaltwerk-selections') || '{}')
+                    allSelections[projectPath] = {
+                        kind: newSelection.kind,
+                        sessionName: newSelection.payload
+                    }
+                    localStorage.setItem('schaltwerk-selections', JSON.stringify(allSelections))
+                } catch (e) {
+                    console.warn('Failed to save selection to localStorage:', e)
+                }
+            }
             
             // Mark as ready
             setIsReady(true)
@@ -247,49 +322,30 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             }
             
             // Check if we need to force recreate for orchestrator when changing projects
-            const shouldForceRecreate = hasInitialized.current && 
-                                       previousProjectPath.current !== null && 
-                                       projectPath !== null && 
-                                       selection.kind === 'orchestrator'
+            const projectChanged = hasInitialized.current && 
+                                  previousProjectPath.current !== null && 
+                                  previousProjectPath.current !== projectPath
             
             // Set initialized flag and update previous path
             hasInitialized.current = true
             previousProjectPath.current = projectPath
             
-            // Try to restore from localStorage
-            const stored = localStorage.getItem('schaltwerk-selection')
-            let initialSelection: Selection = { kind: 'orchestrator' }
+            // Determine target selection
+            let targetSelection: Selection
             
-            if (stored) {
-                try {
-                    const parsed = JSON.parse(stored)
-                    if (parsed.kind === 'session' && parsed.sessionName) {
-                        // Get session data to have complete selection
-                        try {
-                            const sessionData = await invoke('para_core_get_session', { 
-                                name: parsed.sessionName 
-                            }) as any
-                            
-                            if (sessionData && sessionData.worktree_path) {
-                                initialSelection = {
-                                    kind: 'session',
-                                    payload: parsed.sessionName,
-                                    worktreePath: sessionData.worktree_path
-                                }
-                            } else {
-                                console.warn('Session data missing worktree_path, using orchestrator')
-                            }
-                        } catch (e) {
-                            console.warn('Session not found, using orchestrator:', e)
-                        }
-                    }
-                } catch (e) {
-                    console.error('Failed to parse stored selection:', e)
-                }
+            if (projectChanged) {
+                // When switching projects, always reset to orchestrator for the new project
+                targetSelection = { kind: 'orchestrator' }
+            } else {
+                // Only try to restore from localStorage if not a project change
+                targetSelection = await restoreSelectionFromStorage() || { kind: 'orchestrator' }
             }
             
-            // Set the initial selection (force recreate if changing projects)
-            await setSelection(initialSelection, shouldForceRecreate)
+            // Force recreate if project changed and we're on orchestrator
+            const shouldForceRecreate = projectChanged && targetSelection.kind === 'orchestrator'
+            
+            // Set the selection (force recreate if needed)
+            await setSelection(targetSelection, shouldForceRecreate)
         }
         
         // Only run if not currently initializing

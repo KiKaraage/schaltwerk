@@ -5,6 +5,7 @@ import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { useFocus } from '../../contexts/FocusContext'
 import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { useSelection } from '../../contexts/SelectionContext'
+import { useProject } from '../../contexts/ProjectContext'
 import { computeNextSelectedSessionId } from '../../utils/selectionNext'
 import { MarkReadyConfirmation } from '../modals/MarkReadyConfirmation'
 import { SessionButton } from './SessionButton'
@@ -73,6 +74,7 @@ interface SidebarProps {
 
 export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     const { selection, setSelection, clearTerminalTracking, terminals } = useSelection()
+    const { projectPath } = useProject()
     const { setFocusForSession, setCurrentFocus } = useFocus()
     const [sessions, setSessions] = useState<EnrichedSession[]>([])
     const [filterMode, setFilterMode] = useState<'all' | 'draft' | 'running' | 'reviewed'>(() => {
@@ -325,7 +327,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
         }
     }, [sortMode])
 
-    // Initial load only; push updates keep it fresh thereafter
+    // Load sessions on mount and when project changes; push updates keep it fresh thereafter
     useEffect(() => {
         const loadSessions = async () => {
             try {
@@ -379,7 +381,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
         }
 
         loadSessions()
-    }, [])
+    }, [projectPath]) // Reload sessions when project path changes
     
     // Listen for sessions-refreshed events (e.g., after name generation)
     useEffect(() => {
@@ -963,7 +965,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                     }
                     
                     // Clear terminal tracking so they can be recreated
-                    clearTerminalTracking(allTerminals)
+                    await clearTerminalTracking(allTerminals)
                     
                     // Also clear the Terminal component's global started tracking
                     clearTerminalStartedTracking(allTerminals)

@@ -303,7 +303,8 @@ export default function App() {
       // Check if tab already exists
       const existingTab = openTabs.find(tab => tab.projectPath === path)
       if (existingTab) {
-        // Switch to existing tab
+        // Switch to existing tab - ensure backend knows about the project switch
+        await invoke('initialize_project', { path })
         setActiveTabPath(path)
         setProjectPath(path)
         setShowHome(false)
@@ -337,7 +338,13 @@ export default function App() {
     setProjectPath(null)
   }
 
-  const handleSelectTab = (path: string) => {
+  const handleSelectTab = async (path: string) => {
+    // Ensure backend knows about the project switch
+    try {
+      await invoke('initialize_project', { path })
+    } catch (error) {
+      console.error('Failed to switch project in backend:', error)
+    }
     setActiveTabPath(path)
     setProjectPath(path)
     setShowHome(false)
