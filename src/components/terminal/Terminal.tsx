@@ -408,14 +408,31 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
         // Use ResizeObserver with a more conservative debounce for better performance
         let resizeTimeout: NodeJS.Timeout | null = null;
         const resizeObserver = new ResizeObserver(() => {
+            // Skip resize work while user drags the split for smoother UI
+            if (document.body.classList.contains('is-split-dragging')) {
+                return;
+            }
             if (resizeTimeout) clearTimeout(resizeTimeout);
             resizeTimeout = setTimeout(() => {
                 handleResize();
-            }, 160); // reduce chatter during layout changes
+            }, 120); // slightly tighter debounce for snappier feel
         });
         resizeObserver.observe(termRef.current);
         // Initial fit pass after mount
         const mountTimeout = setTimeout(() => handleResize(), 60);
+
+        // After split drag ends, perform a strong fit + resize
+        const doFinalFit = () => {
+            try {
+                if (fitAddon.current && terminal.current) {
+                    fitAddon.current.fit();
+                    const { cols, rows } = terminal.current;
+                    lastSize.current = { cols, rows };
+                    invoke('resize_terminal', { id: terminalId, cols, rows }).catch(console.error);
+                }
+            } catch {}
+        };
+        window.addEventListener('terminal-split-drag-end', doFinalFit);
 
         // Cleanup - dispose UI but keep terminal process running
         // Terminal processes will be cleaned up when the app exits
@@ -424,6 +441,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             cancelled = true;
             if (resizeTimeout) clearTimeout(resizeTimeout);
             clearTimeout(mountTimeout);
+            window.removeEventListener('terminal-split-drag-end', doFinalFit);
             // Synchronously detach if possible to avoid races in tests
             const fn = unlistenRef.current;
             if (fn) { try { fn(); } catch { /* ignore */ } }

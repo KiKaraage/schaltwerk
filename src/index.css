@@ -144,6 +144,13 @@ body,
   transform: translate(-50%, -50%) scale(0.96);
 }
 
+/* Suppress panel transitions during active split drag to avoid trailing artifacts */
+body.is-split-dragging .bg-panel,
+body.is-split-dragging .border,
+body.is-split-dragging [class*="transition-"] {
+  transition: none !important;
+}
+
 /* Hide scrollbars globally except for xterm */
 :not(.xterm-viewport)::-webkit-scrollbar {
   width: 0;
@@ -199,6 +206,12 @@ body {
   inset: 0;
   margin: 0;
   padding: 0;
+}
+
+/* Reduce expensive pointer-driven repainting during split drag */
+body.is-split-dragging {
+  cursor: row-resize;
+  user-select: none;
 }
 
 /* Session frame highlighting (use actual box-shadow on the element for better overflow handling) */
