@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Sidebar } from './components/sidebar/Sidebar'
 import { TerminalGrid } from './components/terminal/TerminalGrid'
 import { RightPanelTabs } from './components/right-panel/RightPanelTabs'
-import { DiffViewerWithReview } from './components/diff/DiffViewerWithReview'
+import { UnifiedDiffModal } from './components/diff/UnifiedDiffModal'
 import Split from 'react-split'
 import { NewSessionModal } from './components/modals/NewSessionModal'
 import { CancelConfirmation } from './components/modals/CancelConfirmation'
@@ -11,7 +11,6 @@ import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from './contexts/SelectionContext'
 import { useProject } from './contexts/ProjectContext'
 import { useFontSize } from './contexts/FontSizeContext'
-import { OpenInSplitButton } from './components/diff/OpenInSplitButton'
 import { VscHome } from 'react-icons/vsc'
 import { HomeScreen } from './components/home/HomeScreen'
 import { ProjectTab, TabBar } from './components/TabBar'
@@ -32,7 +31,7 @@ function getBasename(path: string): string {
 }
 
 export default function App() {
-  const { selection, setSelection } = useSelection()
+  const { setSelection } = useSelection()
   const { setProjectPath } = useProject()
   const { increaseFontSizes, decreaseFontSizes, resetFontSizes } = useFontSize()
   const [newSessionOpen, setNewSessionOpen] = useState(false)
@@ -410,19 +409,6 @@ export default function App() {
               />
             </div>
             <div className="flex items-center gap-2 pointer-events-auto">
-              <OpenInSplitButton resolvePath={async () => {
-                if (selection.kind === 'session') {
-                  let worktreePath = selection.worktreePath
-                  if (!worktreePath && selection.payload) {
-                    try {
-                      const sessionData = await invoke<any>('para_core_get_session', { name: selection.payload })
-                      worktreePath = sessionData?.worktree_path
-                    } catch {}
-                  }
-                  return worktreePath
-                }
-                return await invoke<string>('get_current_directory')
-              }} />
               <button
                 onClick={() => setSettingsOpen(true)}
                 className="px-3 py-1.5 bg-slate-800/40 hover:bg-slate-700/60 border border-slate-700/60 rounded-lg transition-colors flex items-center gap-2 text-sm text-slate-300"
@@ -491,9 +477,9 @@ export default function App() {
             />
           )}
           
-          {/* Diff Viewer Overlay with Review - render only when open */}
+          {/* Diff Viewer Modal with Review - render only when open */}
           {isDiffViewerOpen && (
-            <DiffViewerWithReview 
+            <UnifiedDiffModal 
               filePath={selectedDiffFile}
               isOpen={true}
               onClose={handleCloseDiffViewer}
