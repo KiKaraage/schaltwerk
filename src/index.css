@@ -239,7 +239,7 @@ body {
 
 /* Work area unified ring; color toggled via JS */
 #work-ring {
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.45);
+  box-shadow: none;
 }
 
 /* Keep diff containers themselves transparent but allow line highlights */

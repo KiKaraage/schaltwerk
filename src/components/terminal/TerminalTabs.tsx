@@ -61,7 +61,7 @@ export const TerminalTabs = forwardRef<TerminalTabsHandle, TerminalTabsProps>(({
               className={`
                 flex items-center px-3 py-1.5 text-xs cursor-pointer border-r border-slate-800/50 min-w-0 max-w-32
                 ${tab.index === activeTab 
-                  ? 'bg-panel text-slate-300 border-b-2 border-blue-500' 
+                  ? 'bg-panel text-slate-300' 
                   : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
                 }
               `}

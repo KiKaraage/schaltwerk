@@ -65,15 +65,15 @@ describe('RightPanelTabs', () => {
       )
       
       // Initially shows Changes tab for running session
-      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('border-blue-500')
-      expect(screen.getByRole('button', { name: /Task/i })).not.toHaveClass('border-blue-500')
+      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('bg-slate-800/50')
+      expect(screen.getByRole('button', { name: /Task/i })).not.toHaveClass('bg-slate-800/50')
       
       // User clicks on Task tab
       fireEvent.click(screen.getByRole('button', { name: /Task/i }))
       
       // Task tab should now be active
-      expect(screen.getByRole('button', { name: /Task/i })).toHaveClass('border-blue-500')
-      expect(screen.getByRole('button', { name: /Changes/i })).not.toHaveClass('border-blue-500')
+      expect(screen.getByRole('button', { name: /Task/i })).toHaveClass('bg-slate-800/50')
+      expect(screen.getByRole('button', { name: /Changes/i })).not.toHaveClass('bg-slate-800/50')
       
       // Switch to a different session
       mockUseSelection.mockReturnValue({
@@ -90,8 +90,8 @@ describe('RightPanelTabs', () => {
       )
       
       // Task tab should still be active (user preference persisted)
-      expect(screen.getByRole('button', { name: /Task/i })).toHaveClass('border-blue-500')
-      expect(screen.getByRole('button', { name: /Changes/i })).not.toHaveClass('border-blue-500')
+      expect(screen.getByRole('button', { name: /Task/i })).toHaveClass('bg-slate-800/50')
+      expect(screen.getByRole('button', { name: /Changes/i })).not.toHaveClass('bg-slate-800/50')
     })
     
     it('should persist user tab selection when switching to orchestrator', async () => {
@@ -110,7 +110,7 @@ describe('RightPanelTabs', () => {
       
       // User selects Changes tab explicitly
       fireEvent.click(screen.getByRole('button', { name: /Changes/i }))
-      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('border-blue-500')
+      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('bg-slate-800/50')
       
       // Switch to orchestrator
       mockUseSelection.mockReturnValue({
@@ -128,8 +128,8 @@ describe('RightPanelTabs', () => {
       
       // Even though orchestrator normally defaults to Task/Drafts, 
       // user's choice of Changes should persist
-      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('border-blue-500')
-      expect(screen.getByRole('button', { name: /Drafts/i })).not.toHaveClass('border-blue-500')
+      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('bg-slate-800/50')
+      expect(screen.getByRole('button', { name: /Drafts/i })).not.toHaveClass('bg-slate-800/50')
     })
     
     it('should use smart defaults when user has not made a selection', () => {
@@ -147,7 +147,7 @@ describe('RightPanelTabs', () => {
         <RightPanelTabs onFileSelect={mockOnFileSelect} />
       )
       
-      expect(screen.getByRole('button', { name: /Drafts/i })).toHaveClass('border-blue-500')
+      expect(screen.getByRole('button', { name: /Drafts/i })).toHaveClass('bg-slate-800/50')
       expect(screen.getByRole('button', { name: /Changes/i })).not.toHaveClass('border-blue-500')
       
       // Test draft session defaults to Task
@@ -164,8 +164,8 @@ describe('RightPanelTabs', () => {
         <RightPanelTabs onFileSelect={mockOnFileSelect} />
       )
       
-      expect(screen.getByRole('button', { name: /Task/i })).toHaveClass('border-blue-500')
-      expect(screen.getByRole('button', { name: /Changes/i })).not.toHaveClass('border-blue-500')
+      expect(screen.getByRole('button', { name: /Task/i })).toHaveClass('bg-slate-800/50')
+      expect(screen.getByRole('button', { name: /Changes/i })).not.toHaveClass('bg-slate-800/50')
       
       // Test running session defaults to Changes
       mockUseSelection.mockReturnValue({
@@ -181,8 +181,8 @@ describe('RightPanelTabs', () => {
         <RightPanelTabs onFileSelect={mockOnFileSelect} />
       )
       
-      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('border-blue-500')
-      expect(screen.getByRole('button', { name: /Task/i })).not.toHaveClass('border-blue-500')
+      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('bg-slate-800/50')
+      expect(screen.getByRole('button', { name: /Task/i })).not.toHaveClass('bg-slate-800/50')
     })
     
     it('should allow user to override smart defaults at any time', () => {
@@ -200,11 +200,11 @@ describe('RightPanelTabs', () => {
       )
       
       // Orchestrator starts with Task/Drafts
-      expect(screen.getByRole('button', { name: /Drafts/i })).toHaveClass('border-blue-500')
+      expect(screen.getByRole('button', { name: /Drafts/i })).toHaveClass('bg-slate-800/50')
       
       // User clicks Changes
       fireEvent.click(screen.getByRole('button', { name: /Changes/i }))
-      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('border-blue-500')
+      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('bg-slate-800/50')
       
       // Switch to session - Changes should stay selected
       mockUseSelection.mockReturnValue({
@@ -220,11 +220,11 @@ describe('RightPanelTabs', () => {
         <RightPanelTabs onFileSelect={mockOnFileSelect} />
       )
       
-      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('border-blue-500')
+      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('bg-slate-800/50')
       
       // User now clicks Task
       fireEvent.click(screen.getByRole('button', { name: /Task/i }))
-      expect(screen.getByRole('button', { name: /Task/i })).toHaveClass('border-blue-500')
+      expect(screen.getByRole('button', { name: /Task/i })).toHaveClass('bg-slate-800/50')
       
       // Switch back to orchestrator - Task should stay selected
       mockUseSelection.mockReturnValue({
@@ -241,7 +241,7 @@ describe('RightPanelTabs', () => {
       )
       
       // Label changes to "Drafts" in orchestrator, but Task tab should still be active
-      expect(screen.getByRole('button', { name: /Drafts/i })).toHaveClass('border-blue-500')
+      expect(screen.getByRole('button', { name: /Drafts/i })).toHaveClass('bg-slate-800/50')
     })
   })
   

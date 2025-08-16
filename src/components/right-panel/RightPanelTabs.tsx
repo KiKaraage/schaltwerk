@@ -40,7 +40,7 @@ export function RightPanelTabs({ onFileSelect }: RightPanelTabsProps) {
           onClick={() => setUserSelectedTab('changes')}
           className={clsx(
             'flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
-            activeTab === 'changes' ? 'text-slate-200 bg-slate-800/50 border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+            activeTab === 'changes' ? 'text-slate-200 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
           )}
           title="Changes"
         >
@@ -51,7 +51,7 @@ export function RightPanelTabs({ onFileSelect }: RightPanelTabsProps) {
           onClick={() => setUserSelectedTab('task')}
           className={clsx(
             'flex-1 px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
-            activeTab === 'task' ? 'text-slate-200 bg-slate-800/50 border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+            activeTab === 'task' ? 'text-slate-200 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
           )}
           title={`${rightTabLabel}`}
         >
