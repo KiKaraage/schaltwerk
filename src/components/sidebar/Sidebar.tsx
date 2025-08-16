@@ -614,6 +614,24 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 // Add visual notification badge for the session
                 setSessionsWithNotifications(prev => new Set([...prev, session_name]))
                 
+                // Find the session to get its worktree path
+                setSessions(prev => {
+                    const session = prev.find(s => s.info.session_id === session_name)
+                    if (session) {
+                        // Focus the session when review content is pasted, including worktree path
+                        setSelection({
+                            kind: 'session',
+                            payload: session_name,
+                            worktreePath: session.info.worktree_path
+                        })
+                        
+                        // Set Claude focus for the session
+                        setFocusForSession(session_name, 'claude')
+                        setCurrentFocus('claude')
+                    }
+                    return prev
+                })
+                
                 // Show a toast notification
                 console.log(`📬 Follow-up message for ${session_name}: ${message}`)
                 

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from '../../contexts/SelectionContext'
 import { useReview } from '../../contexts/ReviewContext'
+import { useFocus } from '../../contexts/FocusContext'
 import { ReviewComment } from '../../types/review'
 import { useLineSelection } from '../../hooks/useLineSelection'
 import { 
@@ -31,8 +32,9 @@ interface UnifiedDiffModalProps {
 }
 
 export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModalProps) {
-  const { selection } = useSelection()
+  const { selection, setSelection } = useSelection()
   const { currentReview, startReview, addComment, getCommentsForFile, clearReview } = useReview()
+  const { setFocusForSession, setCurrentFocus } = useFocus()
   const lineSelection = useLineSelection()
   const lineSelectionRef = useRef(lineSelection)
   lineSelectionRef.current = lineSelection
@@ -339,6 +341,14 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
       const terminalId = `session-${sessionName}-top`
       await invoke('write_terminal', { id: terminalId, data: reviewText })
       
+      // Focus the session with blue border
+      await setSelection({
+        kind: 'session',
+        payload: sessionName
+      })
+      setFocusForSession(sessionName, 'claude')
+      setCurrentFocus('claude')
+      
       // Clear the review after sending
       clearReview()
       
@@ -346,7 +356,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     } catch (error) {
       console.error('Failed to send review to terminal:', error)
     }
-  }, [currentReview, sessionName, formatReviewForPrompt, clearReview, onClose])
+  }, [currentReview, sessionName, formatReviewForPrompt, clearReview, onClose, setSelection, setFocusForSession, setCurrentFocus])
 
   const getFileIcon = (changeType: string) => {
     switch (changeType) {
