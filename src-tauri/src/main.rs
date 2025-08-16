@@ -1217,6 +1217,36 @@ async fn set_agent_env_vars(agent_type: String, env_vars: HashMap<String, String
     manager.set_agent_env_vars(&agent_type, env_vars)
 }
 
+#[tauri::command]
+async fn get_terminal_ui_preferences() -> Result<settings::TerminalUIPreferences, String> {
+    let settings_manager = SETTINGS_MANAGER
+        .get()
+        .ok_or_else(|| "Settings manager not initialized".to_string())?;
+    
+    let manager = settings_manager.lock().await;
+    Ok(manager.get_terminal_ui_preferences())
+}
+
+#[tauri::command]
+async fn set_terminal_collapsed(is_collapsed: bool) -> Result<(), String> {
+    let settings_manager = SETTINGS_MANAGER
+        .get()
+        .ok_or_else(|| "Settings manager not initialized".to_string())?;
+    
+    let mut manager = settings_manager.lock().await;
+    manager.set_terminal_collapsed(is_collapsed)
+}
+
+#[tauri::command]
+async fn set_terminal_divider_position(position: f64) -> Result<(), String> {
+    let settings_manager = SETTINGS_MANAGER
+        .get()
+        .ok_or_else(|| "Settings manager not initialized".to_string())?;
+    
+    let mut manager = settings_manager.lock().await;
+    manager.set_terminal_divider_position(position)
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProjectSettings {
@@ -1349,6 +1379,9 @@ fn main() {
             set_project_default_base_branch,
             get_agent_env_vars,
             set_agent_env_vars,
+            get_terminal_ui_preferences,
+            set_terminal_collapsed,
+            set_terminal_divider_position,
             get_project_settings,
             set_project_settings
         ])

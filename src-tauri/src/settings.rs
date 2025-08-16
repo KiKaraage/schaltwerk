@@ -12,8 +12,15 @@ pub struct AgentEnvVars {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct TerminalUIPreferences {
+    pub is_collapsed: bool,
+    pub divider_position: Option<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Settings {
     pub agent_env_vars: AgentEnvVars,
+    pub terminal_ui: TerminalUIPreferences,
 }
 
 pub struct SettingsManager {
@@ -77,6 +84,20 @@ impl SettingsManager {
             _ => return Err(format!("Unknown agent type: {agent_type}")),
         }
         
+        self.save()
+    }
+    
+    pub fn get_terminal_ui_preferences(&self) -> TerminalUIPreferences {
+        self.settings.terminal_ui.clone()
+    }
+    
+    pub fn set_terminal_collapsed(&mut self, is_collapsed: bool) -> Result<(), String> {
+        self.settings.terminal_ui.is_collapsed = is_collapsed;
+        self.save()
+    }
+    
+    pub fn set_terminal_divider_position(&mut self, position: f64) -> Result<(), String> {
+        self.settings.terminal_ui.divider_position = Some(position);
         self.save()
     }
 }
