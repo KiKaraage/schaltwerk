@@ -5,13 +5,11 @@ import Split from 'react-split'
 import { VscChevronDown, VscChevronUp } from 'react-icons/vsc'
 import { useSelection } from '../../contexts/SelectionContext'
 import { useFocus } from '../../contexts/FocusContext'
-import { useTerminalUIPreferences } from '../../hooks/useTerminalUIPreferences'
 import { useRef, useEffect, useState } from 'react'
 
 export function TerminalGrid() {
     const { selection, terminals, isReady, isDraft } = useSelection()
     const { getFocusForSession, setFocusForSession, currentFocus } = useFocus()
-    const { isCollapsed } = useTerminalUIPreferences()
     const [terminalKey, setTerminalKey] = useState(0)
     const [localFocus, setLocalFocus] = useState<'claude' | 'terminal' | null>(null)
     const containerRef = useRef<HTMLDivElement>(null)
@@ -49,7 +47,21 @@ export function TerminalGrid() {
     }
 
     const toggleTerminalCollapsed = () => {
-        setIsBottomCollapsed(!isBottomCollapsed)
+        const newCollapsed = !isBottomCollapsed
+        setIsBottomCollapsed(newCollapsed)
+        
+        if (newCollapsed) {
+            // When collapsing, save current size and set to collapsed size
+            const currentBottom = sizes[1]
+            if (currentBottom > collapsedPercent) {
+                setLastExpandedBottomPercent(currentBottom)
+            }
+            setSizes([100 - collapsedPercent, collapsedPercent])
+        } else {
+            // When expanding, restore to last expanded size
+            const expandedSize = lastExpandedBottomPercent || 35
+            setSizes([100 - expandedSize, expandedSize])
+        }
     }
     
     // Listen for terminal reset events
@@ -151,22 +163,33 @@ export function TerminalGrid() {
         const rawCollapsed = localStorage.getItem(`schaltwerk:terminal-grid:collapsed:${key}`)
         const rawExpanded = localStorage.getItem(`schaltwerk:terminal-grid:lastExpandedBottom:${key}`)
         let nextSizes: number[] = [65, 35]
-        let collapsed = false
         let expandedBottom = 35
+        
         if (raw) {
             try { const parsed = JSON.parse(raw) as number[]; if (Array.isArray(parsed) && parsed.length === 2) nextSizes = parsed } catch {}
         }
-        if (rawCollapsed === 'true') collapsed = true
         if (rawExpanded) { const v = Number(rawExpanded); if (!Number.isNaN(v) && v > 0 && v < 100) expandedBottom = v }
-        setLastExpandedBottomPercent(expandedBottom)
-        setIsBottomCollapsed(collapsed)
-        if (collapsed) {
-            const pct = collapsedPercent
-            const target = [100 - pct, pct]
-            if (sizes[0] !== target[0] || sizes[1] !== target[1]) setSizes(target)
+        
+        // Only change collapsed state if there's an explicit localStorage value for this session
+        // Otherwise, keep the current collapsed state
+        if (rawCollapsed !== null) {
+            const collapsed = rawCollapsed === 'true'
+            setIsBottomCollapsed(collapsed)
+            if (collapsed) {
+                const pct = collapsedPercent
+                const target = [100 - pct, pct]
+                if (sizes[0] !== target[0] || sizes[1] !== target[1]) setSizes(target)
+            } else {
+                if (sizes[0] !== nextSizes[0] || sizes[1] !== nextSizes[1]) setSizes(nextSizes)
+            }
         } else {
-            if (sizes[0] !== nextSizes[0] || sizes[1] !== nextSizes[1]) setSizes(nextSizes)
+            // No localStorage entry - keep current collapsed state but update sizes
+            if (!isBottomCollapsed) {
+                if (sizes[0] !== nextSizes[0] || sizes[1] !== nextSizes[1]) setSizes(nextSizes)
+            }
         }
+        
+        setLastExpandedBottomPercent(expandedBottom)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selection])
 
@@ -239,68 +262,17 @@ export function TerminalGrid() {
         )
     }
 
-    const claudeSection = (
-        <div className={`bg-panel rounded overflow-hidden min-h-0 flex flex-col transition-all duration-200 ${localFocus === 'claude' ? 'border-2 border-blue-500/60 shadow-lg shadow-blue-500/20' : 'border border-slate-800'}`}>
-            <div 
-                className={`h-8 px-3 text-xs border-b cursor-pointer flex-shrink-0 flex items-center justify-between transition-colors duration-200 ${
-                    localFocus === 'claude' 
-                        ? 'bg-blue-900/30 text-blue-200 border-blue-800/50 hover:bg-blue-900/40' 
-                        : 'text-slate-400 border-slate-800 hover:bg-slate-800'
-                }`}
-                onClick={handleClaudeSessionClick}
-            >
-                <span className="flex-1 text-center font-medium">
-                    {selection.kind === 'orchestrator' ? 'Orchestrator — main repo' : `Session — ${selection.payload ?? ''}`}
-                </span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded mr-1 transition-colors duration-200 ${
-                    localFocus === 'claude' 
-                        ? 'bg-blue-600/40 text-blue-200' 
-                        : 'bg-slate-700/50 text-slate-400'
-                }`} title="Focus Claude (⌘T)">⌘T</span>
-            </div>
-            <div className={`h-[2px] flex-shrink-0 transition-opacity duration-200 ${
-                localFocus === 'claude' 
-                    ? 'bg-gradient-to-r from-transparent via-blue-500/50 to-transparent' 
-                    : 'bg-gradient-to-r from-transparent via-slate-600/30 to-transparent'
-            }`} />
-            <div className={`flex-1 min-h-0 ${localFocus === 'claude' ? 'terminal-focused-claude' : ''}`} onClick={handleClaudeSessionClick}>
-                <Terminal 
-                    key={`top-terminal-${terminalKey}`}
-                    ref={claudeTerminalRef}
-                    terminalId={terminals.top} 
-                    className="h-full w-full" 
-                    sessionName={selection.kind === 'session' ? selection.payload ?? undefined : undefined}
-                    isOrchestrator={selection.kind === 'orchestrator'}
-                />
-            </div>
-        </div>
-    )
-
-
-    if (isCollapsed) {
-        return (
-            <div className="h-full px-2 pb-2 pt-0 relative">
-                {claudeSection}
-            <div className="mt-2 flex justify-center">
-                    <button
-                        onClick={toggleTerminalCollapsed}
-                        className="px-3 py-1 text-xs bg-slate-700/50 text-slate-400 hover:bg-slate-600/50 rounded border border-slate-600 transition-colors flex items-center gap-1"
-                        title="Show Terminal (⌘B)"
-                    >
-                        <span>▼</span>
-                        <span>Show Terminal</span>
-                    </button>
-                </div>
-            </div>
-        )
-    }
+    // When collapsed, adjust sizes to show just the terminal header
+    const effectiveSizes = isBottomCollapsed 
+        ? [100 - collapsedPercent, collapsedPercent]
+        : sizes
 
     return (
         <div ref={containerRef} className="h-full px-2 pb-2 pt-0 relative">
             <Split 
                 className="h-full flex flex-col" 
                 direction="vertical" 
-                sizes={sizes || [65, 35]} 
+                sizes={effectiveSizes || [65, 35]} 
                 minSize={[120, 24]} 
                 gutterSize={8}
                 onDragStart={() => {
@@ -390,7 +362,7 @@ export function TerminalGrid() {
                             ? 'bg-gradient-to-r from-transparent via-blue-500/50 to-transparent'
                             : 'bg-gradient-to-r from-transparent via-slate-600/30 to-transparent'
                     }`} />
-                    <div className="flex-1 min-h-0" onClick={handleTerminalClick}>
+                    <div className={`flex-1 min-h-0 ${isBottomCollapsed ? 'hidden' : ''}`} onClick={handleTerminalClick}>
                         <TerminalTabs
                             key={`terminal-tabs-${terminalKey}`}
                             ref={terminalTabsRef}

@@ -368,4 +368,270 @@ describe('TerminalGrid', () => {
     expect(m.__getMountCount(topId)).toBe(2)
     expect(m.__getMountCount(bottomId)).toBe(2)
   })
+
+  describe('Terminal Minimization', () => {
+    it('toggles terminal collapse state correctly', async () => {
+      renderGrid()
+      vi.useRealTimers()
+
+      // Wait for initialization
+      await waitFor(() => {
+        expect(bridge).toBeDefined()
+        expect(bridge?.isReady).toBe(true)
+      }, { timeout: 3000 })
+
+      // Initially not collapsed - both panels visible
+      expect(screen.getByText('Orchestrator — main repo')).toBeInTheDocument()
+      expect(screen.getByText('Terminal — main')).toBeInTheDocument()
+      expect(screen.getByTestId('split')).toBeInTheDocument()
+
+      // Find and click the collapse button (chevron down icon)
+      const collapseButton = screen.getByLabelText('Collapse terminal panel')
+      fireEvent.click(collapseButton)
+
+      // After collapse, split view should still be present but with adjusted sizes
+      await waitFor(() => {
+        expect(screen.getByTestId('split')).toBeInTheDocument()
+        // Terminal header should still be visible
+        expect(screen.getByText(/Terminal — /)).toBeInTheDocument()
+      })
+
+      // Claude section should still be visible
+      expect(screen.getByText('Orchestrator — main repo')).toBeInTheDocument()
+
+      // Click expand button to expand again
+      const expandButton = screen.getByLabelText('Expand terminal panel')
+      fireEvent.click(expandButton)
+
+      // Should still have split view, terminal content should be visible
+      await waitFor(() => {
+        expect(screen.getByTestId('split')).toBeInTheDocument()
+        const collapseButton2 = screen.getByLabelText('Collapse terminal panel')
+        expect(collapseButton2).toBeInTheDocument()
+      })
+    })
+
+    it('persists collapse state per session in localStorage', async () => {
+      // Clear localStorage to start fresh
+      localStorage.clear()
+
+      renderGrid()
+      vi.useRealTimers()
+
+      await waitFor(() => {
+        expect(bridge).toBeDefined()
+        expect(bridge?.isReady).toBe(true)
+      }, { timeout: 3000 })
+
+      // Collapse terminal for orchestrator
+      const collapseButton = screen.getByLabelText('Collapse terminal panel')
+      fireEvent.click(collapseButton)
+
+      // Wait for collapse to take effect
+      await waitFor(() => {
+        const expandBtn = screen.getByLabelText('Expand terminal panel')
+        expect(expandBtn).toBeInTheDocument()
+      })
+
+      // Check localStorage was updated for orchestrator
+      expect(localStorage.getItem('schaltwerk:terminal-grid:collapsed:orchestrator')).toBe('true')
+
+      // Switch to a session
+      await act(async () => {
+        await bridge!.setSelection({ kind: 'session', payload: 'test-session', worktreePath: '/test/path' })
+      })
+
+      // Wait for session to load
+      await waitFor(() => {
+        expect(screen.getByText('Session — test-session')).toBeInTheDocument()
+      })
+
+      // Session should inherit the collapsed state from orchestrator since it has no localStorage entry
+      expect(screen.getByTestId('split')).toBeInTheDocument()
+      const expandBtn = screen.getByLabelText('Expand terminal panel')
+      expect(expandBtn).toBeInTheDocument()
+      // The inherited collapsed state is immediately persisted
+      expect(localStorage.getItem('schaltwerk:terminal-grid:collapsed:test-session')).toBe('true')
+
+      // First expand it
+      fireEvent.click(expandBtn)
+      
+      await waitFor(() => {
+        const collapseBtn = screen.getByLabelText('Collapse terminal panel')
+        expect(collapseBtn).toBeInTheDocument()
+      })
+
+      // Now collapse terminal for this session
+      const sessionCollapseButton = screen.getByLabelText('Collapse terminal panel')
+      fireEvent.click(sessionCollapseButton)
+
+      await waitFor(() => {
+        const expandBtn2 = screen.getByLabelText('Expand terminal panel')
+        expect(expandBtn2).toBeInTheDocument()
+      })
+
+      expect(localStorage.getItem('schaltwerk:terminal-grid:collapsed:test-session')).toBe('true')
+
+      // Switch back to orchestrator
+      await act(async () => {
+        await bridge!.setSelection({ kind: 'orchestrator', payload: undefined, worktreePath: undefined })
+      })
+
+      // Wait for orchestrator to load
+      await waitFor(() => {
+        expect(screen.getByText('Orchestrator — main repo')).toBeInTheDocument()
+      })
+
+      // Orchestrator should still be collapsed (state was persisted)
+      const expandBtnOrch = screen.getByLabelText('Expand terminal panel')
+      expect(expandBtnOrch).toBeInTheDocument()
+      expect(screen.getByTestId('split')).toBeInTheDocument()
+    })
+
+    it('restores correct minimization state when switching between sessions', async () => {
+      // Set up different collapse states in localStorage
+      localStorage.setItem('schaltwerk:terminal-grid:collapsed:orchestrator', 'false')
+      localStorage.setItem('schaltwerk:terminal-grid:collapsed:session-a', 'true')
+      localStorage.setItem('schaltwerk:terminal-grid:collapsed:session-b', 'false')
+
+      renderGrid()
+      vi.useRealTimers()
+
+      await waitFor(() => {
+        expect(bridge).toBeDefined()
+        expect(bridge?.isReady).toBe(true)
+      }, { timeout: 3000 })
+
+      // Orchestrator starts not collapsed
+      expect(screen.getByTestId('split')).toBeInTheDocument()
+      const collapseBtn = screen.getByLabelText('Collapse terminal panel')
+      expect(collapseBtn).toBeInTheDocument()
+
+      // Switch to session-a (should be collapsed)
+      await act(async () => {
+        await bridge!.setSelection({ kind: 'session', payload: 'session-a', worktreePath: '/a/path' })
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('Session — session-a')).toBeInTheDocument()
+        const expandBtn = screen.getByLabelText('Expand terminal panel')
+        expect(expandBtn).toBeInTheDocument()
+        expect(screen.getByTestId('split')).toBeInTheDocument()
+      })
+
+      // Switch to session-b (should not be collapsed)
+      await act(async () => {
+        await bridge!.setSelection({ kind: 'session', payload: 'session-b', worktreePath: '/b/path' })
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('Session — session-b')).toBeInTheDocument()
+        expect(screen.getByTestId('split')).toBeInTheDocument()
+        const collapseBtn = screen.getByLabelText('Collapse terminal panel')
+        expect(collapseBtn).toBeInTheDocument()
+      })
+
+      // Switch back to session-a (should still be collapsed)
+      await act(async () => {
+        await bridge!.setSelection({ kind: 'session', payload: 'session-a', worktreePath: '/a/path' })
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('Session — session-a')).toBeInTheDocument()
+        const expandBtn = screen.getByLabelText('Expand terminal panel')
+        expect(expandBtn).toBeInTheDocument()
+        expect(screen.getByTestId('split')).toBeInTheDocument()
+      })
+    })
+
+    it('expands terminal when clicking expand button while collapsed', async () => {
+      // Pre-set collapsed state for the test session
+      localStorage.setItem('schaltwerk:terminal-grid:collapsed:test', 'true')
+      
+      renderGrid()
+      vi.useRealTimers()
+
+      await waitFor(() => {
+        expect(bridge).toBeDefined()
+        expect(bridge?.isReady).toBe(true)
+      }, { timeout: 3000 })
+
+      // Switch to the test session which has collapsed state
+      await act(async () => {
+        await bridge!.setSelection({ kind: 'session', payload: 'test', worktreePath: '/test' })
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('Session — test')).toBeInTheDocument()
+      })
+
+      // Terminal should be collapsed for this session (from localStorage)
+      const expandBtn = screen.getByLabelText('Expand terminal panel')
+      expect(expandBtn).toBeInTheDocument()
+
+      // Click expand button to expand
+      fireEvent.click(expandBtn)
+
+      // Should expand the terminal
+      await waitFor(() => {
+        expect(screen.getByTestId('split')).toBeInTheDocument()
+        const collapseBtn = screen.getByLabelText('Collapse terminal panel')
+        expect(collapseBtn).toBeInTheDocument()
+      })
+
+      // Terminal should be visible and functional after expansion
+      expect(screen.getByText('Terminal — test')).toBeInTheDocument()
+      expect(screen.getByTestId('terminal-session-test-bottom-0')).toBeInTheDocument()
+    })
+
+    it('maintains correct UI state when rapidly toggling collapse', async () => {
+      renderGrid()
+      vi.useRealTimers()
+
+      await waitFor(() => {
+        expect(bridge).toBeDefined()
+        expect(bridge?.isReady).toBe(true)
+      }, { timeout: 3000 })
+
+      // Rapidly toggle collapse state
+      const collapseButton = screen.getByLabelText('Collapse terminal panel')
+      
+      // Collapse
+      fireEvent.click(collapseButton)
+      await waitFor(() => {
+        const expandBtn = screen.getByLabelText('Expand terminal panel')
+        expect(expandBtn).toBeInTheDocument()
+      })
+
+      // Expand
+      const expandButton = screen.getByLabelText('Expand terminal panel')
+      fireEvent.click(expandButton)
+      await waitFor(() => {
+        const collapseBtn = screen.getByLabelText('Collapse terminal panel')
+        expect(collapseBtn).toBeInTheDocument()
+      })
+
+      // Collapse again
+      const collapseButton2 = screen.getByLabelText('Collapse terminal panel')
+      fireEvent.click(collapseButton2)
+      await waitFor(() => {
+        const expandBtn = screen.getByLabelText('Expand terminal panel')
+        expect(expandBtn).toBeInTheDocument()
+      })
+
+      // Expand again
+      const expandButton2 = screen.getByLabelText('Expand terminal panel')
+      fireEvent.click(expandButton2)
+      await waitFor(() => {
+        const collapseBtn = screen.getByLabelText('Collapse terminal panel')
+        expect(collapseBtn).toBeInTheDocument()
+      })
+
+      // Final state should be expanded and functional
+      expect(screen.getByText('Orchestrator — main repo')).toBeInTheDocument()
+      expect(screen.getByText('Terminal — main')).toBeInTheDocument()
+      const collapseBtn = screen.getByLabelText('Collapse terminal panel')
+      expect(collapseBtn).toBeInTheDocument()
+    })
+  })
 })
