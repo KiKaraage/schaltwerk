@@ -91,6 +91,9 @@ describe('Sidebar sorting functionality', () => {
       if (cmd === 'para_core_list_enriched_sessions') {
         return sessions
       }
+      if (cmd === 'para_core_list_sessions_by_state') {
+        return []
+      }
       if (cmd === 'get_current_directory') {
         return '/test/dir'
       }
@@ -103,6 +106,7 @@ describe('Sidebar sorting functionality', () => {
       if (cmd === 'get_buffer') {
         return ''
       }
+      if (cmd === 'para_core_list_sessions_by_state') return []
       throw new Error(`Unexpected command: ${cmd}`)
     })
 
@@ -187,6 +191,9 @@ describe('Sidebar sorting functionality', () => {
       if (cmd === 'para_core_list_enriched_sessions') {
         return sessions
       }
+      if (cmd === 'para_core_list_sessions_by_state') {
+        return []
+      }
       if (cmd === 'get_current_directory') {
         return '/test/dir'
       }
@@ -199,6 +206,7 @@ describe('Sidebar sorting functionality', () => {
       if (cmd === 'get_buffer') {
         return ''
       }
+      if (cmd === 'para_core_list_sessions_by_state') return []
       throw new Error(`Unexpected command: ${cmd}`)
     })
 
@@ -248,6 +256,9 @@ describe('Sidebar sorting functionality', () => {
       if (cmd === 'para_core_list_enriched_sessions') {
         return sessions
       }
+      if (cmd === 'para_core_list_sessions_by_state') {
+        return []
+      }
       if (cmd === 'get_current_directory') {
         return '/test/dir'
       }
@@ -260,6 +271,7 @@ describe('Sidebar sorting functionality', () => {
       if (cmd === 'get_buffer') {
         return ''
       }
+      if (cmd === 'para_core_list_sessions_by_state') return []
       throw new Error(`Unexpected command: ${cmd}`)
     })
 
@@ -309,6 +321,9 @@ describe('Sidebar sorting functionality', () => {
       if (cmd === 'para_core_list_enriched_sessions') {
         return sessions
       }
+      if (cmd === 'para_core_list_sessions_by_state') {
+        return []
+      }
       if (cmd === 'get_current_directory') {
         return '/test/dir'
       }
@@ -321,6 +336,7 @@ describe('Sidebar sorting functionality', () => {
       if (cmd === 'get_buffer') {
         return ''
       }
+      if (cmd === 'para_core_list_sessions_by_state') return []
       throw new Error(`Unexpected command: ${cmd}`)
     })
 

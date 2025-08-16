@@ -185,6 +185,8 @@ describe('Sidebar', () => {
             worktree_path: '/test/session/path',
             session_id: 'test-session'
           })
+        case 'para_core_list_sessions_by_state':
+          return Promise.resolve([])
         default:
           return Promise.resolve()
       }
@@ -204,7 +206,10 @@ describe('Sidebar', () => {
 
   describe('session list rendering', () => {
     it('should show empty state when no sessions', async () => {
-      mockInvoke.mockResolvedValueOnce([])
+      // Mock both the regular sessions and drafts calls
+      mockInvoke
+        .mockResolvedValueOnce([]) // para_core_list_enriched_sessions
+        .mockResolvedValueOnce([]) // para_core_list_sessions_by_state
 
       render(<Sidebar />, { wrapper: createTestWrapper() })
 
@@ -234,7 +239,10 @@ describe('Sidebar', () => {
         }
       ]
 
-      mockInvoke.mockResolvedValueOnce(mockSessions)
+      // Mock both the regular sessions and drafts calls
+      mockInvoke
+        .mockResolvedValueOnce(mockSessions) // para_core_list_enriched_sessions
+        .mockResolvedValueOnce([]) // para_core_list_sessions_by_state
 
       render(<Sidebar />, { wrapper: createTestWrapper() })
 
@@ -470,7 +478,10 @@ describe('Sidebar', () => {
         }
       ]
 
-      mockInvoke.mockResolvedValueOnce(mockSessions)
+      // Mock both the regular sessions and drafts calls
+      mockInvoke
+        .mockResolvedValueOnce(mockSessions) // para_core_list_enriched_sessions
+        .mockResolvedValueOnce([]) // para_core_list_sessions_by_state
 
       render(<Sidebar />, { wrapper: createTestWrapper() })
 

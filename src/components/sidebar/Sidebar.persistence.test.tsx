@@ -115,6 +115,7 @@ describe('Sidebar sort mode persistence', () => {
       if (cmd === 'terminal_exists') return false
       if (cmd === 'create_terminal') return true
       if (cmd === 'get_buffer') return ''
+      if (cmd === 'para_core_list_sessions_by_state') return []
       throw new Error(`Unexpected command: ${cmd}`)
     })
   })

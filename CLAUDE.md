@@ -97,6 +97,14 @@ Never consider a task complete unless `npm run test` passes without errors.
 
 If tests are failing, they must be fixed immediately. Do not assume test failures are from previous changes or unrelated work. Every test failure indicates a real problem that must be resolved.
 
+### Performance Test Failures
+
+**CRITICAL**: Performance tests are indicators of actual performance issues and must be treated seriously:
+- **Fix the performance issue**: When performance tests fail, investigate and fix the underlying performance problem
+- **Never ignore performance tests**: Do not skip or disable failing performance tests
+- **Exception for obsolete tests**: Only delete a performance test if it no longer makes sense (e.g., testing removed functionality)
+- **Performance regressions matter**: Slower performance affects user experience and must be addressed
+
 ### Common Issues to Check
 - Unused imports (both TypeScript and Rust)
 - Missing JSX configuration in tsconfig.json

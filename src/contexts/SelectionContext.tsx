@@ -302,21 +302,26 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     
     // Listen for selection events from backend (e.g., when MCP creates/updates drafts)
     useEffect(() => {
+        let unlisten: (() => void) | undefined
+        
         const setupSelectionListener = async () => {
-            const unlisten = await listen<Selection>('schaltwerk:selection', async (event) => {
-                console.log('Received selection event from backend:', event.payload)
-                // Set the selection to the requested session/draft
-                await setSelection(event.payload)
-            })
-            
-            return () => {
-                unlisten()
+            try {
+                unlisten = await listen<Selection>('schaltwerk:selection', async (event) => {
+                    console.log('Received selection event from backend:', event.payload)
+                    // Set the selection to the requested session/draft
+                    await setSelection(event.payload)
+                })
+            } catch (e) {
+                console.error('[SelectionContext] Failed to attach selection listener', e)
             }
         }
         
-        const cleanup = setupSelectionListener()
+        setupSelectionListener()
+        
         return () => {
-            cleanup.then(fn => fn())
+            if (unlisten) {
+                unlisten()
+            }
         }
     }, [setSelection])
     
