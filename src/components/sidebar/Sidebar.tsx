@@ -385,71 +385,58 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     useEffect(() => {
         const setupRefreshListener = async () => {
             const unlisten = await listen<EnrichedSession[]>('schaltwerk:sessions-refreshed', async (event) => {
-                // If payload is empty (from webhook), reload all sessions including drafts
-                if (!event.payload || event.payload.length === 0) {
-                    try {
-                        // Reload both regular sessions and drafts
-                        const [regularSessions, draftSessions] = await Promise.all([
-                            invoke<EnrichedSession[]>('para_core_list_enriched_sessions'),
-                            invoke<any[]>('para_core_list_sessions_by_state', { state: 'draft' })
-                        ])
-                        
-                        // Convert draft sessions to EnrichedSession format
-                        const enrichedDrafts: EnrichedSession[] = draftSessions.map(draft => ({
-                            id: draft.id,
-                            info: {
-                                session_id: draft.name,
-                                display_name: draft.display_name || draft.name,
-                                branch: draft.branch,
-                                worktree_path: draft.worktree_path || '',
-                                base_branch: draft.parent_branch,
-                                merge_mode: 'rebase',
-                                status: 'draft' as any,
-                                session_state: 'draft',
-                                created_at: new Date(draft.created_at).toISOString(),
-                                last_modified: draft.updated_at ? new Date(draft.updated_at).toISOString() : new Date(draft.created_at).toISOString(),
-                                has_uncommitted_changes: false,
-                                ready_to_merge: false,
-                                diff_stats: undefined,
-                                is_current: false,
-                                session_type: 'worktree' as any,
-                            },
-                            terminals: [
-                                `session-${draft.name}-top`,
-                                `session-${draft.name}-bottom`,
-                                `session-${draft.name}-right`
-                            ]
-                        }))
-                        
-                        // Combine and set all sessions
-                        const allSessions = [...regularSessions, ...enrichedDrafts]
-                        setSessions(allSessions.map(s => ({
-                            ...s,
-                            info: {
-                                ...s.info,
-                                last_modified_ts: s.info.last_modified ? Date.parse(s.info.last_modified) : undefined,
-                            }
-                        })))
-                    } catch (err) {
-                        console.error('Failed to reload sessions:', err)
-                    }
-                } else {
-                    // Use the provided payload
-                    setSessions(event.payload.map(s => ({
+                try {
+                    // If we received a payload, treat it as the authoritative list of non-draft sessions.
+                    // Always merge in the current drafts to avoid dropping them.
+                    const baseSessions: EnrichedSession[] = (event.payload && event.payload.length > 0)
+                        ? event.payload
+                        : await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
+
+                    const draftSessions = await invoke<any[]>('para_core_list_sessions_by_state', { state: 'draft' })
+                    const enrichedDrafts: EnrichedSession[] = draftSessions.map(draft => ({
+                        id: draft.id,
+                        info: {
+                            session_id: draft.name,
+                            display_name: draft.display_name || draft.name,
+                            branch: draft.branch,
+                            worktree_path: draft.worktree_path || '',
+                            base_branch: draft.parent_branch,
+                            merge_mode: 'rebase',
+                            status: 'draft' as any,
+                            session_state: 'draft',
+                            created_at: new Date(draft.created_at).toISOString(),
+                            last_modified: draft.updated_at ? new Date(draft.updated_at).toISOString() : new Date(draft.created_at).toISOString(),
+                            has_uncommitted_changes: false,
+                            ready_to_merge: false,
+                            diff_stats: undefined,
+                            is_current: false,
+                            session_type: 'worktree' as any,
+                        },
+                        terminals: [
+                            `session-${draft.name}-top`,
+                            `session-${draft.name}-bottom`,
+                            `session-${draft.name}-right`
+                        ]
+                    }))
+
+                    const allSessions = [...baseSessions, ...enrichedDrafts]
+                    setSessions(allSessions.map(s => ({
                         ...s,
                         info: {
                             ...s.info,
                             last_modified_ts: s.info.last_modified ? Date.parse(s.info.last_modified) : undefined,
                         }
                     })))
+                } catch (err) {
+                    console.error('Failed to reload sessions:', err)
                 }
             })
-            
+
             return () => {
                 unlisten()
             }
         }
-        
+
         const cleanup = setupRefreshListener()
         return () => {
             cleanup.then(fn => fn())
@@ -773,8 +760,44 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                                 onUnmarkReady={async (sessionId) => {
                                     try {
                                         await invoke('para_core_unmark_session_ready', { name: sessionId })
-                                        const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                                        setSessions(result)
+                                        // Reload both regular and draft sessions to avoid dropping drafts
+                                        const [regularSessions, draftSessions] = await Promise.all([
+                                            invoke<EnrichedSession[]>('para_core_list_enriched_sessions'),
+                                            invoke<any[]>('para_core_list_sessions_by_state', { state: 'draft' })
+                                        ])
+                                        const enrichedDrafts: EnrichedSession[] = draftSessions.map(draft => ({
+                                            id: draft.id,
+                                            info: {
+                                                session_id: draft.name,
+                                                display_name: draft.display_name || draft.name,
+                                                branch: draft.branch,
+                                                worktree_path: draft.worktree_path || '',
+                                                base_branch: draft.parent_branch,
+                                                merge_mode: 'rebase',
+                                                status: 'draft' as any,
+                                                session_state: 'draft',
+                                                created_at: new Date(draft.created_at).toISOString(),
+                                                last_modified: draft.updated_at ? new Date(draft.updated_at).toISOString() : new Date(draft.created_at).toISOString(),
+                                                has_uncommitted_changes: false,
+                                                ready_to_merge: false,
+                                                diff_stats: undefined,
+                                                is_current: false,
+                                                session_type: 'worktree' as any,
+                                            },
+                                            terminals: [
+                                                `session-${draft.name}-top`,
+                                                `session-${draft.name}-bottom`,
+                                                `session-${draft.name}-right`
+                                            ]
+                                        }))
+                                        const allSessions = [...regularSessions, ...enrichedDrafts]
+                                        setSessions(allSessions.map(s => ({
+                                            ...s,
+                                            info: {
+                                                ...s.info,
+                                                last_modified_ts: s.info.last_modified ? Date.parse(s.info.last_modified) : undefined,
+                                            }
+                                        })))
                                     } catch (err) {
                                         console.error('Failed to unmark reviewed session:', err)
                                     }
@@ -793,27 +816,53 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                                 }}
                                 onRunDraft={async (sessionId) => {
                                     try {
-                                        // Start the draft session
-                                        await invoke('para_core_start_draft_session', { 
-                                            name: sessionId,
-                                            baseBranch: null 
-                                        })
-                                        
-                                        // Refresh the sessions list
-                                        const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                                        setSessions(result)
-                                        
-                                        // Select the now-running session
-                                        await handleSelectSession(i)
+                                        // Open Start task modal prefilled from draft
+                                        window.dispatchEvent(new CustomEvent('schaltwerk:start-task-from-draft', { detail: { name: sessionId } }))
                                     } catch (err) {
-                                        console.error('Failed to run draft session:', err)
+                                        console.error('Failed to open start modal from draft:', err)
                                     }
                                 }}
                                 onDeleteDraft={async (sessionId) => {
                                     try {
                                         await invoke('para_core_cancel_session', { name: sessionId })
-                                        const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                                        setSessions(result)
+                                        // Reload both regular and draft sessions to ensure remaining drafts persist
+                                        const [regularSessions, draftSessions] = await Promise.all([
+                                            invoke<EnrichedSession[]>('para_core_list_enriched_sessions'),
+                                            invoke<any[]>('para_core_list_sessions_by_state', { state: 'draft' })
+                                        ])
+                                        const enrichedDrafts: EnrichedSession[] = draftSessions.map(draft => ({
+                                            id: draft.id,
+                                            info: {
+                                                session_id: draft.name,
+                                                display_name: draft.display_name || draft.name,
+                                                branch: draft.branch,
+                                                worktree_path: draft.worktree_path || '',
+                                                base_branch: draft.parent_branch,
+                                                merge_mode: 'rebase',
+                                                status: 'draft' as any,
+                                                session_state: 'draft',
+                                                created_at: new Date(draft.created_at).toISOString(),
+                                                last_modified: draft.updated_at ? new Date(draft.updated_at).toISOString() : new Date(draft.created_at).toISOString(),
+                                                has_uncommitted_changes: false,
+                                                ready_to_merge: false,
+                                                diff_stats: undefined,
+                                                is_current: false,
+                                                session_type: 'worktree' as any,
+                                            },
+                                            terminals: [
+                                                `session-${draft.name}-top`,
+                                                `session-${draft.name}-bottom`,
+                                                `session-${draft.name}-right`
+                                            ]
+                                        }))
+                                        const allSessions = [...regularSessions, ...enrichedDrafts]
+                                        setSessions(allSessions.map(s => ({
+                                            ...s,
+                                            info: {
+                                                ...s.info,
+                                                last_modified_ts: s.info.last_modified ? Date.parse(s.info.last_modified) : undefined,
+                                            }
+                                        })))
                                     } catch (err) {
                                         console.error('Failed to delete draft:', err)
                                     }
@@ -829,9 +878,44 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 hasUncommittedChanges={markReadyModal.hasUncommitted}
                 onClose={() => setMarkReadyModal({ open: false, sessionName: '', hasUncommitted: false })}
                 onSuccess={async () => {
-                    // Reload sessions
-                    const result = await invoke<EnrichedSession[]>('para_core_list_enriched_sessions')
-                    setSessions(result)
+                    // Reload both regular and draft sessions
+                    const [regularSessions, draftSessions] = await Promise.all([
+                        invoke<EnrichedSession[]>('para_core_list_enriched_sessions'),
+                        invoke<any[]>('para_core_list_sessions_by_state', { state: 'draft' })
+                    ])
+                    const enrichedDrafts: EnrichedSession[] = draftSessions.map(draft => ({
+                        id: draft.id,
+                        info: {
+                            session_id: draft.name,
+                            display_name: draft.display_name || draft.name,
+                            branch: draft.branch,
+                            worktree_path: draft.worktree_path || '',
+                            base_branch: draft.parent_branch,
+                            merge_mode: 'rebase',
+                            status: 'draft' as any,
+                            session_state: 'draft',
+                            created_at: new Date(draft.created_at).toISOString(),
+                            last_modified: draft.updated_at ? new Date(draft.updated_at).toISOString() : new Date(draft.created_at).toISOString(),
+                            has_uncommitted_changes: false,
+                            ready_to_merge: false,
+                            diff_stats: undefined,
+                            is_current: false,
+                            session_type: 'worktree' as any,
+                        },
+                        terminals: [
+                            `session-${draft.name}-top`,
+                            `session-${draft.name}-bottom`,
+                            `session-${draft.name}-right`
+                        ]
+                    }))
+                    const allSessions = [...regularSessions, ...enrichedDrafts]
+                    setSessions(allSessions.map(s => ({
+                        ...s,
+                        info: {
+                            ...s.info,
+                            last_modified_ts: s.info.last_modified ? Date.parse(s.info.last_modified) : undefined,
+                        }
+                    })))
                 }}
             />
             <SwitchOrchestratorModal

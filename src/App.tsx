@@ -45,6 +45,7 @@ export default function App() {
   const [showHome, setShowHome] = useState(true)
   const [openTabs, setOpenTabs] = useState<ProjectTab[]>([])
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null)
+  const [startFromDraftName, setStartFromDraftName] = useState<string | null>(null)
   
   // Start with home screen, user must explicitly choose a project
   // Remove automatic project detection to ensure home screen is shown first
@@ -153,6 +154,40 @@ export default function App() {
     window.addEventListener('schaltwerk:new-draft', handler as any)
     return () => window.removeEventListener('schaltwerk:new-draft', handler as any)
   }, [])
+
+  // Open Start Task modal prefilled from an existing draft
+  useEffect(() => {
+    const handler = (event: any) => {
+      const name = event?.detail?.name as string | undefined
+      if (!name) return
+      // Open modal first
+      setNewSessionOpen(true)
+      setStartFromDraftName(name)
+      // Fetch draft content and parent branch, then prefill modal
+      ;(async () => {
+        try {
+          const sessionData = await invoke<any>('para_core_get_session', { name })
+          const text: string = sessionData?.draft_content ?? sessionData?.initial_prompt ?? ''
+          const parentBranch: string | undefined = sessionData?.parent_branch || undefined
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('schaltwerk:new-session:prefill', {
+              detail: {
+                name,
+                taskContent: text,
+                baseBranch: parentBranch,
+                lockName: true,
+                fromDraft: true,
+              }
+            }))
+          }, 0)
+        } catch (error) {
+          console.error('Failed to prefill from draft:', error)
+        }
+      })()
+    }
+    window.addEventListener('schaltwerk:start-task-from-draft' as any, handler)
+    return () => window.removeEventListener('schaltwerk:start-task-from-draft' as any, handler)
+  }, [])
   
   
   const handleCancelSession = async (_force: boolean) => {
@@ -191,6 +226,36 @@ export default function App() {
     draftContent?: string
   }) => {
     try {
+      // If starting from an existing draft via the modal, convert that draft to active
+      if (!data.isDraft && startFromDraftName && startFromDraftName === data.name) {
+        // Ensure the draft content reflects latest prompt before starting
+        const contentToUse = data.prompt || ''
+        if (contentToUse.trim().length > 0) {
+          await invoke('para_core_update_draft_content', {
+            name: data.name,
+            content: contentToUse,
+          })
+        }
+        // Start the draft session (transitions draft -> active and creates worktree)
+        await invoke('para_core_start_draft_session', {
+          name: data.name,
+          baseBranch: data.baseBranch || null,
+        })
+        setNewSessionOpen(false)
+        setStartFromDraftName(null)
+        
+        // Get the started session to get correct worktree path
+        const sessionData = await invoke('para_core_get_session', { name: data.name }) as any
+        
+        // Switch to the session - rest of the app will handle agent start
+        await setSelection({
+          kind: 'session',
+          payload: data.name,
+          worktreePath: sessionData.worktree_path
+        })
+        return
+      }
+      
       if (data.isDraft) {
         // Create draft session
         await invoke('para_core_create_draft_session', {
@@ -412,7 +477,7 @@ export default function App() {
             </div>
           </Split>
           
-          <NewSessionModal open={newSessionOpen} onClose={() => setNewSessionOpen(false)} onCreate={handleCreateSession} />
+          <NewSessionModal open={newSessionOpen} onClose={() => { setNewSessionOpen(false); setStartFromDraftName(null) }} onCreate={handleCreateSession} />
           
           {currentSession && (
             <CancelConfirmation

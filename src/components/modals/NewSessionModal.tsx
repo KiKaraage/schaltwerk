@@ -31,6 +31,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [validationError, setValidationError] = useState('')
     const [creating, setCreating] = useState(false)
     const [createAsDraft, setCreateAsDraft] = useState(false)
+    const [nameLocked, setNameLocked] = useState(false)
     const { getSkipPermissions, setSkipPermissions: saveSkipPermissions, getAgentType, setAgentType: saveAgentType } = useClaudeSession()
     const nameInputRef = useRef<HTMLInputElement>(null)
     const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -149,6 +150,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
             setTaskContent('')
             setValidationError('')
             setCreateAsDraft(false)
+            setNameLocked(false)
             
             // Fetch available branches and the project-specific default branch
             setLoadingBranches(true)
@@ -196,10 +198,33 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
 
         window.addEventListener('keydown', handleKeyDown)
         const setDraftHandler = () => setCreateAsDraft(true)
+        const prefillHandler = (event: any) => {
+            const detail = event?.detail || {}
+            const nameFromDraft: string | undefined = detail.name
+            const taskContentFromDraft: string | undefined = detail.taskContent
+            const baseBranchFromDraft: string | undefined = detail.baseBranch
+            const lockName: boolean | undefined = detail.lockName
+
+            if (nameFromDraft) {
+                setName(nameFromDraft)
+                // Treat this as user-provided name to avoid regen
+                wasEditedRef.current = true
+                setWasEdited(true)
+                setNameLocked(!!lockName)
+            }
+            if (typeof taskContentFromDraft === 'string') {
+                setTaskContent(taskContentFromDraft)
+            }
+            if (typeof baseBranchFromDraft === 'string' && baseBranchFromDraft) {
+                setBaseBranch(baseBranchFromDraft)
+            }
+        }
         window.addEventListener('schaltwerk:new-session:set-draft' as any, setDraftHandler)
+        window.addEventListener('schaltwerk:new-session:prefill' as any, prefillHandler)
         return () => {
             window.removeEventListener('keydown', handleKeyDown)
             window.removeEventListener('schaltwerk:new-session:set-draft' as any, setDraftHandler)
+            window.removeEventListener('schaltwerk:new-session:prefill' as any, prefillHandler)
         }
     }, [open, onClose])
 
@@ -223,6 +248,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                                 validationError ? 'border-red-500' : 'border-slate-700'
                             }`} 
                             placeholder="eager_cosmos" 
+                            disabled={nameLocked}
                         />
                         {validationError && (
                             <div className="flex items-start gap-2 mt-1">

@@ -15,11 +15,7 @@ interface DraftSession {
   state: 'draft'
 }
 
-interface DraftTaskPanelProps {
-  onSessionStart?: (sessionName: string) => void
-}
-
-export function DraftTaskPanel({ onSessionStart }: DraftTaskPanelProps) {
+export function DraftTaskPanel() {
   const [drafts, setDrafts] = useState<DraftSession[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -99,21 +95,11 @@ export function DraftTaskPanel({ onSessionStart }: DraftTaskPanelProps) {
     try {
       setStarting(sessionName)
       setError(null)
-      
-      // Start the draft session (creates worktree, updates state to Running)
-      await invoke('para_core_start_draft_session', { 
-        name: sessionName,
-        baseBranch: null 
-      })
-      
-      // Start Claude/Cursor in the session
-      await invoke('para_core_start_claude', { sessionName })
-      
-      onSessionStart?.(sessionName)
-      await fetchDrafts()
+      // Open Start new task modal prefilled from draft instead of starting directly
+      window.dispatchEvent(new CustomEvent('schaltwerk:start-task-from-draft', { detail: { name: sessionName } }))
     } catch (err) {
-      console.error('[DraftTaskPanel] Failed to start session:', err)
-      setError(`Failed to start session: ${err}`)
+      console.error('[DraftTaskPanel] Failed to open start modal from draft:', err)
+      setError('Failed to open start modal')
     } finally {
       setStarting(null)
     }

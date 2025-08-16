@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
-import { invoke } from '@tauri-apps/api/core'
 import { useSelection } from '../../contexts/SelectionContext'
 import { VscPlay, VscDebugStart, VscRocket } from 'react-icons/vsc'
 
 export function DraftPlaceholder() {
-  const { selection, setSelection } = useSelection()
+  const { selection } = useSelection()
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -15,11 +14,10 @@ export function DraftPlaceholder() {
     try {
       setStarting(true)
       setError(null)
-      await invoke('para_core_start_draft_session', { name: sessionName, baseBranch: null })
-      // Force refresh selection to ensure terminals get created promptly
-      await setSelection({ kind: 'session', payload: sessionName }, true)
+      // Open Start new task modal prefilled from draft instead of starting directly
+      window.dispatchEvent(new CustomEvent('schaltwerk:start-task-from-draft', { detail: { name: sessionName } }))
     } catch (e: any) {
-      console.error('[DraftPlaceholder] Failed to start draft:', e)
+      console.error('[DraftPlaceholder] Failed to open start modal from draft:', e)
       setError(String(e))
     } finally {
       setStarting(false)
