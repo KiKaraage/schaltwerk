@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { useFontSize } from '../../contexts/FontSizeContext';
@@ -29,6 +30,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
     const termRef = useRef<HTMLDivElement>(null);
     const terminal = useRef<XTerm | null>(null);
     const fitAddon = useRef<FitAddon | null>(null);
+    const webglAddon = useRef<WebglAddon | null>(null);
     const lastSize = useRef<{ cols: number; rows: number }>({ cols: 80, rows: 24 });
     const [hydrated, setHydrated] = useState(false);
     const hydratedRef = useRef<boolean>(false);
@@ -105,6 +107,82 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
         // Add fit addon for proper sizing
         fitAddon.current = new FitAddon();
         terminal.current.loadAddon(fitAddon.current);
+        
+        // Add WebGL addon for GPU acceleration with optimizations
+        const setupWebGLAcceleration = () => {
+            // Check WebGL support before attempting to create addon
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+            if (!gl) {
+                console.info(`[Terminal ${terminalId}] WebGL not supported, using canvas renderer`);
+                return false;
+            }
+
+            // Skip WebGL on mobile devices for better compatibility
+            const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            if (isMobile) {
+                console.info(`[Terminal ${terminalId}] Mobile device detected, using canvas renderer for compatibility`);
+                return false;
+            }
+
+            try {
+                webglAddon.current = new WebglAddon();
+                terminal.current!.loadAddon(webglAddon.current);
+                
+                // Enhanced context loss handling with restoration attempt
+                webglAddon.current.onContextLoss(() => {
+                    console.warn(`[Terminal ${terminalId}] WebGL context lost, attempting restoration`);
+                    
+                    // Attempt to restore WebGL context after a brief delay
+                    setTimeout(() => {
+                        if (webglAddon.current && !cancelled) {
+                            try {
+                                // Check if context can be restored
+                                const testCanvas = document.createElement('canvas');
+                                const testGl = testCanvas.getContext('webgl2') || testCanvas.getContext('webgl');
+                                
+                                if (testGl) {
+                                    console.info(`[Terminal ${terminalId}] WebGL context restoration possible, recreating addon`);
+                                    const oldAddon = webglAddon.current;
+                                    oldAddon.dispose();
+                                    
+                                    webglAddon.current = new WebglAddon();
+                                    terminal.current?.loadAddon(webglAddon.current);
+                                    console.info(`[Terminal ${terminalId}] WebGL acceleration restored`);
+                                } else {
+                                    console.warn(`[Terminal ${terminalId}] WebGL context restoration failed, permanently using canvas renderer`);
+                                    webglAddon.current.dispose();
+                                    webglAddon.current = null;
+                                }
+                            } catch (restoreError) {
+                                console.warn(`[Terminal ${terminalId}] WebGL restoration failed:`, restoreError);
+                                if (webglAddon.current) {
+                                    webglAddon.current.dispose();
+                                    webglAddon.current = null;
+                                }
+                            }
+                        }
+                    }, 1000);
+                });
+
+                console.info(`[Terminal ${terminalId}] WebGL acceleration enabled`);
+                return true;
+                
+            } catch (error: any) {
+                if (error.name === 'SecurityError') {
+                    console.info(`[Terminal ${terminalId}] WebGL blocked by security policy, using canvas renderer`);
+                } else if (error.message?.includes('blacklisted')) {
+                    console.info(`[Terminal ${terminalId}] WebGL blacklisted on this system, using canvas renderer`);
+                } else {
+                    console.warn(`[Terminal ${terminalId}] WebGL addon failed to load, using canvas renderer:`, error);
+                }
+                webglAddon.current = null;
+                return false;
+            }
+        };
+
+        setupWebGLAcceleration();
+        
         terminal.current.open(termRef.current);
 
         // Intercept global shortcuts before xterm.js processes them
@@ -354,6 +432,8 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
                 unlistenPromiseRef.current.then((resolved) => { try { resolved(); } catch { /* ignore */ } });
             }
             window.removeEventListener('font-size-changed', handleFontSizeChange);
+            webglAddon.current?.dispose();
+            webglAddon.current = null;
             terminal.current?.dispose();
             terminal.current = null;
             resizeObserver.disconnect();

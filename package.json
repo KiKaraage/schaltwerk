@@ -32,6 +32,7 @@
     "@types/highlight.js": "^9.12.4",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
+    "@xterm/addon-webgl": "^0.18.0",
     "autoprefixer": "^10.4.21",
     "clsx": "^2.1.1",
     "highlight.js": "^11.11.1",
