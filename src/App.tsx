@@ -301,6 +301,16 @@ export default function App() {
       }
     }
   }
+
+  // Update unified work area ring color when selection changes
+  useEffect(() => {
+    const el = document.getElementById('work-ring')
+    if (!el) return
+    const color = selection.kind === 'orchestrator'
+      ? 'rgba(59,130,246,0.45)'
+      : 'rgba(34,197,94,0.45)'
+    el.style.boxShadow = `0 0 0 2px ${color}`
+  }, [selection])
   
   if (showHome && openTabs.length === 0) {
     return <HomeScreen onOpenProject={handleOpenProject} />

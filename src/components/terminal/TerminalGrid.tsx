@@ -81,17 +81,43 @@ export function TerminalGrid() {
         }, 150)
     }, [selection, getFocusForSession])
 
-    // If global focus changes to claude/terminal, apply it immediately
+    // If global focus changes to claude/terminal, apply it immediately.
+    // Avoid overriding per-session default when only the selection changed
+    // but the global focus value stayed the same.
+    const lastAppliedGlobalFocusRef = useRef<'claude' | 'terminal' | null>(null)
+    const lastSelectionKeyRef = useRef<string>('')
     useEffect(() => {
-        if (!selection || !currentFocus) return
+        const sessionKey = getSessionKey()
+        const focusChanged = currentFocus !== lastAppliedGlobalFocusRef.current
+        const selectionChanged = sessionKey !== lastSelectionKeyRef.current
+
+        // Update refs for next run
+        lastSelectionKeyRef.current = sessionKey
+
+        // Do nothing if we have no explicit global focus
+        if (!currentFocus) {
+            lastAppliedGlobalFocusRef.current = null
+            return
+        }
+
+        // If selection changed but global focus did not, skip applying it so per-session
+        // focus (handled in the other effect) can take precedence.
+        if (selectionChanged && !focusChanged) {
+            return
+        }
+
+        // Apply the new global focus
         if (currentFocus === 'claude') {
             setLocalFocus('claude')
             claudeTerminalRef.current?.focus()
+            lastAppliedGlobalFocusRef.current = 'claude'
         } else if (currentFocus === 'terminal') {
             setLocalFocus('terminal')
             terminalTabsRef.current?.focus()
+            lastAppliedGlobalFocusRef.current = 'terminal'
         } else {
             setLocalFocus(null)
+            lastAppliedGlobalFocusRef.current = null
         }
     }, [currentFocus, selection])
 
