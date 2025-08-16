@@ -793,14 +793,64 @@ pub fn get_commit_hash(repo_path: &Path, branch_or_ref: &str) -> Result<String> 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+fn extract_session_name_from_path(worktree_path: &Path) -> Result<String> {
+    // Extract session name from path like: /repo/.schaltwerk/worktrees/session-name
+    worktree_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| anyhow!("Cannot extract session name from worktree path"))
+}
+
+fn restore_session_specific_stash(worktree_path: &Path, session_id: &str) -> Result<()> {
+    let stash_list_output = Command::new("git")
+        .args([
+            "-C", worktree_path.to_str().unwrap(),
+            "stash", "list", "--format=%H %s"
+        ])
+        .output()?;
+    
+    if !stash_list_output.status.success() {
+        return Ok(()); // No stashes or error - that's fine
+    }
+    
+    let stash_list = String::from_utf8_lossy(&stash_list_output.stdout);
+    let target_pattern = format!("[session:{session_id}]");
+    
+    // Find the most recent stash for this session
+    for (index, line) in stash_list.lines().enumerate() {
+        if line.contains(&target_pattern) {
+            // Pop this specific stash
+            let pop_output = Command::new("git")
+                .args([
+                    "-C", worktree_path.to_str().unwrap(),
+                    "stash", "pop", &format!("stash@{{{index}}}")
+                ])
+                .output()?;
+            
+            if !pop_output.status.success() {
+                log::warn!("Failed to restore session-specific stash, it remains in stash");
+            } else {
+                log::info!("Successfully restored stash for session {session_id}");
+            }
+            break; // Only pop the first (most recent) match
+        }
+    }
+    
+    Ok(())
+}
+
 pub fn update_worktree_branch(worktree_path: &Path, new_branch: &str) -> Result<()> {
-    // First, check if there are uncommitted changes
+    let session_id = extract_session_name_from_path(worktree_path)?;
+    let stash_message = format!("Auto-stash before branch rename [session:{session_id}]");
+    
+    // Check if there are uncommitted changes
     if has_uncommitted_changes(worktree_path)? {
-        // Stash changes temporarily
+        // Stash with session-specific message
         let stash_output = Command::new("git")
             .args([
                 "-C", worktree_path.to_str().unwrap(),
-                "stash", "push", "-m", "Auto-stash before branch rename"
+                "stash", "push", "-m", &stash_message
             ])
             .output()?;
         
@@ -809,7 +859,7 @@ pub fn update_worktree_branch(worktree_path: &Path, new_branch: &str) -> Result<
         }
     }
     
-    // Update the worktree to track the new branch
+    // Switch to new branch
     let output = Command::new("git")
         .args([
             "-C", worktree_path.to_str().unwrap(),
@@ -822,26 +872,8 @@ pub fn update_worktree_branch(worktree_path: &Path, new_branch: &str) -> Result<
         return Err(anyhow!("Failed to update worktree to new branch: {stderr}"));
     }
     
-    // Try to pop the stash if we stashed anything
-    let stash_list = Command::new("git")
-        .args([
-            "-C", worktree_path.to_str().unwrap(),
-            "stash", "list"
-        ])
-        .output()?;
-    
-    if stash_list.status.success() && !stash_list.stdout.is_empty() {
-        let pop_output = Command::new("git")
-            .args([
-                "-C", worktree_path.to_str().unwrap(),
-                "stash", "pop"
-            ])
-            .output()?;
-        
-        if !pop_output.status.success() {
-            log::warn!("Failed to restore stashed changes, they remain in stash");
-        }
-    }
+    // Only pop stashes that belong to THIS session
+    restore_session_specific_stash(worktree_path, &session_id)?;
     
     Ok(())
 }
@@ -1258,6 +1290,144 @@ mod performance_tests {
         // Should match the latest commit on the branch, not the initial one
         let latest_commit = get_commit_hash(&repo_path, &current_branch).unwrap();
         assert_eq!(worktree_hash, latest_commit, "Worktree should be at latest commit");
+    }
+
+    #[test]
+    fn test_stash_isolation_between_worktrees() {
+        use tempfile::TempDir;
+        use std::process::Command as StdCommand;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path().to_path_buf();
+        let worktree1_path = temp_dir.path().join("session1");
+        let worktree2_path = temp_dir.path().join("session2");
+
+        // Initialize git repo
+        StdCommand::new("git")
+            .args(["init"])
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+        
+        StdCommand::new("git")
+            .args(["config", "user.email", "test@example.com"])
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+        
+        StdCommand::new("git")
+            .args(["config", "user.name", "Test User"])
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+        
+        // Create initial commit
+        std::fs::write(repo_path.join("README.md"), "Initial").unwrap();
+        StdCommand::new("git")
+            .args(["add", "."])
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+        StdCommand::new("git")
+            .args(["commit", "-m", "Initial"])
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+
+        let current_branch = get_current_branch(&repo_path).unwrap();
+        
+        // Create two worktrees
+        create_worktree_from_base(&repo_path, "session1", &worktree1_path, &current_branch).unwrap();
+        create_worktree_from_base(&repo_path, "session2", &worktree2_path, &current_branch).unwrap();
+
+        // Create changes in worktree1 and stash them
+        std::fs::write(worktree1_path.join("session1_file.txt"), "session1 changes").unwrap();
+        StdCommand::new("git")
+            .args(["add", "."])
+            .current_dir(&worktree1_path)
+            .output()
+            .unwrap();
+
+        // Manually stash in worktree1 to simulate the problem
+        StdCommand::new("git")
+            .args(["stash", "push", "-m", "session1 work"])
+            .current_dir(&worktree1_path)
+            .output()
+            .unwrap();
+
+        // Verify worktree1 is clean
+        assert!(!has_uncommitted_changes(&worktree1_path).unwrap());
+
+        // Now update worktree2's branch - this should NOT restore session1's stash
+        let result = update_worktree_branch(&worktree2_path, "session2");
+        
+        // This should succeed
+        assert!(result.is_ok(), "Branch update should succeed");
+
+        // Worktree2 should NOT have session1's file - this is the bug we're fixing
+        assert!(!worktree2_path.join("session1_file.txt").exists(), 
+               "Worktree2 should not have session1's changes - this test should initially FAIL");
+    }
+
+    #[test]
+    fn test_session_specific_stash_restore() {
+        use tempfile::TempDir;
+        use std::process::Command as StdCommand;
+
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path().to_path_buf();
+        let worktree_path = temp_dir.path().join("test-session");
+
+        // Initialize git repo
+        StdCommand::new("git")
+            .args(["init"])
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+        
+        StdCommand::new("git")
+            .args(["config", "user.email", "test@example.com"])
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+        
+        StdCommand::new("git")
+            .args(["config", "user.name", "Test User"])
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+        
+        // Create initial commit
+        std::fs::write(repo_path.join("README.md"), "Initial").unwrap();
+        StdCommand::new("git")
+            .args(["add", "."])
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+        StdCommand::new("git")
+            .args(["commit", "-m", "Initial"])
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+
+        let current_branch = get_current_branch(&repo_path).unwrap();
+        
+        // Create worktree
+        create_worktree_from_base(&repo_path, "test-session", &worktree_path, &current_branch).unwrap();
+
+        // Create changes in the worktree
+        std::fs::write(worktree_path.join("test_changes.txt"), "my changes").unwrap();
+
+        // Update the branch (this should stash and restore the changes)
+        let result = update_worktree_branch(&worktree_path, "test-session");
+        assert!(result.is_ok(), "Branch update should succeed");
+
+        // The changes should be restored after the branch switch
+        assert!(worktree_path.join("test_changes.txt").exists(), 
+               "Session's own changes should be restored");
+        
+        let content = std::fs::read_to_string(worktree_path.join("test_changes.txt")).unwrap();
+        assert_eq!(content, "my changes", "Content should be preserved");
     }
 }
 
