@@ -788,7 +788,18 @@ async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: O
             let (session_id, worktree_path, repo_path, current_branch, agent, initial_prompt) = session_info;
             
             log::info!("Starting name generation for session '{}' with prompt: {:?}", 
-                session_name_clone, initial_prompt.as_ref().map(|p| &p[..p.len().min(50)]));
+                session_name_clone, initial_prompt.as_ref().map(|p| {
+                    let max_len = 50;
+                    if p.len() <= max_len {
+                        p.as_str()
+                    } else {
+                        let mut end = max_len;
+                        while !p.is_char_boundary(end) && end > 0 {
+                            end -= 1;
+                        }
+                        &p[..end]
+                    }
+                }));
             
             // Now do the async operation without holding any locks
             let ctx = crate::para_core::naming::SessionRenameContext {
