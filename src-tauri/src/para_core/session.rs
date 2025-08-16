@@ -14,6 +14,8 @@ use crate::para_core::{
 // Track which sessions have already had their initial prompt sent
 // Use worktree path as key for uniqueness
 static PROMPTED_SESSIONS: OnceLock<StdMutex<HashSet<PathBuf>>> = OnceLock::new();
+// Reserve generated names per repository path to avoid duplicates across rapid successive calls
+static RESERVED_NAMES: OnceLock<StdMutex<HashMap<PathBuf, HashSet<String>>>> = OnceLock::new();
 
 fn has_session_been_prompted(worktree_path: &Path) -> bool {
     let set = PROMPTED_SESSIONS.get_or_init(|| StdMutex::new(HashSet::new()));
@@ -58,6 +60,31 @@ impl SessionManager {
             .collect()
     }
     
+    fn is_reserved(&self, name: &str) -> bool {
+        let map_mutex = RESERVED_NAMES.get_or_init(|| StdMutex::new(HashMap::new()));
+        let map = map_mutex.lock().unwrap();
+        if let Some(set) = map.get(&self.repo_path) {
+            set.contains(name)
+        } else {
+            false
+        }
+    }
+
+    fn reserve_name(&self, name: &str) {
+        let map_mutex = RESERVED_NAMES.get_or_init(|| StdMutex::new(HashMap::new()));
+        let mut map = map_mutex.lock().unwrap();
+        let set = map.entry(self.repo_path.clone()).or_default();
+        set.insert(name.to_string());
+    }
+
+    fn unreserve_name(&self, name: &str) {
+        let map_mutex = RESERVED_NAMES.get_or_init(|| StdMutex::new(HashMap::new()));
+        let mut map = map_mutex.lock().unwrap();
+        if let Some(set) = map.get_mut(&self.repo_path) {
+            set.remove(name);
+        }
+    }
+    
     fn check_name_availability(&self, name: &str) -> Result<bool> {
         let branch = format!("schaltwerk/{name}");
         let worktree_path = self.repo_path
@@ -68,11 +95,14 @@ impl SessionManager {
         let branch_exists = git::branch_exists(&self.repo_path, &branch)?;
         let worktree_exists = worktree_path.exists();
         let session_exists = self.db.get_session_by_name(&self.repo_path, name).is_ok();
+        let reserved_exists = self.is_reserved(name);
         
-        let is_available = !branch_exists && !worktree_exists && !session_exists;
+        let is_available = !branch_exists && !worktree_exists && !session_exists && !reserved_exists;
         
         if !is_available {
-            log::debug!("Session name '{name}' conflicts (branch: {branch_exists}, worktree: {worktree_exists}, db: {session_exists})");
+            log::debug!(
+                "Session name '{name}' conflicts (branch: {branch_exists}, worktree: {worktree_exists}, db: {session_exists}, reserved: {reserved_exists})"
+            );
         }
         
         Ok(is_available)
@@ -87,6 +117,8 @@ impl SessionManager {
                 .join("worktrees")
                 .join(base_name);
             log::info!("Found unique session name: {base_name}");
+            // Reserve immediately to avoid duplicates in subsequent calls before persistence
+            self.reserve_name(base_name);
             return Ok((base_name.to_string(), branch, worktree_path));
         }
         
@@ -103,6 +135,7 @@ impl SessionManager {
                     .join("worktrees")
                     .join(&candidate);
                 log::info!("Found unique session name with random suffix: {candidate} (attempt {})", attempt + 1);
+                self.reserve_name(&candidate);
                 return Ok((candidate, branch, worktree_path));
             }
         }
@@ -118,6 +151,7 @@ impl SessionManager {
                     .join("worktrees")
                     .join(&candidate);
                 log::info!("Found unique session name with incremental suffix: {candidate}");
+                self.reserve_name(&candidate);
                 return Ok((candidate, branch, worktree_path));
             }
         }
@@ -233,6 +267,8 @@ impl SessionManager {
         );
         
         if let Err(e) = create_result {
+            // Release reservation if we failed to actually create the worktree
+            self.unreserve_name(&unique_name);
             return Err(anyhow!("Failed to create worktree: {}", e));
         }
         
@@ -246,6 +282,8 @@ impl SessionManager {
         if let Err(e) = self.db.create_session(&session) {
             let _ = git::remove_worktree(&self.repo_path, &worktree_path);
             let _ = git::delete_branch(&self.repo_path, &branch);
+            // Release reservation on failure to persist session
+            self.unreserve_name(&unique_name);
             return Err(anyhow!("Failed to save session to database: {}", e));
         }
 
@@ -258,6 +296,8 @@ impl SessionManager {
         git_stats.session_id = session_id;
         self.db.save_git_stats(&git_stats)?;
         
+        // Session persisted successfully; reservation no longer needed
+        self.unreserve_name(&unique_name);
         Ok(session)
     }
     
@@ -667,9 +707,13 @@ impl SessionManager {
         };
         
         if let Err(e) = self.db.create_session(&session) {
+            // Release reservation on failure to persist session
+            self.unreserve_name(&unique_name);
             return Err(anyhow!("Failed to save draft session to database: {}", e));
         }
         
+        // Draft persisted successfully; reservation no longer needed
+        self.unreserve_name(&unique_name);
         Ok(session)
     }
 

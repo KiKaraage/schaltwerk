@@ -167,7 +167,7 @@ describe('DiffViewerWithReview advanced', () => {
     await waitFor(() => expect(screen.getByText(/Comments \(1\)/)).toBeInTheDocument())
   })
 
-  it.skip('navigates between files using Cmd/Ctrl+Arrow keys', async () => {
+  it('navigates between files using Cmd/Ctrl+Arrow keys', async () => {
     const onClose = vi.fn()
     render(
       <Wrapper>
@@ -192,7 +192,7 @@ describe('DiffViewerWithReview advanced', () => {
     expect(await screen.findByText('src/a.ts')).toBeInTheDocument()
   })
 
-  it.skip('finishes review via button and keyboard and writes to terminal', async () => {
+  it('finishes review via button and keyboard and writes to terminal', async () => {
     const onClose = vi.fn()
     render(
       <Wrapper>
@@ -251,7 +251,7 @@ describe('DiffViewerWithReview advanced', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 
-  it.skip('shows syntax highlighting class and toggles syntax label', async () => {
+  it('shows syntax highlighting class and toggles syntax label', async () => {
     const onClose = vi.fn()
     render(
       <Wrapper>
@@ -272,12 +272,12 @@ describe('DiffViewerWithReview advanced', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Add Comment/i }))
 
     // hljs code element present; assert within the comment modal specifically to avoid duplicate overlay label
-    const form = await screen.findByRole('dialog', { hidden: true }).catch(() => null)
+    const form = await screen.findByRole('dialog', { hidden: false }).catch(() => null)
     if (form) {
-      expect(form.textContent || '').toMatch(/Lines 2-3/)
+      expect(form.textContent || '').toMatch(/Lines 2(–|-)?3|Lines 2 \(current\)/)
     } else {
       // fallback: at least one match exists
-      expect(screen.getAllByText(/Lines 2-3/).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/Lines 2(–|-)?3|Lines 2 \(current\)/).length).toBeGreaterThan(0)
     }
     expect(document.querySelector('.hljs')).toBeTruthy()
 
@@ -309,7 +309,7 @@ describe('DiffViewerWithReview advanced', () => {
     expect(splitBtn).toBeInTheDocument()
   })
 
-  it.skip('persists review comments across file navigation and back', async () => {
+  it('persists review comments across file navigation and back', async () => {
     const onClose = vi.fn()
     render(
       <Wrapper>

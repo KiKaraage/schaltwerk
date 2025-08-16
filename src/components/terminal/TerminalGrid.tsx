@@ -255,7 +255,7 @@ export function TerminalGrid() {
         return (
             <div className="h-full px-2 pb-2 pt-0 relative">
                 {claudeSection}
-                <div className="mt-2 flex justify-center">
+            <div className="mt-2 flex justify-center">
                     <button
                         onClick={toggleTerminalCollapsed}
                         className="px-3 py-1 text-xs bg-slate-700/50 text-slate-400 hover:bg-slate-600/50 rounded border border-slate-600 transition-colors flex items-center gap-1"

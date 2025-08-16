@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 static LOG_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
+static LOGGER_INITIALIZED: Mutex<bool> = Mutex::new(false);
 
 /// Get the application's log directory
 pub fn get_log_dir() -> PathBuf {
@@ -42,9 +43,21 @@ pub fn get_log_path() -> PathBuf {
 
 /// Initialize logging to both console and file
 pub fn init_logging() {
+    // Make idempotent: avoid double init in tests or multiple starts
+    {
+        let mut initialized = LOGGER_INITIALIZED.lock().unwrap();
+        if *initialized {
+            return;
+        }
+        *initialized = true;
+    }
     let log_path = get_log_path();
     let log_path_for_closure = log_path.clone();
     
+    // Ensure parent directory exists before opening
+    if let Some(parent) = log_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
     // Verify we can write to the log file
     match OpenOptions::new()
         .create(true)
@@ -59,6 +72,10 @@ pub fn init_logging() {
     }
     
     let mut builder = Builder::new();
+    // In tests, capture logs via test harness and keep console quiet unless failures
+    if cfg!(test) {
+        builder.is_test(true);
+    }
     
     // Set log level from env or default to DEBUG for our crates, INFO for others
     if let Ok(rust_log) = std::env::var("RUST_LOG") {
@@ -114,6 +131,7 @@ pub fn init_logging() {
     builder.target(env_logger::Target::Stderr);
     
     // Initialize the logger
+    // Initialize the logger; subsequent calls are prevented by guard above
     builder.init();
     
     log::info!("========================================");
@@ -122,8 +140,10 @@ pub fn init_logging() {
     log::info!("Process ID: {}", std::process::id());
     log::info!("========================================");
     
-    // Print to console so user knows where logs are
-    eprintln!("Logs are being written to: {}", log_path.display());
+    // Print to console so user knows where logs are (skip in tests to avoid noisy outputs)
+    if !cfg!(test) {
+        eprintln!("Logs are being written to: {}", log_path.display());
+    }
 }
 
 #[cfg(test)]
@@ -167,7 +187,6 @@ mod tests {
 
     #[test]
     #[serial]
-    #[ignore] // Test has race condition with async logging initialization - keeping ignored
     fn test_init_logging_writes_header_to_file() {
         let tmp = TempDir::new().unwrap();
         let prev = env::var("HOME").ok();
