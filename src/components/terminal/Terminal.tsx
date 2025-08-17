@@ -108,7 +108,11 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
         fitAddon.current = new FitAddon();
         terminal.current.loadAddon(fitAddon.current);
         
-        // Add WebGL addon for GPU acceleration with optimizations
+        // Open terminal to DOM first (required before WebGL addon)
+        terminal.current.open(termRef.current);
+        
+        // Add WebGL addon AFTER terminal is opened to DOM
+        // This is critical for proper rendering with TUI applications
         const setupWebGLAcceleration = () => {
             // Check WebGL support before attempting to create addon
             const canvas = document.createElement('canvas');
@@ -181,9 +185,42 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             }
         };
 
-        setupWebGLAcceleration();
+        // Smart WebGL initialization with fallback strategy (similar to VSCode)
+        // Start with Canvas for immediate compatibility, then try WebGL
+        const initializeRenderer = () => {
+            if (!cancelled && terminal.current && termRef.current) {
+                // Skip WebGL for known problematic terminal types
+                const isProblematicTerminal = terminalId.includes('session-') && !terminalId.includes('orchestrator');
+                
+                if (isProblematicTerminal) {
+                    // Session terminals that run TUI apps - use Canvas for compatibility
+                    console.info(`[Terminal ${terminalId}] Using Canvas renderer for TUI app compatibility`);
+                    return;
+                }
+                
+                // For orchestrator terminals, try WebGL with proper error handling
+                if (termRef.current.clientWidth > 0 && termRef.current.clientHeight > 0) {
+                    try {
+                        fitAddon.current?.fit();
+                        const webglEnabled = setupWebGLAcceleration();
+                        if (!webglEnabled) {
+                            console.info(`[Terminal ${terminalId}] Falling back to Canvas renderer`);
+                        }
+                    } catch (e) {
+                        console.warn(`[Terminal ${terminalId}] WebGL initialization failed, using Canvas:`, e);
+                    }
+                } else {
+                    // Retry if container not yet sized
+                    setTimeout(() => initializeRenderer(), 100);
+                }
+            }
+        };
         
-        terminal.current.open(termRef.current);
+        // Delay renderer initialization to ensure terminal is ready
+        // This avoids the WebGL timing issues with initial data
+        requestAnimationFrame(() => {
+            setTimeout(() => initializeRenderer(), 50);
+        });
 
         // Intercept global shortcuts before xterm.js processes them
         terminal.current.attachCustomKeyEventHandler((event: KeyboardEvent) => {
