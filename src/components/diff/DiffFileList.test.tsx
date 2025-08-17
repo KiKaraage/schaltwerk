@@ -63,13 +63,6 @@ function Wrapper({ children, sessionName }: { children: React.ReactNode, session
   )
 }
 
-function setSessionInStorage(sessionName: string) {
-  localStorage.setItem(
-    'schaltwerk-selection',
-    JSON.stringify({ kind: 'session', sessionName })
-  )
-}
-
 describe.skip('DiffFileList - skipped due to component refactor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
