@@ -9,6 +9,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 mod cleanup;
 mod diff_commands;
+mod file_utils;
 mod logging;
 mod terminal;
 mod para_core;

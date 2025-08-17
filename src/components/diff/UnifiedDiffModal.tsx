@@ -49,6 +49,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
   
   const [files, setFiles] = useState<ChangedFile[]>([])
   const [selectedFile, setSelectedFile] = useState<string | null>(filePath)
+  const [fileError, setFileError] = useState<string | null>(null)
   const [branchInfo, setBranchInfo] = useState<{ 
     currentBranch: string
     baseBranch: string
@@ -106,22 +107,31 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     
     try {
       for (const file of fileList) {
-        const [mainText, worktreeText] = await invoke<[string, string]>('get_file_diff_from_main', {
-          sessionName,
-          filePath: file.path
-        })
-        
-        const diffLines = computeUnifiedDiff(mainText, worktreeText)
-        const diffResult = addCollapsibleSections(diffLines)
-        const splitDiffResult = computeSplitDiff(mainText, worktreeText)
-        
-        newDiffs.set(file.path, {
-          file,
-          mainContent: mainText,
-          worktreeContent: worktreeText,
-          diffResult,
-          splitDiffResult
-        })
+        try {
+          const [mainText, worktreeText] = await invoke<[string, string]>('get_file_diff_from_main', {
+            sessionName,
+            filePath: file.path
+          })
+          
+          const diffLines = computeUnifiedDiff(mainText, worktreeText)
+          const diffResult = addCollapsibleSections(diffLines)
+          const splitDiffResult = computeSplitDiff(mainText, worktreeText)
+          
+          newDiffs.set(file.path, {
+            file,
+            mainContent: mainText,
+            worktreeContent: worktreeText,
+            diffResult,
+            splitDiffResult
+          })
+        } catch (fileError) {
+          console.warn(`Failed to load diff for ${file.path}:`, fileError)
+          // Set error state for this specific file
+          if (file.path === selectedFile) {
+            const errorMessage = fileError instanceof Error ? fileError.message : String(fileError)
+            setFileError(errorMessage)
+          }
+        }
       }
       
       setAllFileDiffs(newDiffs)
@@ -130,7 +140,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     } finally {
       setLoadingAllFiles(false)
     }
-  }, [sessionName])
+  }, [sessionName, selectedFile])
 
   const loadChangedFiles = useCallback(async () => {
     try {
@@ -165,6 +175,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
 
   const scrollToFile = useCallback((path: string, index?: number) => {
     setSelectedFile(path)
+    setFileError(null)
     if (index !== undefined) {
       setSelectedFileIndex(index)
     }
@@ -569,6 +580,17 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
               {loadingAllFiles ? (
                 <div className="flex-1 flex items-center justify-center">
                   <div className="text-slate-500">Loading all diffs...</div>
+                </div>
+              ) : fileError ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center px-8">
+                    <div className="text-6xl mb-4 text-slate-600">⚠️</div>
+                    <div className="text-lg font-medium text-slate-400 mb-2">Cannot Display Diff</div>
+                    <div className="text-sm text-slate-500">{fileError}</div>
+                    <div className="text-xs text-slate-600 mt-4">
+                      This file type cannot be compared in the diff viewer.
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <>

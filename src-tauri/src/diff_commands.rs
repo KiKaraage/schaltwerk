@@ -1,7 +1,9 @@
 use std::process::Command;
+use std::path::Path;
 // no serde derives used in this module
 use crate::get_para_core;
 use crate::para_core::{git, types::ChangedFile};
+use crate::file_utils;
 
 #[tauri::command]
 pub async fn get_changed_files_from_main(session_name: Option<String>) -> Result<Vec<ChangedFile>, String> {
@@ -19,18 +21,36 @@ pub async fn get_file_diff_from_main(
     let repo_path = get_repo_path(session_name.clone()).await?;
     let base_branch = get_base_branch(session_name).await?;
     
+    // Check if the worktree file is diffable
+    let worktree_path = Path::new(&repo_path).join(&file_path);
+    if worktree_path.exists() {
+        let diff_info = file_utils::check_file_diffability(&worktree_path);
+        if !diff_info.is_diffable {
+            return Err(format!("Cannot diff file: {}", 
+                diff_info.reason.unwrap_or_else(|| "Unknown reason".to_string())));
+        }
+    }
+    
+    // Check if the base file is diffable by trying to get it first
     let base_content = Command::new("git")
         .args(["-C", &repo_path, "show", &format!("{base_branch}:{file_path}")])
         .output()
         .map_err(|e| format!("Failed to get base content: {e}"))?;
     
     let base_text = if base_content.status.success() {
-        String::from_utf8_lossy(&base_content.stdout).to_string()
+        // Check if the base content looks binary
+        let base_bytes = &base_content.stdout;
+        if base_bytes.len() > 10 * 1024 * 1024 {
+            return Err("Base file is too large to diff (>10MB)".to_string());
+        }
+        if base_bytes.contains(&0) || is_likely_binary(base_bytes) {
+            return Err("Base file appears to be binary".to_string());
+        }
+        String::from_utf8_lossy(base_bytes).to_string()
     } else {
         String::new()
     };
     
-    let worktree_path = std::path::Path::new(&repo_path).join(&file_path);
     let worktree_text = if worktree_path.exists() {
         std::fs::read_to_string(worktree_path)
             .map_err(|e| format!("Failed to read worktree file: {e}"))?
@@ -39,6 +59,16 @@ pub async fn get_file_diff_from_main(
     };
     
     Ok((base_text, worktree_text))
+}
+
+fn is_likely_binary(bytes: &[u8]) -> bool {
+    // Use Git's standard algorithm: check for null bytes in first 8000 bytes
+    // This matches Git's buffer_is_binary() function
+    let check_size = std::cmp::min(8000, bytes.len());
+    let sample = &bytes[..check_size];
+    
+    // Check for null bytes (Git's standard binary detection)
+    sample.contains(&0)
 }
 
 #[tauri::command]

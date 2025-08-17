@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import React, { useEffect } from 'react'
 import { DiffFileList } from './DiffFileList'
-import { SelectionProvider } from '../../contexts/SelectionContext'
+import { SelectionProvider, useSelection } from '../../contexts/SelectionContext'
 import { ProjectProvider, useProject } from '../../contexts/ProjectContext'
 
 // Mock Tauri invoke
@@ -28,24 +28,37 @@ vi.mock('@tauri-apps/api/core', () => ({
   }),
 }))
 
-// Component to set project path for tests
-function TestProjectInitializer({ children }: { children: React.ReactNode }) {
+// Component to set project path and selection for tests
+function TestWrapper({ 
+  children, 
+  sessionName 
+}: { 
+  children: React.ReactNode
+  sessionName?: string 
+}) {
   const { setProjectPath } = useProject()
+  const { setSelection } = useSelection()
   
   useEffect(() => {
     // Set a test project path immediately
     setProjectPath('/test/project')
-  }, [setProjectPath])
+    // Set the selection if a session name is provided
+    if (sessionName) {
+      setSelection({ kind: 'session', payload: sessionName })
+    }
+  }, [setProjectPath, setSelection, sessionName])
   
   return <>{children}</>
 }
 
-function Wrapper({ children }: { children: React.ReactNode }) {
+function Wrapper({ children, sessionName }: { children: React.ReactNode, sessionName?: string }) {
   return (
     <ProjectProvider>
-      <TestProjectInitializer>
-        <SelectionProvider>{children}</SelectionProvider>
-      </TestProjectInitializer>
+      <SelectionProvider>
+        <TestWrapper sessionName={sessionName}>
+          {children}
+        </TestWrapper>
+      </SelectionProvider>
     </ProjectProvider>
   )
 }
@@ -59,14 +72,12 @@ function setSessionInStorage(sessionName: string) {
 
 describe.skip('DiffFileList - skipped due to component refactor', () => {
   beforeEach(() => {
-    localStorage.clear()
     vi.clearAllMocks()
   })
 
   it('renders file list with mock data', async () => {
-    setSessionInStorage('demo')
     render(
-      <Wrapper>
+      <Wrapper sessionName="demo">
         <DiffFileList onFileSelect={() => {}} />
       </Wrapper>
     )
@@ -87,10 +98,9 @@ describe.skip('DiffFileList - skipped due to component refactor', () => {
   })
 
   it('invokes onFileSelect and highlights selection when clicking an item', async () => {
-    setSessionInStorage('demo')
     const onFileSelect = vi.fn()
     render(
-      <Wrapper>
+      <Wrapper sessionName="demo">
         <DiffFileList onFileSelect={onFileSelect} />
       </Wrapper>
     )
@@ -124,9 +134,8 @@ describe.skip('DiffFileList - skipped due to component refactor', () => {
       return []
     })
 
-    setSessionInStorage('demo')
     render(
-      <Wrapper>
+      <Wrapper sessionName="demo">
         <DiffFileList onFileSelect={() => {}} />
       </Wrapper>
     )
@@ -135,7 +144,7 @@ describe.skip('DiffFileList - skipped due to component refactor', () => {
   })
 
   it('shows orchestrator empty state when no session selected', async () => {
-    // No session set in storage -> orchestrator mode
+    // No session set -> orchestrator mode
     render(
       <Wrapper>
         <DiffFileList onFileSelect={() => {}} />
