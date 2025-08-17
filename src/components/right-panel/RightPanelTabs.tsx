@@ -16,9 +16,11 @@ export function RightPanelTabs({ onFileSelect }: RightPanelTabsProps) {
   const [previewDraftName, setPreviewDraftName] = useState<string | null>(null)
 
   // Determine active tab based on user selection or smart defaults
-  const activeTab = userSelectedTab || (
-    selection.kind === 'orchestrator' ? 'task' :
-    selection.kind === 'session' && isDraft ? 'task' : 'changes'
+  // For drafts, always show task tab regardless of user selection
+  const activeTab = (selection.kind === 'session' && isDraft) ? 'task' : (
+    userSelectedTab || (
+      selection.kind === 'orchestrator' ? 'task' : 'changes'
+    )
   )
 
   // Reset preview when leaving orchestrator
@@ -32,21 +34,24 @@ export function RightPanelTabs({ onFileSelect }: RightPanelTabsProps) {
   const isOrchestrator = selection.kind === 'orchestrator'
   const rightTabLabel = isOrchestrator ? 'Drafts' : 'Task'
   const showBackButton = isOrchestrator && !!previewDraftName
+  const showChangesTab = selection.kind === 'session' && !isDraft
 
   return (
     <div className="h-full flex flex-col bg-panel">
       <div className="h-8 flex items-center border-b border-slate-800">
-        <button
-          onClick={() => setUserSelectedTab('changes')}
-          className={clsx(
-            'h-full flex-1 px-3 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
-            activeTab === 'changes' ? 'text-slate-200 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
-          )}
-          title="Changes"
-        >
-          <VscDiff className="text-sm" />
-          <span>Changes</span>
-        </button>
+        {showChangesTab && (
+          <button
+            onClick={() => setUserSelectedTab('changes')}
+            className={clsx(
+              'h-full flex-1 px-3 text-xs font-medium transition-colors flex items-center justify-center gap-1.5',
+              activeTab === 'changes' ? 'text-slate-200 bg-slate-800/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+            )}
+            title="Changes"
+          >
+            <VscDiff className="text-sm" />
+            <span>Changes</span>
+          </button>
+        )}
         <button
           onClick={() => setUserSelectedTab('task')}
           className={clsx(

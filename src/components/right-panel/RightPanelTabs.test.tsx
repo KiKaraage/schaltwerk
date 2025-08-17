@@ -108,9 +108,9 @@ describe('RightPanelTabs', () => {
         <RightPanelTabs onFileSelect={mockOnFileSelect} />
       )
       
-      // User selects Changes tab explicitly
-      fireEvent.click(screen.getByRole('button', { name: /Changes/i }))
-      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('bg-slate-800/50')
+      // User selects Task tab explicitly
+      fireEvent.click(screen.getByRole('button', { name: /Task/i }))
+      expect(screen.getByRole('button', { name: /Task/i })).toHaveClass('bg-slate-800/50')
       
       // Switch to orchestrator
       mockUseSelection.mockReturnValue({
@@ -126,14 +126,12 @@ describe('RightPanelTabs', () => {
         <RightPanelTabs onFileSelect={mockOnFileSelect} />
       )
       
-      // Even though orchestrator normally defaults to Task/Drafts, 
-      // user's choice of Changes should persist
-      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('bg-slate-800/50')
-      expect(screen.getByRole('button', { name: /Drafts/i })).not.toHaveClass('bg-slate-800/50')
+      // User's choice of Task should persist (shown as "Drafts" in orchestrator)
+      expect(screen.getByRole('button', { name: /Drafts/i })).toHaveClass('bg-slate-800/50')
     })
     
     it('should use smart defaults when user has not made a selection', () => {
-      // Test orchestrator defaults to Task/Drafts
+      // Test orchestrator defaults to Task/Drafts (no Changes tab in orchestrator)
       mockUseSelection.mockReturnValue({
         selection: { kind: 'orchestrator' },
         isDraft: false,
@@ -148,9 +146,10 @@ describe('RightPanelTabs', () => {
       )
       
       expect(screen.getByRole('button', { name: /Drafts/i })).toHaveClass('bg-slate-800/50')
-      expect(screen.getByRole('button', { name: /Changes/i })).not.toHaveClass('border-blue-500')
+      // Changes tab should not be present in orchestrator
+      expect(screen.queryByRole('button', { name: /Changes/i })).not.toBeInTheDocument()
       
-      // Test draft session defaults to Task
+      // Test draft session defaults to Task and changes tab is hidden
       mockUseSelection.mockReturnValue({
         selection: { kind: 'session', payload: 'draft1' },
         isDraft: true,
@@ -165,7 +164,8 @@ describe('RightPanelTabs', () => {
       )
       
       expect(screen.getByRole('button', { name: /Task/i })).toHaveClass('bg-slate-800/50')
-      expect(screen.getByRole('button', { name: /Changes/i })).not.toHaveClass('bg-slate-800/50')
+      // Changes tab should not be present for drafts
+      expect(screen.queryByRole('button', { name: /Changes/i })).not.toBeInTheDocument()
       
       // Test running session defaults to Changes
       mockUseSelection.mockReturnValue({
@@ -186,27 +186,7 @@ describe('RightPanelTabs', () => {
     })
     
     it('should allow user to override smart defaults at any time', () => {
-      mockUseSelection.mockReturnValue({
-        selection: { kind: 'orchestrator' },
-        isDraft: false,
-        terminals: { top: 'orchestrator-top', bottomBase: 'orchestrator-bottom', workingDirectory: '/test' },
-        setSelection: vi.fn(),
-        clearTerminalTracking: vi.fn(),
-        isReady: true
-      })
-      
-      const { rerender } = render(
-        <RightPanelTabs onFileSelect={mockOnFileSelect} />
-      )
-      
-      // Orchestrator starts with Task/Drafts
-      expect(screen.getByRole('button', { name: /Drafts/i })).toHaveClass('bg-slate-800/50')
-      
-      // User clicks Changes
-      fireEvent.click(screen.getByRole('button', { name: /Changes/i }))
-      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('bg-slate-800/50')
-      
-      // Switch to session - Changes should stay selected
+      // Start with a running session that has both tabs
       mockUseSelection.mockReturnValue({
         selection: { kind: 'session', payload: 'session1' },
         isDraft: false,
@@ -216,17 +196,38 @@ describe('RightPanelTabs', () => {
         isReady: true
       })
       
+      const { rerender } = render(
+        <RightPanelTabs onFileSelect={mockOnFileSelect} />
+      )
+      
+      // Session starts with Changes (default)
+      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('bg-slate-800/50')
+      
+      // User clicks Task
+      fireEvent.click(screen.getByRole('button', { name: /Task/i }))
+      expect(screen.getByRole('button', { name: /Task/i })).toHaveClass('bg-slate-800/50')
+      
+      // Switch to another session - Task should stay selected
+      mockUseSelection.mockReturnValue({
+        selection: { kind: 'session', payload: 'session2' },
+        isDraft: false,
+        terminals: { top: 'session2-top', bottomBase: 'session2-bottom', workingDirectory: '/test' },
+        setSelection: vi.fn(),
+        clearTerminalTracking: vi.fn(),
+        isReady: true
+      })
+      
       rerender(
         <RightPanelTabs onFileSelect={mockOnFileSelect} />
       )
       
-      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('bg-slate-800/50')
-      
-      // User now clicks Task
-      fireEvent.click(screen.getByRole('button', { name: /Task/i }))
       expect(screen.getByRole('button', { name: /Task/i })).toHaveClass('bg-slate-800/50')
       
-      // Switch back to orchestrator - Task should stay selected
+      // User now clicks Changes
+      fireEvent.click(screen.getByRole('button', { name: /Changes/i }))
+      expect(screen.getByRole('button', { name: /Changes/i })).toHaveClass('bg-slate-800/50')
+      
+      // Switch to orchestrator - Task tab is shown as "Drafts"
       mockUseSelection.mockReturnValue({
         selection: { kind: 'orchestrator' },
         isDraft: false,
@@ -240,8 +241,10 @@ describe('RightPanelTabs', () => {
         <RightPanelTabs onFileSelect={mockOnFileSelect} />
       )
       
-      // Label changes to "Drafts" in orchestrator, but Task tab should still be active
-      expect(screen.getByRole('button', { name: /Drafts/i })).toHaveClass('bg-slate-800/50')
+      // In orchestrator, the persisted "changes" selection should show diff panel content
+      // but only Drafts tab is visible since orchestrator doesn't have changes tab
+      expect(screen.getByRole('button', { name: /Drafts/i })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Changes/i })).not.toBeInTheDocument()
     })
   })
   
@@ -268,6 +271,27 @@ describe('RightPanelTabs', () => {
       
       // Should now show Task content (DraftContentView)
       expect(screen.queryByTestId('diff-panel')).not.toBeInTheDocument()
+    })
+    
+    it('should hide changes tab for draft sessions', () => {
+      mockUseSelection.mockReturnValue({
+        selection: { kind: 'session', payload: 'draft1' },
+        isDraft: true,
+        terminals: { top: 'draft1-top', bottomBase: 'draft1-bottom', workingDirectory: '/test' },
+        setSelection: vi.fn(),
+        clearTerminalTracking: vi.fn(),
+        isReady: true
+      })
+      
+      render(
+        <RightPanelTabs onFileSelect={mockOnFileSelect} />
+      )
+      
+      // Changes tab should not be visible for drafts
+      expect(screen.queryByRole('button', { name: /Changes/i })).not.toBeInTheDocument()
+      // Only Task tab should be visible
+      expect(screen.getByRole('button', { name: /Task/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Task/i })).toHaveClass('bg-slate-800/50')
     })
   })
 })
