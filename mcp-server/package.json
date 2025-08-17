@@ -17,9 +17,9 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",
+    "node-fetch": "^3.3.2",
     "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
-    "node-fetch": "^3.3.2"
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",
@@ -28,23 +28,30 @@
     "@typescript-eslint/parser": "^8.18.1",
     "eslint": "^9.18.0",
     "jest": "^29.7.0",
-    "ts-jest": "^29.2.5",
+    "ts-jest": "^29.4.1",
     "typescript": "^5.7.3"
   },
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
-    "extensionsToTreatAsEsm": [".ts"],
+    "extensionsToTreatAsEsm": [
+      ".ts"
+    ],
     "moduleNameMapper": {
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },
     "transform": {
-      "^.+\\.ts$": ["ts-jest", {
-        "useESM": true
-      }]
+      "^.+\\.ts$": [
+        "ts-jest",
+        {
+          "useESM": true,
+          "tsconfig": "tsconfig.test.json"
+        }
+      ]
     },
     "testMatch": [
-      "**/src/**/*.test.ts"
+      "**/src/**/*.test.ts",
+      "**/test/**/*.test.ts"
     ],
     "collectCoverageFrom": [
       "src/**/*.ts",

@@ -577,7 +577,7 @@ ${session.initial_prompt ? `- Initial Prompt: ${session.initial_prompt}` : ''}`
             display_name: s.display_name || s.name,
             status: s.status === 'draft' ? 'draft' : (s.ready_to_merge ? 'reviewed' : 'new'),
             state: s.session_state,
-            created_at: new Date(s.created_at).toISOString(),
+            created_at: s.created_at ? new Date(s.created_at).toISOString() : null,
             last_activity: s.last_activity ? new Date(s.last_activity).toISOString() : null,
             agent_type: s.original_agent_type || 'claude',
             branch: s.branch,
@@ -593,7 +593,7 @@ ${session.initial_prompt ? `- Initial Prompt: ${session.initial_prompt}` : ''}`
             // Format as human-readable text
             const lines = sessions.map((s: Session) => {
               if (s.status === 'draft') {
-                const created = new Date(s.created_at).toLocaleDateString()
+                const created = s.created_at ? new Date(s.created_at).toLocaleDateString() : 'unknown'
                 const contentLength = s.draft_content?.length || 0
                 const name = s.display_name || s.name
                 return `[DRAFT] ${name} - Created: ${created}, Content: ${contentLength} chars`
@@ -707,8 +707,8 @@ ${session.initial_prompt ? `- Initial Prompt: ${session.initial_prompt}` : ''}`
           const essentialDrafts = drafts.map(d => ({
             name: d.name,
             display_name: d.display_name || d.name,
-            created_at: new Date(d.created_at).toISOString(),
-            updated_at: new Date(d.updated_at).toISOString(),
+            created_at: d.created_at ? new Date(d.created_at).toISOString() : null,
+            updated_at: d.updated_at ? new Date(d.updated_at).toISOString() : null,
             base_branch: d.parent_branch,
             content_length: d.draft_content?.length || 0,
             content_preview: d.draft_content?.substring(0, 200) || ''
@@ -720,8 +720,8 @@ ${session.initial_prompt ? `- Initial Prompt: ${session.initial_prompt}` : ''}`
           } else {
             const lines = drafts.map((d: Session) => {
               const name = d.display_name || d.name
-              const created = new Date(d.created_at).toLocaleDateString()
-              const updated = new Date(d.updated_at).toLocaleDateString()
+              const created = d.created_at ? new Date(d.created_at).toLocaleDateString() : 'unknown'
+              const updated = d.updated_at ? new Date(d.updated_at).toLocaleDateString() : 'unknown'
               const contentLength = d.draft_content?.length || 0
               const preview = d.draft_content?.substring(0, 50)?.replace(/\n/g, ' ') || '(empty)'
               
@@ -755,7 +755,7 @@ ${session.initial_prompt ? `- Initial Prompt: ${session.initial_prompt}` : ''}`
           display_name: t.display_name || t.name,
           status: t.status,
           session_state: t.session_state,
-          created_at: new Date(t.created_at).toISOString(),
+          created_at: t.created_at ? new Date(t.created_at).toISOString() : null,
           last_activity: t.last_activity ? new Date(t.last_activity).toISOString() : null,
           initial_prompt: t.initial_prompt || null,
           draft_content: t.draft_content || null,
