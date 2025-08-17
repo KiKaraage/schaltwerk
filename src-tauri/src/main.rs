@@ -1384,6 +1384,7 @@ fn main() {
             remove_recent_project,
             is_git_repository,
             directory_exists,
+            create_new_project,
             initialize_project,
             get_project_default_branch,
             list_project_branches,
@@ -1509,6 +1510,16 @@ fn is_git_repository(path: String) -> Result<bool, String> {
 #[tauri::command]
 fn directory_exists(path: String) -> Result<bool, String> {
     Ok(projects::directory_exists(std::path::Path::new(&path)))
+}
+
+#[tauri::command]
+fn create_new_project(name: String, parent_path: String) -> Result<String, String> {
+    let project_path = projects::create_new_project(&name, &parent_path)
+        .map_err(|e| format!("{e}"))?;
+    
+    Ok(project_path.to_str()
+        .ok_or_else(|| "Invalid path encoding".to_string())?
+        .to_string())
 }
 
 #[tauri::command]

@@ -100,6 +100,38 @@ pub fn directory_exists(path: &Path) -> bool {
     path.exists() && path.is_dir()
 }
 
+pub fn create_new_project(name: &str, parent_path: &str) -> Result<PathBuf> {
+    use std::fs;
+    
+    let parent = Path::new(parent_path);
+    
+    if !parent.exists() || !parent.is_dir() {
+        return Err(anyhow::anyhow!("Parent directory does not exist: {}", parent_path));
+    }
+    
+    let project_path = parent.join(name);
+    
+    if project_path.exists() {
+        return Err(anyhow::anyhow!("Project directory already exists: {}", project_path.display()));
+    }
+    
+    fs::create_dir(&project_path)
+        .map_err(|e| anyhow::anyhow!("Failed to create project directory: {}", e))?;
+    
+    if let Err(e) = crate::para_core::git::init_repository(&project_path) {
+        fs::remove_dir(&project_path).ok();
+        return Err(e);
+    }
+    
+    let mut history = ProjectHistory::load()?;
+    history.add_project(project_path.to_str()
+        .ok_or_else(|| anyhow::anyhow!("Invalid path encoding"))?)?;
+    
+    log::info!("Created new project with git repository: {}", project_path.display());
+    
+    Ok(project_path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use anyhow::{Result, anyhow};
+use std::fs;
 
 pub fn discover_repository() -> Result<PathBuf> {
     if let Ok(repo_env) = std::env::var("PARA_REPO_PATH") {
@@ -143,4 +144,22 @@ pub fn get_commit_hash(repo_path: &Path, branch_or_ref: &str) -> Result<String> 
     }
     
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+pub fn init_repository(path: &Path) -> Result<()> {
+    if !path.exists() {
+        fs::create_dir_all(path)?;
+    }
+    
+    let output = Command::new("git")
+        .arg("init")
+        .current_dir(path)
+        .output()?;
+    
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow!("Git init failed: {}", stderr));
+    }
+    
+    Ok(())
 }

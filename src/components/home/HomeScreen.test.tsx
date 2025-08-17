@@ -6,6 +6,7 @@ import { vi } from 'vitest'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }))
+vi.mock('@tauri-apps/api/path', () => ({ homeDir: vi.fn().mockResolvedValue('/home/user') }))
 
 const invoke = (await import('@tauri-apps/api/core')).invoke as unknown as ReturnType<typeof vi.fn>
 const dialog = await import('@tauri-apps/plugin-dialog')
@@ -31,6 +32,7 @@ describe('HomeScreen', () => {
         case 'remove_recent_project':
         case 'update_recent_project_timestamp':
         case 'initialize_project':
+        case 'create_new_project':
           return null
         case 'directory_exists':
           return overrides.directory_exists ?? true
@@ -48,7 +50,7 @@ describe('HomeScreen', () => {
     setup({ get_recent_projects: [] })
 
     // CTA button present
-    expect(screen.getByRole('button', { name: /open git repository/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /open repository/i })).toBeInTheDocument()
 
     // Recent Projects header should not be visible when empty
     await waitFor(() => {
@@ -79,7 +81,7 @@ describe('HomeScreen', () => {
     const { onOpenProject } = setup()
     ;(dialog.open as ReturnType<typeof vi.fn>).mockResolvedValue('/some/repo')
 
-    const openBtn = screen.getByRole('button', { name: /open git repository/i })
+    const openBtn = screen.getByRole('button', { name: /open repository/i })
     await user.click(openBtn)
 
     await waitFor(() => {
@@ -93,7 +95,7 @@ describe('HomeScreen', () => {
     setup({ is_git_repository: false })
     ;(dialog.open as ReturnType<typeof vi.fn>).mockResolvedValue('/not/repo')
 
-    await user.click(screen.getByRole('button', { name: /open git repository/i }))
+    await user.click(screen.getByRole('button', { name: /open repository/i }))
 
     expect(await screen.findByText(/not a git repository/i)).toBeInTheDocument()
     // should not navigate
@@ -104,7 +106,7 @@ describe('HomeScreen', () => {
     setup()
     ;(dialog.open as ReturnType<typeof vi.fn>).mockResolvedValue('/enter/repo')
 
-    const btn = screen.getByRole('button', { name: /open git repository/i })
+    const btn = screen.getByRole('button', { name: /open repository/i })
     btn.focus()
     await user.keyboard('{Enter}')
 
@@ -117,9 +119,9 @@ describe('HomeScreen', () => {
     setup()
     // Verify the CTA to start new session exists in App, but HomeScreen does not handle it.
     // We assert HomeScreen remains focusable and interactive via keyboard.
-    const openBtn = screen.getByRole('button', { name: /open git repository/i })
+    const newProjectBtn = screen.getByRole('button', { name: /new project/i })
     await user.tab()
-    expect(openBtn).toHaveFocus()
+    expect(newProjectBtn).toHaveFocus()
   })
 
   it('opening a missing recent project shows an error and refreshes list', async () => {
@@ -131,5 +133,45 @@ describe('HomeScreen', () => {
 
     expect(await screen.findByText(/no longer exists/i)).toBeInTheDocument()
     expect(invoke).toHaveBeenCalledWith('remove_recent_project', { path: '/gone/repo' })
+  })
+
+  it('handles project creation and opens the new project', async () => {
+    const { onOpenProject } = setup()
+    
+    // Mock successful project creation
+    invoke.mockImplementation(async (cmd: string, _args?: any) => {
+      switch (cmd) {
+        case 'get_recent_projects':
+          return []
+        case 'create_new_project':
+          return '/new/project/path'
+        default:
+          return null
+      }
+    })
+
+    // Click New Project button
+    const newProjectBtn = screen.getByRole('button', { name: /new project/i })
+    await user.click(newProjectBtn)
+
+    // Dialog should open - use role selector to avoid ambiguity with button text
+    expect(await screen.findByRole('heading', { name: 'New Project' })).toBeInTheDocument()
+
+    // Fill in project details
+    const nameInput = screen.getByPlaceholderText(/my-awesome-project/i)
+    await user.type(nameInput, 'test-project')
+
+    // Create project
+    const createBtn = screen.getByRole('button', { name: /create project/i })
+    await user.click(createBtn)
+
+    // Should call create command and open the project
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('create_new_project', {
+        name: 'test-project',
+        parentPath: expect.any(String)
+      })
+      expect(onOpenProject).toHaveBeenCalledWith('/new/project/path')
+    })
   })
 })

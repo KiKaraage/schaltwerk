@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { VscFolderOpened, VscHistory, VscWarning, VscTrash } from 'react-icons/vsc'
+import { VscFolderOpened, VscHistory, VscWarning, VscTrash, VscNewFolder } from 'react-icons/vsc'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { AsciiBuilderLogo } from './AsciiBuilderLogo'
+import { NewProjectDialog } from './NewProjectDialog'
 
 interface RecentProject {
   path: string
@@ -17,7 +18,7 @@ interface HomeScreenProps {
 export function HomeScreen({ onOpenProject }: HomeScreenProps) {
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([])
   const [error, setError] = useState<string | null>(null)
-  
+  const [showNewProjectDialog, setShowNewProjectDialog] = useState(false)
 
   useEffect(() => {
     loadRecentProjects()
@@ -108,6 +109,12 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
     }
   }
 
+  const handleProjectCreated = async (projectPath: string) => {
+    setError(null)
+    await loadRecentProjects()
+    onOpenProject(projectPath)
+  }
+
   return (
     <div className="h-screen w-screen bg-slate-950 flex flex-col items-center justify-center p-8">
       <div className="max-w-4xl w-full">
@@ -127,13 +134,20 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
           </div>
         )}
 
-        <div className="mb-8">
+        <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button
+            onClick={() => setShowNewProjectDialog(true)}
+            className="bg-emerald-900/30 hover:bg-emerald-800/40 border border-emerald-700/50 text-emerald-300 py-4 px-6 rounded-lg flex items-center justify-center gap-3 transition-all duration-200 group"
+          >
+            <VscNewFolder className="text-2xl group-hover:scale-110 transition-transform" />
+            <span className="text-lg font-medium">New Project</span>
+          </button>
           <button
             onClick={handleSelectDirectory}
-            className="w-full bg-cyan-900/30 hover:bg-cyan-800/40 border border-cyan-700/50 text-cyan-300 py-4 px-6 rounded-lg flex items-center justify-center gap-3 transition-all duration-200 group"
+            className="bg-cyan-900/30 hover:bg-cyan-800/40 border border-cyan-700/50 text-cyan-300 py-4 px-6 rounded-lg flex items-center justify-center gap-3 transition-all duration-200 group"
           >
             <VscFolderOpened className="text-2xl group-hover:scale-110 transition-transform" />
-            <span className="text-lg font-medium">Open Git Repository</span>
+            <span className="text-lg font-medium">Open Repository</span>
           </button>
         </div>
 
@@ -182,6 +196,12 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
           </div>
         )}
       </div>
+      
+      <NewProjectDialog
+        isOpen={showNewProjectDialog}
+        onClose={() => setShowNewProjectDialog(false)}
+        onProjectCreated={handleProjectCreated}
+      />
     </div>
   )
 }
