@@ -57,6 +57,8 @@ describe('Session Switching Performance', () => {
             if (cmd === 'get_current_directory') {
                 return '/test/dir'
             }
+            if (cmd === 'list_available_open_apps') return [{ id: 'finder', name: 'Finder', kind: 'system' }]
+            if (cmd === 'get_default_open_app') return 'finder'
             if (cmd === 'terminal_exists') {
                 return true
             }
@@ -129,6 +131,8 @@ describe('Session Switching Performance', () => {
             if (cmd === 'get_current_directory') {
                 return '/test/dir'
             }
+            if (cmd === 'list_available_open_apps') return [{ id: 'finder', name: 'Finder', kind: 'system' }]
+            if (cmd === 'get_default_open_app') return 'finder'
             if (cmd === 'terminal_exists') {
                 return true
             }

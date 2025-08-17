@@ -28,11 +28,19 @@ vi.mock('./components/modals/CancelConfirmation', () => ({
 vi.mock('./components/diff/DiffViewerWithReview', () => ({
   DiffViewerWithReview: () => null,
 }))
-vi.mock('./components/diff/OpenInSplitButton', () => ({
+vi.mock('./components/OpenInSplitButton', () => ({
   OpenInSplitButton: () => <button data-testid="open-in-split" />,
 }))
 vi.mock('./components/TabBar', () => ({
   TabBar: () => <div data-testid="tab-bar" />,
+}))
+vi.mock('./components/TopBar', () => ({
+  TopBar: ({ onGoHome, tabs }: { onGoHome: () => void, tabs: any[] }) => (
+    <div data-testid="top-bar">
+      <button onClick={onGoHome} aria-label="Home">Home</button>
+      {tabs && tabs.length > 0 && <div data-testid="tab-bar" />}
+    </div>
+  ),
 }))
 
 // ---- Mock: HomeScreen to drive transitions via onOpenProject ----

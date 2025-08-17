@@ -2,6 +2,7 @@ import { VscHome, VscSettingsGear } from 'react-icons/vsc'
 import { TabBar, ProjectTab } from './TabBar'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useRef, useEffect } from 'react'
+import { OpenInSplitButton } from './OpenInSplitButton'
 
 interface TopBarProps {
   tabs: ProjectTab[]
@@ -106,6 +107,15 @@ export function TopBar({
             userSelect: 'none'
           } as React.CSSProperties}
         />
+        
+        {/* Open in IDE button - only show when a tab is active */}
+        {activeTabPath && (
+          <div className="mr-2">
+            <OpenInSplitButton 
+              resolvePath={async () => activeTabPath}
+            />
+          </div>
+        )}
         
         {/* Settings button */}
         <button

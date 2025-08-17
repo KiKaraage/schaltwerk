@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import { clsx } from 'clsx'
 import { formatLastActivity } from '../../utils/time'
+import { OpenInSplitButton } from '../OpenInSplitButton'
 
 interface DiffStats {
     files_changed: number
@@ -169,6 +170,14 @@ export const SessionButton = memo<SessionButtonProps>(({
                 </div>
             </div>
             <div className="-mt-4 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity whitespace-nowrap">
+                <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="mr-1"
+                >
+                    <OpenInSplitButton
+                        resolvePath={async () => s.worktree_path}
+                    />
+                </div>
                 {sessionState === 'draft' ? (
                     <span 
                         onClick={(e) => {
