@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import { Terminal as XTerm } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
+import { Terminal as XTerm } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { SearchAddon } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
@@ -23,6 +24,7 @@ interface TerminalProps {
 
 export interface TerminalHandle {
     focus: () => void;
+    showSearch: () => void;
 }
 
 export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId, className = '', sessionName, isOrchestrator = false }, ref) => {
@@ -30,11 +32,14 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
     const termRef = useRef<HTMLDivElement>(null);
     const terminal = useRef<XTerm | null>(null);
     const fitAddon = useRef<FitAddon | null>(null);
+    const searchAddon = useRef<SearchAddon | null>(null);
     const webglAddon = useRef<WebglAddon | null>(null);
     const lastSize = useRef<{ cols: number; rows: number }>({ cols: 80, rows: 24 });
     const [hydrated, setHydrated] = useState(false);
     const hydratedRef = useRef<boolean>(false);
     const pendingOutput = useRef<string[]>([]);
+    const [isSearchVisible, setIsSearchVisible] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
     // Batch terminal writes to reduce xterm parse/render overhead
     const writeQueueRef = useRef<string[]>([]);
     const rafIdRef = useRef<number | null>(null);
@@ -50,6 +55,9 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
             if (terminal.current) {
                 terminal.current.focus();
             }
+        },
+        showSearch: () => {
+            setIsSearchVisible(true);
         }
     }), []);
 
@@ -107,6 +115,10 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
         // Add fit addon for proper sizing
         fitAddon.current = new FitAddon();
         terminal.current.loadAddon(fitAddon.current);
+        
+        // Add search addon
+        searchAddon.current = new SearchAddon();
+        terminal.current.loadAddon(searchAddon.current);
         
         // Open terminal to DOM first (required before WebGL addon)
         terminal.current.open(termRef.current);
@@ -224,7 +236,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
 
         // Intercept global shortcuts before xterm.js processes them
         terminal.current.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+            const isMac = navigator.userAgent.includes('Mac')
             const modifierKey = isMac ? event.metaKey : event.ctrlKey
             
             if (modifierKey && (event.key === 'n' || event.key === 'N')) {
@@ -236,6 +248,11 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
                 // Dispatch a custom event to trigger the global mark reviewed handler
                 window.dispatchEvent(new CustomEvent('global-mark-ready-shortcut'))
                 return false
+            }
+            if (modifierKey && (event.key === 'f' || event.key === 'F')) {
+                // Show search UI
+                setIsSearchVisible(true);
+                return false; // Prevent xterm.js from processing this event
             }
             
             return true // Allow xterm.js to process other events
@@ -585,7 +602,88 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
     }, [hydrated, terminalId]);
 
 
-    return <div ref={termRef} className={`h-full w-full ${className}`} />;
+    return (
+        <div className={`h-full w-full ${className}`}>
+            <div ref={termRef} className="h-full w-full" />
+            {/* Search icon that appears when terminal is focused */}
+            {/* Search icon that appears when search UI is not active */}
+            {!isSearchVisible && (
+                <button
+                    onClick={() => setIsSearchVisible(true)}
+                    className="absolute top-2 right-2 text-slate-400 hover:text-slate-200 z-10"
+                    title="Search in terminal (Cmd+F)"
+                >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M14 14L10 10M10 10L10 10C8.34315 10 7 8.65685 7 7C7 5.34315 8.34315 4 10 4C11.6569 4 13 5.34315 13 7C13 8.65685 11.6569 10 10 10Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                </button>
+            )}
+            {isSearchVisible && (
+                <div className="absolute top-2 right-2 flex items-center bg-panel border border-slate-700 rounded px-2 py-1 z-10">
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                if (searchAddon.current && terminal.current) {
+                                    if (e.shiftKey) {
+                                        searchAddon.current.findPrevious(searchTerm);
+                                    } else {
+                                        searchAddon.current.findNext(searchTerm);
+                                    }
+                                }
+                            } else if (e.key === 'Escape') {
+                                setIsSearchVisible(false);
+                                setSearchTerm('');
+                            }
+                        }}
+                        placeholder="Search..."
+                        className="bg-transparent text-sm text-slate-200 outline-none w-40"
+                        autoFocus
+                    />
+                    <button 
+                        onClick={() => {
+                            if (searchAddon.current && terminal.current) {
+                                searchAddon.current.findPrevious(searchTerm);
+                            }
+                        }}
+                        className="text-slate-400 hover:text-slate-200 ml-1"
+                        title="Previous match (Shift+Enter)"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M7 12L3 8L7 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                    </button>
+                    <button 
+                        onClick={() => {
+                            if (searchAddon.current && terminal.current) {
+                                searchAddon.current.findNext(searchTerm);
+                            }
+                        }}
+                        className="text-slate-400 hover:text-slate-200 ml-1"
+                        title="Next match (Enter)"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M9 4L13 8L9 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                    </button>
+                    <button 
+                        onClick={() => {
+                            setIsSearchVisible(false);
+                            setSearchTerm('');
+                        }}
+                        className="text-slate-400 hover:text-slate-200 ml-2"
+                        title="Close search (Escape)"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+            )}
+        </div>
+    );
 });
 
 Terminal.displayName = 'Terminal';

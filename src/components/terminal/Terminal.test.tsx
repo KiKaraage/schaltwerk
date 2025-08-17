@@ -6,8 +6,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('xterm/css/xterm.css', () => ({}))
 
-// ---- Mock: xterm (defined entirely inside factory to avoid hoist issues) ----
-vi.mock('xterm', () => {
+// ---- Mock: @xterm/xterm (defined entirely inside factory to avoid hoist issues) ----
+vi.mock('@xterm/xterm', () => {
   const instances: any[] = []
   class MockXTerm {
     static __instances = instances
@@ -49,13 +49,13 @@ vi.mock('xterm', () => {
   }
 })
 
-// ---- Mock: xterm-addon-fit ----
-vi.mock('xterm-addon-fit', () => {
+// ---- Mock: @xterm/addon-fit ----
+vi.mock('@xterm/addon-fit', () => {
   let nextFitSize: { cols: number; rows: number } | null = null
   class MockFitAddon {
     fit() {
       // import lazily to avoid circular init
-      const xterm = require('xterm') as any
+      const xterm = require('@xterm/xterm') as any
       const last = xterm.__getLastInstance?.()
       if (nextFitSize && last) {
         last.cols = nextFitSize.cols
@@ -142,8 +142,8 @@ import { FontSizeProvider } from '../../contexts/FontSizeContext'
 // Also import mocked helpers for control
 import * as TauriEvent from '@tauri-apps/api/event'
 import * as TauriCore from '@tauri-apps/api/core'
-import * as XTermModule from 'xterm'
-import * as FitAddonModule from 'xterm-addon-fit'
+import * as XTermModule from '@xterm/xterm'
+import * as FitAddonModule from '@xterm/addon-fit'
 
 function getLastXtermInstance() {
   return (XTermModule as any).__getLastInstance()
@@ -235,6 +235,7 @@ describe('Terminal component', () => {
   it('intercepts global shortcuts for new session and mark reviewed', async () => {
     // Force mac platform
     Object.defineProperty(window.navigator, 'platform', { value: 'MacIntel', configurable: true })
+    Object.defineProperty(window.navigator, 'userAgent', { value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36', configurable: true })
 
     renderTerminal({ terminalId: "session-keys-top", sessionName: "keys" })
     await flushAll()
@@ -248,10 +249,12 @@ describe('Terminal component', () => {
 
     const resNew = xterm.__triggerKey({ key: 'n', metaKey: true, ctrlKey: false })
     const resReady = xterm.__triggerKey({ key: 'R', metaKey: true, ctrlKey: false })
+    const resSearch = xterm.__triggerKey({ key: 'f', metaKey: true, ctrlKey: false })
     const resOther = xterm.__triggerKey({ key: 'x', metaKey: true, ctrlKey: false })
 
     expect(resNew).toBe(false)
     expect(resReady).toBe(false)
+    expect(resSearch).toBe(false) // Search should also be intercepted
     expect(resOther).toBe(true)
     expect(newSessionSpy).toHaveBeenCalledTimes(1)
     expect(markReadySpy).toHaveBeenCalledTimes(1)
@@ -259,6 +262,7 @@ describe('Terminal component', () => {
 
   it('intercepts Ctrl-based shortcuts on non-Mac for mark reviewed', async () => {
     Object.defineProperty(window.navigator, 'platform', { value: 'Win32', configurable: true })
+    Object.defineProperty(window.navigator, 'userAgent', { value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', configurable: true })
     renderTerminal({ terminalId: "session-keys2-top", sessionName: "keys2" })
     await flushAll()
 
@@ -375,7 +379,7 @@ describe('Terminal component', () => {
   })
 
   it('exposes focus via ref', async () => {
-    const ref = createRef<{ focus: () => void }>()
+    const ref = createRef<{ focus: () => void; showSearch: () => void }>()
     render(
       <FontSizeProvider>
         <Terminal terminalId="session-focus-top" sessionName="focus" ref={ref} />
