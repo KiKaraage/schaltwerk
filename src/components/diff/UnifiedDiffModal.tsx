@@ -58,7 +58,8 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
   } | null>(null)
   const [selectedFileIndex, setSelectedFileIndex] = useState<number>(0)
   const [allFileDiffs, setAllFileDiffs] = useState<Map<string, FileDiffData>>(new Map())
-  const [loadingAllFiles, setLoadingAllFiles] = useState(false)
+  const [loadingAllFiles, setLoadingAllFiles] = useState(true)
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const fileRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   
@@ -102,7 +103,10 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
   }, [isOpen, sessionName, currentReview, startReview])
 
   const loadAllFileDiffs = useCallback(async (fileList: ChangedFile[]) => {
-    setLoadingAllFiles(true)
+    if (!hasLoadedOnce) {
+      setLoadingAllFiles(true)
+    }
+    
     const newDiffs = new Map<string, FileDiffData>()
     
     try {
@@ -126,7 +130,6 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
           })
         } catch (fileError) {
           console.warn(`Failed to load diff for ${file.path}:`, fileError)
-          // Set error state for this specific file
           if (file.path === selectedFile) {
             const errorMessage = fileError instanceof Error ? fileError.message : String(fileError)
             setFileError(errorMessage)
@@ -135,12 +138,13 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
       }
       
       setAllFileDiffs(newDiffs)
+      setHasLoadedOnce(true)
     } catch (error) {
       console.error('Failed to load all file diffs:', error)
     } finally {
       setLoadingAllFiles(false)
     }
-  }, [sessionName, selectedFile])
+  }, [sessionName, selectedFile, hasLoadedOnce])
 
   const loadChangedFiles = useCallback(async () => {
     try {
@@ -183,7 +187,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     // Scroll to the file section
     const fileElement = fileRefs.current.get(path)
     if (fileElement && scrollContainerRef.current) {
-      fileElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      fileElement.scrollIntoView({ behavior: 'auto', block: 'start' })
     }
     
     lineSelectionRef.current.clearSelection()
@@ -191,50 +195,15 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     setCommentFormPosition(null)
   }, [])
 
-  // Monitor scroll position to update selected file
-  useEffect(() => {
-    if (!scrollContainerRef.current || loadingAllFiles) return
-    
-    const handleScroll = () => {
-      const container = scrollContainerRef.current
-      if (!container) return
-      
-      const containerTop = container.getBoundingClientRect().top
-      
-      // Find which file is currently most visible
-      let currentFile: string | null = null
-      let currentIndex = 0
-      
-      files.forEach((file, index) => {
-        const element = fileRefs.current.get(file.path)
-        if (element) {
-          const rect = element.getBoundingClientRect()
-          const relativeTop = rect.top - containerTop
-          
-          if (relativeTop <= 100 && relativeTop > -rect.height) {
-            currentFile = file.path
-            currentIndex = index
-          }
-        }
-      })
-      
-      if (currentFile && currentFile !== selectedFile) {
-        setSelectedFile(currentFile)
-        setSelectedFileIndex(currentIndex)
-      }
-    }
-    
-    const container = scrollContainerRef.current
-    container.addEventListener('scroll', handleScroll, { passive: true })
-    
-    return () => {
-      container.removeEventListener('scroll', handleScroll)
-    }
-  }, [files, selectedFile, loadingAllFiles])
+  // Removed automatic scroll monitoring to prevent jumping
+  // The selected file should only change when explicitly clicked in the sidebar
 
   useEffect(() => {
     if (isOpen) {
       loadChangedFiles()
+    } else {
+      setHasLoadedOnce(false)
+      setLoadingAllFiles(true)
     }
   }, [isOpen, loadChangedFiles])
 
@@ -577,9 +546,9 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
 
             {/* Diff viewer */}
             <div className="flex-1 flex flex-col overflow-hidden">
-              {loadingAllFiles ? (
+              {loadingAllFiles && allFileDiffs.size === 0 ? (
                 <div className="flex-1 flex items-center justify-center">
-                  <div className="text-slate-500">Loading all diffs...</div>
+                  <div className="text-slate-500">Loading diffs...</div>
                 </div>
               ) : fileError ? (
                 <div className="flex-1 flex items-center justify-center">
