@@ -202,8 +202,14 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     
     // Set selection atomically
     const setSelection = useCallback(async (newSelection: Selection, forceRecreate = false) => {
-        // Check if we're actually changing selection (but allow initial setup or force recreate)
-        if (!forceRecreate && isReady && selection.kind === newSelection.kind && selection.payload === newSelection.payload) {
+        // Get the new terminal IDs to check if they're changing
+        const newTerminalIds = getTerminalIds(newSelection)
+        
+        // Check if we're actually changing selection or terminals (but allow initial setup or force recreate)
+        if (!forceRecreate && isReady && 
+            selection.kind === newSelection.kind && 
+            selection.payload === newSelection.payload &&
+            terminals.top === newTerminalIds.top) {
             return
         }
         
@@ -246,7 +252,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             // Stay on current selection if we fail
             setIsReady(true)
         }
-    }, [ensureTerminals, getTerminalIds, clearTerminalTracking, isReady, selection, projectPath])
+    }, [ensureTerminals, getTerminalIds, clearTerminalTracking, isReady, selection, terminals, projectPath])
 
     // React to backend session refreshes (e.g., draft -> running)
     useEffect(() => {
@@ -292,7 +298,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
                 return
             }
             
-            // Check if we need to force recreate for orchestrator when changing projects
+            // Check if we're switching projects
             const projectChanged = hasInitialized.current && 
                                   previousProjectPath.current !== null && 
                                   previousProjectPath.current !== projectPath
@@ -306,8 +312,9 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
                 ? { kind: 'orchestrator' as const }
                 : await restoreSelectionFromStorage()
             
-            // Set the selection (force recreate if project changed)
-            await setSelection(targetSelection, projectChanged)
+            // Set the selection - the orchestrator terminals are already project-specific via the ID hash
+            // No need to force recreate, just switch to the correct project's orchestrator
+            await setSelection(targetSelection, false)
         }
         
         // Only run if not currently initializing
@@ -316,7 +323,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
             // Still mark as ready even on error so UI doesn't hang
             setIsReady(true)
         })
-    }, [projectPath, setSelection]) // Re-run when projectPath changes
+    }, [projectPath, setSelection, getTerminalIds]) // Re-run when projectPath changes
     
     // Listen for selection events from backend (e.g., when MCP creates/updates drafts)
     useEffect(() => {
