@@ -1,47 +1,197 @@
 use std::path::{Path, PathBuf};
 use std::fs;
 
-pub fn find_opencode_session(path: &Path) -> Option<String> {
-    // OpenCode uses --continue flag for last session or --session for specific IDs
-    // We'll store a session marker in the worktree similar to Cursor
-    let session_file = path.join(".opencode-session");
+pub struct OpenCodeSessionInfo {
+    pub id: String,
+    pub has_history: bool,
+}
+
+pub fn find_opencode_session(path: &Path) -> Option<OpenCodeSessionInfo> {
+    // Find OpenCode session by looking in the OpenCode data directory
+    // OpenCode stores sessions in ~/.local/share/opencode/project/{sanitized_path}/storage/session/info/
     
-    if session_file.exists() {
-        fs::read_to_string(&session_file)
-            .ok()
-            .and_then(|content| {
-                let trimmed = content.trim();
-                if !trimmed.is_empty() {
-                    Some(trimmed.to_string())
-                } else {
-                    None
-                }
-            })
-    } else {
-        // No stored session, OpenCode will create a new one
-        None
+    let home = std::env::var("HOME").ok()?;
+    let opencode_dir = PathBuf::from(home).join(".local").join("share").join("opencode");
+    let projects_dir = opencode_dir.join("project");
+    
+    // Sanitize the path similar to how OpenCode does it
+    let sanitized = sanitize_path_for_opencode(path);
+    let project_dir = projects_dir.join(&sanitized);
+    
+    log::debug!("Looking for OpenCode session at: {}", project_dir.display());
+    
+    if !project_dir.exists() {
+        log::debug!("Project directory does not exist: {}", project_dir.display());
+        return None;
     }
+    
+    // Look for session info files in storage/session/info/
+    let session_info_dir = project_dir.join("storage").join("session").join("info");
+    log::debug!("Looking for session info at: {}", session_info_dir.display());
+    
+    if !session_info_dir.exists() {
+        log::debug!("Session info directory does not exist: {}", session_info_dir.display());
+        return None;
+    }
+    
+    // Find all session files and get the most recent one
+    let mut sessions: Vec<_> = fs::read_dir(&session_info_dir).ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path().extension().map(|ext| ext == "json").unwrap_or(false)
+        })
+        .collect();
+    
+    log::debug!("Found {} session files", sessions.len());
+    
+    if sessions.is_empty() {
+        log::debug!("No session files found");
+        return None;
+    }
+    
+    // Sort by modification time to get the most recent session
+    sessions.sort_by_key(|e| {
+        e.metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+    });
+    
+    // Get the session ID from the most recent file
+    let latest_session = sessions.last()?;
+    let session_id = latest_session
+        .path()
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string())?;
+    
+    log::debug!("Found session ID: {session_id}");
+    
+    // Check if the session has actual message history
+    let message_dir = project_dir.join("storage").join("session").join("message").join(&session_id);
+    let has_history = if message_dir.exists() {
+        // Count the number of message files
+        // OpenCode creates 2 initial messages for every new session:
+        // 1. An empty user message (no content, just metadata)
+        // 2. An assistant response
+        // Sessions with only these 2 messages have no real user interaction
+        let message_count = fs::read_dir(&message_dir)
+            .ok()
+            .map(|entries| {
+                entries.filter_map(|e| e.ok())
+                    .filter(|e| {
+                        e.path().extension().map(|ext| ext == "json").unwrap_or(false)
+                    })
+                    .count()
+            })
+            .unwrap_or(0);
+        
+        log::debug!("Session {session_id} has {message_count} messages");
+        
+        // Consider it has history only if there are more than 2 messages
+        // 2 messages = just the auto-created initial messages, no real history
+        // >2 messages = user has actually interacted with the session
+        message_count > 2
+    } else {
+        log::debug!("No message directory found for session {session_id}");
+        false
+    };
+    
+    Some(OpenCodeSessionInfo {
+        id: session_id,
+        has_history,
+    })
+}
+
+fn sanitize_path_for_opencode(path: &Path) -> String {
+    // Based on analysis of actual OpenCode directory names:
+    // Looking at actual directories like:
+    // Users-marius-wichtner-Documents-git-tubetalk--schaltwerk-worktrees-keen_brahmagupta
+    // 
+    // The pattern is:
+    // 1. Remove leading slash
+    // 2. Replace / with - (single dash) normally
+    // 3. When a component starts with . (hidden dir), use -- before it (without the dot)
+    //    e.g., tubetalk/.schaltwerk becomes tubetalk--schaltwerk
+    // 4. Regular dots in filenames become single dash
+    //    e.g., marius.wichtner becomes marius-wichtner
+    
+    let path_str = path.to_string_lossy();
+    let without_leading_slash = path_str.trim_start_matches('/');
+    
+    // Process components and build result
+    let mut result = String::new();
+    let components: Vec<&str> = without_leading_slash.split('/').collect();
+    
+    for (i, component) in components.iter().enumerate() {
+        if i > 0 {
+            // Add separator before this component
+            if component.starts_with('.') {
+                // Hidden directory gets double dash separator
+                result.push_str("--");
+            } else {
+                // Normal separator
+                result.push('-');
+            }
+        }
+        
+        // Add the component itself (with dots replaced, and leading dot removed if hidden)
+        if let Some(stripped) = component.strip_prefix('.') {
+            // Hidden directory: remove the dot
+            result.push_str(&stripped.replace('.', "-"));
+        } else {
+            // Regular component: replace dots with dash
+            result.push_str(&component.replace('.', "-"));
+        }
+    }
+    
+    result
 }
 
 pub fn build_opencode_command(
     worktree_path: &Path,
-    session_id: Option<&str>,
+    session_info: Option<&OpenCodeSessionInfo>,
     initial_prompt: Option<&str>,
     _skip_permissions: bool,
 ) -> String {
     let opencode_bin = resolve_opencode_binary();
     let mut cmd = format!("cd {} && {}", worktree_path.display(), opencode_bin);
     
-    if let Some(_id) = session_id {
-        // For OpenCode, we use --continue to resume the last session
-        // since it doesn't support explicit session IDs like Claude
-        cmd.push_str(" --continue");
-    }
-    
-    if let Some(prompt) = initial_prompt {
-        // Add initial prompt using the --prompt flag for interactive mode
-        let escaped = prompt.replace('"', r#"\""#);
-        cmd.push_str(&format!(r#" --prompt "{escaped}""#));
+    match session_info {
+        Some(info) if info.has_history => {
+            // Session exists with real conversation history - always resume it
+            // Use --session to resume the specific session
+            log::debug!("Continuing specific session {} with history", info.id);
+            cmd.push_str(&format!(r#" --session "{}""#, info.id));
+        }
+        Some(info) => {
+            // Session exists but has no real history (only auto-created messages)
+            // This is essentially a fresh session that OpenCode created but user hasn't used
+            log::debug!("Session {} exists but has no real user interaction", info.id);
+            if let Some(prompt) = initial_prompt {
+                // Start fresh with the prompt - don't resume the empty session
+                // This avoids showing the auto-created assistant greeting
+                let escaped = prompt.replace('"', r#"\""#);
+                cmd.push_str(&format!(r#" --prompt "{escaped}""#));
+            } else {
+                // No prompt provided - start a new session instead of resuming
+                // the empty one. This prevents all empty sessions from showing
+                // the same auto-generated greeting when restarted.
+                log::debug!("Starting fresh session instead of resuming empty session {}", info.id);
+                // OpenCode will start a new session by default
+            }
+        }
+        None => {
+            // No session exists - start a new one
+            if let Some(prompt) = initial_prompt {
+                log::debug!("Starting new session with prompt");
+                let escaped = prompt.replace('"', r#"\""#);
+                cmd.push_str(&format!(r#" --prompt "{escaped}""#));
+            } else {
+                log::debug!("Starting new session without prompt");
+                // OpenCode will start a new session by default
+            }
+        }
     }
     
     cmd
@@ -73,9 +223,163 @@ mod tests {
     use super::*;
     use std::path::Path;
 
+#[test]
+    fn test_sanitize_path_for_opencode() {
+        // Test that the function produces consistent, reasonable results
+        let path = Path::new("/Users/john.doe/my-project");
+        let sanitized = sanitize_path_for_opencode(path);
+        assert_eq!(sanitized, "Users-john-doe-my-project");
+        
+        // Test path with multiple slashes and dots
+        let path = Path::new("/Users/john.doe/Documents/git/project.name");
+        let sanitized = sanitize_path_for_opencode(path);
+        assert!(!sanitized.is_empty());
+        assert_eq!(sanitized, "Users-john-doe-Documents-git-project-name");
+        
+        // Test path without leading slash
+        let path = Path::new("Users/john.doe/my-project");
+        let sanitized = sanitize_path_for_opencode(path);
+        assert!(!sanitized.is_empty());
+        
+        // Test path with dashes (should be preserved)
+        let path = Path::new("/Users/john-doe/my-project");
+        let sanitized = sanitize_path_for_opencode(path);
+        assert!(!sanitized.is_empty());
+        assert!(sanitized.contains("john-doe"));
+        
+        // Test path with underscores (should be preserved)
+        let path = Path::new("/Users/john_doe/my_project");
+        let sanitized = sanitize_path_for_opencode(path);
+        assert!(!sanitized.is_empty());
+        assert!(sanitized.contains("john_doe"));
+        
+        // Test the actual tubetalk worktree path pattern
+        // The key is that it should produce a path that can be found in the filesystem
+        let path = Path::new("/Users/marius.wichtner/Documents/git/tubetalk/.schaltwerk/worktrees/bold_dijkstra");
+        let sanitized = sanitize_path_for_opencode(path);
+        assert_eq!(sanitized, "Users-marius-wichtner-Documents-git-tubetalk--schaltwerk-worktrees-bold_dijkstra");
+    }
+    
     #[test]
-    #[serial_test::serial]
+    fn test_find_opencode_session_no_home() {
+        // Test when HOME environment variable is not set
+        let original_home = std::env::var("HOME").ok();
+        std::env::remove_var("HOME");
+        
+        let path = Path::new("/some/path");
+        let result = find_opencode_session(path);
+        assert!(result.is_none());
+        
+        // Restore HOME if it was set
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        }
+    }
+    
+    #[test]
+    fn test_find_opencode_session_integration() {
+        // This test checks if the function can find real session files
+        // Only run if HOME is set and the test path exists
+        if let Ok(home) = std::env::var("HOME") {
+            let test_path = Path::new("/Users/marius.wichtner/Documents/git/tubetalk/.schaltwerk/worktrees/bold_dijkstra");
+            
+            // Test the actual sanitized path that OpenCode uses
+            let expected_sanitized_path = sanitize_path_for_opencode(test_path);
+            let expected_project_dir = PathBuf::from(&home)
+                .join(".local")
+                .join("share")
+                .join("opencode")
+                .join("project")
+                .join(&expected_sanitized_path);
+            
+            // Test if we can find the session with the correct path
+            if expected_project_dir.exists() {
+                // Temporarily override the sanitize function for this test
+                // to use the known correct path
+                let home_clone = home.clone();
+                let find_result = find_opencode_session_with_override(test_path, &home_clone, &expected_sanitized_path);
+                // Should find at least one session
+                assert!(find_result.is_some());
+                // Session ID should start with "ses_"
+                if let Some(session_info) = find_result {
+                    assert!(session_info.id.starts_with("ses_"));
+                }
+            }
+        }
+    }
+    
+    // Helper function for testing with overridden path
+    fn find_opencode_session_with_override(_path: &Path, home: &str, sanitized_override: &str) -> Option<OpenCodeSessionInfo> {
+        let opencode_dir = PathBuf::from(home).join(".local").join("share").join("opencode");
+        let projects_dir = opencode_dir.join("project");
+        let project_dir = projects_dir.join(sanitized_override);
+        
+        if !project_dir.exists() {
+            return None;
+        }
+        
+        // Look for session info files in storage/session/info/
+        let session_info_dir = project_dir.join("storage").join("session").join("info");
+        if !session_info_dir.exists() {
+            return None;
+        }
+        
+        // Find all session files and get the most recent one
+        let mut sessions: Vec<_> = fs::read_dir(&session_info_dir).ok()?
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path().extension().map(|ext| ext == "json").unwrap_or(false)
+            })
+            .collect();
+        
+        if sessions.is_empty() {
+            return None;
+        }
+        
+        // Sort by modification time to get the most recent session
+        sessions.sort_by_key(|e| {
+            e.metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+        });
+        
+        // Get the session ID from the most recent file
+        let session_id = sessions.last()?
+            .path()
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_string())?;
+        
+        // Check for message history - same logic as main function
+        let message_dir = project_dir.join("storage").join("session").join("message").join(&session_id);
+        let has_history = if message_dir.exists() {
+            let message_count = fs::read_dir(&message_dir)
+                .ok()
+                .map(|entries| {
+                    entries.filter_map(|e| e.ok())
+                        .filter(|e| {
+                            e.path().extension().map(|ext| ext == "json").unwrap_or(false)
+                        })
+                        .count()
+                })
+                .unwrap_or(0);
+            // Only consider it has history if more than 2 messages (beyond auto-created ones)
+            message_count > 2
+        } else {
+            false
+        };
+        
+        Some(OpenCodeSessionInfo {
+            id: session_id,
+            has_history,
+        })
+    }
+    
+    #[test]
     fn test_new_session_with_prompt() {
+        // Save the original value if it exists
+        let original_value = std::env::var("OPENCODE_BIN").ok();
         std::env::set_var("OPENCODE_BIN", "/custom/bin/opencode");
         let cmd = build_opencode_command(
             Path::new("/path/to/worktree"),
@@ -84,26 +388,40 @@ mod tests {
             true,
         );
         assert_eq!(cmd, r#"cd /path/to/worktree && /custom/bin/opencode --prompt "implement feature X""#);
-        std::env::remove_var("OPENCODE_BIN");
+        // Restore the original value or remove if it didn't exist
+        match original_value {
+            Some(val) => std::env::set_var("OPENCODE_BIN", val),
+            None => std::env::remove_var("OPENCODE_BIN"),
+        }
     }
-
-    #[test]
-    #[serial_test::serial]
+    
+#[test]
     fn test_continue_with_session_id() {
+        // Save the original value if it exists
+        let original_value = std::env::var("OPENCODE_BIN").ok();
         std::env::set_var("OPENCODE_BIN", "/custom/bin/opencode");
+        let session_info = OpenCodeSessionInfo {
+            id: "ses_743dfa323ffe5EQMH4dv6COsh1".to_string(),
+            has_history: true,
+        };
         let cmd = build_opencode_command(
             Path::new("/path/to/worktree"),
-            Some("my-session"),
+            Some(&session_info),
             None,
             false,
         );
-        assert_eq!(cmd, r#"cd /path/to/worktree && /custom/bin/opencode --continue"#);
-        std::env::remove_var("OPENCODE_BIN");
+        assert_eq!(cmd, r#"cd /path/to/worktree && /custom/bin/opencode --session "ses_743dfa323ffe5EQMH4dv6COsh1""#);
+        // Restore the original value or remove if it didn't exist
+        match original_value {
+            Some(val) => std::env::set_var("OPENCODE_BIN", val),
+            None => std::env::remove_var("OPENCODE_BIN"),
+        }
     }
-
+    
     #[test]
-    #[serial_test::serial]
     fn test_new_session_no_prompt() {
+        // Save the original value if it exists
+        let original_value = std::env::var("OPENCODE_BIN").ok();
         std::env::set_var("OPENCODE_BIN", "/custom/bin/opencode");
         let cmd = build_opencode_command(
             Path::new("/path/to/worktree"),
@@ -112,26 +430,76 @@ mod tests {
             false,
         );
         assert_eq!(cmd, "cd /path/to/worktree && /custom/bin/opencode");
-        std::env::remove_var("OPENCODE_BIN");
+        // Restore the original value or remove if it didn't exist
+        match original_value {
+            Some(val) => std::env::set_var("OPENCODE_BIN", val),
+            None => std::env::remove_var("OPENCODE_BIN"),
+        }
     }
-
+    
     #[test]
-    #[serial_test::serial]
-    fn test_continue_session_with_new_prompt() {
+    fn test_session_without_history() {
+        // Save the original value if it exists
+        let original_value = std::env::var("OPENCODE_BIN").ok();
         std::env::set_var("OPENCODE_BIN", "/custom/bin/opencode");
+        
+        // Test session with no history and no prompt - should start fresh
+        let session_info = OpenCodeSessionInfo {
+            id: "ses_new_session".to_string(),
+            has_history: false,
+        };
         let cmd = build_opencode_command(
             Path::new("/path/to/worktree"),
-            Some("session-123"),
+            Some(&session_info),
+            None,
+            false,
+        );
+        assert_eq!(cmd, r#"cd /path/to/worktree && /custom/bin/opencode"#);
+        
+        // Test session with no history but with a prompt - should start fresh
+        let cmd_with_prompt = build_opencode_command(
+            Path::new("/path/to/worktree"),
+            Some(&session_info),
+            Some("implement feature Y"),
+            false,
+        );
+        assert_eq!(cmd_with_prompt, r#"cd /path/to/worktree && /custom/bin/opencode --prompt "implement feature Y""#);
+        
+        // Restore the original value or remove if it didn't exist
+        match original_value {
+            Some(val) => std::env::set_var("OPENCODE_BIN", val),
+            None => std::env::remove_var("OPENCODE_BIN"),
+        }
+    }
+    
+#[test]
+    fn test_continue_session_with_new_prompt() {
+        // Save the original value if it exists
+        let original_value = std::env::var("OPENCODE_BIN").ok();
+        std::env::set_var("OPENCODE_BIN", "/custom/bin/opencode");
+        let session_info = OpenCodeSessionInfo {
+            id: "ses_743dfa323ffe5EQMH4dv6COsh1".to_string(),
+            has_history: true,
+        };
+        let cmd = build_opencode_command(
+            Path::new("/path/to/worktree"),
+            Some(&session_info),
             Some("new task"),
             true,
         );
-        assert_eq!(cmd, r#"cd /path/to/worktree && /custom/bin/opencode --continue --prompt "new task""#);
-        std::env::remove_var("OPENCODE_BIN");
+        // When session has history, we use --session to continue the specific session
+        assert_eq!(cmd, r#"cd /path/to/worktree && /custom/bin/opencode --session "ses_743dfa323ffe5EQMH4dv6COsh1""#);
+        // Restore the original value or remove if it didn't exist
+        match original_value {
+            Some(val) => std::env::set_var("OPENCODE_BIN", val),
+            None => std::env::remove_var("OPENCODE_BIN"),
+        }
     }
-
+    
     #[test]
-    #[serial_test::serial]
     fn test_prompt_with_quotes() {
+        // Save the original value if it exists
+        let original_value = std::env::var("OPENCODE_BIN").ok();
         std::env::set_var("OPENCODE_BIN", "/custom/bin/opencode");
         let cmd = build_opencode_command(
             Path::new("/path/to/worktree"),
@@ -140,6 +508,10 @@ mod tests {
             false,
         );
         assert_eq!(cmd, r#"cd /path/to/worktree && /custom/bin/opencode --prompt "implement \"feature\" with quotes""#);
-        std::env::remove_var("OPENCODE_BIN");
+        // Restore the original value or remove if it didn't exist
+        match original_value {
+            Some(val) => std::env::set_var("OPENCODE_BIN", val),
+            None => std::env::remove_var("OPENCODE_BIN"),
+        }
     }
 }

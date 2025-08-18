@@ -563,19 +563,36 @@ impl SessionManager {
                 )
             }
             "opencode" => {
-                let session_id = crate::para_core::opencode::find_opencode_session(&session.worktree_path);
-                let prompt_to_use = if session_id.is_none() && !has_session_been_prompted(&session.worktree_path) {
-                    session.initial_prompt.as_ref().map(|p| {
-                        mark_session_prompted(&session.worktree_path);
-                        p.as_str()
-                    })
+                let session_info = crate::para_core::opencode::find_opencode_session(&session.worktree_path);
+                // Only pass initial prompt if:
+                // 1. No session exists yet, OR
+                // 2. Session exists but has no history (empty session)
+                // AND we haven't prompted this session before
+                let prompt_to_use = if !has_session_been_prompted(&session.worktree_path) {
+                    match &session_info {
+                        None => {
+                            // No session exists - can use initial prompt
+                            session.initial_prompt.as_ref().map(|p| {
+                                mark_session_prompted(&session.worktree_path);
+                                p.as_str()
+                            })
+                        }
+                        Some(info) if !info.has_history => {
+                            // Session exists but has no history - can use initial prompt
+                            session.initial_prompt.as_ref().map(|p| {
+                                mark_session_prompted(&session.worktree_path);
+                                p.as_str()
+                            })
+                        }
+                        _ => None // Session has history - don't pass prompt
+                    }
                 } else {
                     None
                 };
                 
                 crate::para_core::opencode::build_opencode_command(
                     &session.worktree_path,
-                    session_id.as_deref(),
+                    session_info.as_ref(),
                     prompt_to_use,
                     skip_permissions,
                 )
@@ -636,10 +653,10 @@ impl SessionManager {
                 )
             }
             "opencode" => {
-                let session_id = crate::para_core::opencode::find_opencode_session(&self.repo_path);
+                let session_info = crate::para_core::opencode::find_opencode_session(&self.repo_path);
                 crate::para_core::opencode::build_opencode_command(
                     &self.repo_path,
-                    session_id.as_deref(),
+                    session_info.as_ref(),
                     None,
                     skip_permissions,
                 )
