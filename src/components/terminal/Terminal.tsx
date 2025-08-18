@@ -605,19 +605,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({ terminalId,
     return (
         <div className={`h-full w-full ${className}`}>
             <div ref={termRef} className="h-full w-full" />
-            {/* Search icon that appears when terminal is focused */}
-            {/* Search icon that appears when search UI is not active */}
-            {!isSearchVisible && (
-                <button
-                    onClick={() => setIsSearchVisible(true)}
-                    className="absolute top-2 right-2 text-slate-400 hover:text-slate-200 z-10"
-                    title="Search in terminal (Cmd+F)"
-                >
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path d="M14 14L10 10M10 10L10 10C8.34315 10 7 8.65685 7 7C7 5.34315 8.34315 4 10 4C11.6569 4 13 5.34315 13 7C13 8.65685 11.6569 10 10 10Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    </svg>
-                </button>
-            )}
+            {/* Search UI opens via keyboard shortcut only (Cmd/Ctrl+F) */}
             {isSearchVisible && (
                 <div className="absolute top-2 right-2 flex items-center bg-panel border border-slate-700 rounded px-2 py-1 z-10">
                     <input
