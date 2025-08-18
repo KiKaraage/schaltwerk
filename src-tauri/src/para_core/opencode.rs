@@ -397,11 +397,10 @@ mod tests {
     
 #[test]
     fn test_continue_with_session_id() {
-        // Save and clear any existing OPENCODE_BIN to ensure clean test environment
+        // Save the original value if it exists
         let original_value = std::env::var("OPENCODE_BIN").ok();
-        std::env::remove_var("OPENCODE_BIN");
         
-        // Now set our test value
+        // Set our test value directly without clearing first
         std::env::set_var("OPENCODE_BIN", "/custom/bin/opencode");
         
         let session_info = OpenCodeSessionInfo {
