@@ -7,7 +7,7 @@ interface Props {
     onClose: () => void
 }
 
-type AgentType = 'claude' | 'cursor' | 'opencode'
+type AgentType = 'claude' | 'cursor' | 'opencode' | 'gemini'
 type EnvVars = Record<string, string>
 type SettingsCategory = 'appearance' | 'keyboard' | 'environment' | 'projects'
 
@@ -70,7 +70,8 @@ export function SettingsModal({ open, onClose }: Props) {
     const [envVars, setEnvVars] = useState<Record<AgentType, Array<{key: string, value: string}>>>({
         claude: [],
         cursor: [],
-        opencode: []
+        opencode: [],
+        gemini: []
     })
     const [loading, setLoading] = useState(false)
     const [saving, setSaving] = useState(false)
@@ -96,11 +97,12 @@ export function SettingsModal({ open, onClose }: Props) {
     const loadEnvVars = async () => {
         setLoading(true)
         try {
-            const agents: AgentType[] = ['claude', 'cursor', 'opencode']
+            const agents: AgentType[] = ['claude', 'cursor', 'opencode', 'gemini']
             const loadedVars: Record<AgentType, Array<{key: string, value: string}>> = {
                 claude: [],
                 cursor: [],
-                opencode: []
+                opencode: [],
+                gemini: []
             }
 
             for (const agent of agents) {
@@ -120,7 +122,7 @@ export function SettingsModal({ open, onClose }: Props) {
         setSaving(true)
         try {
             // Save environment variables
-            const agents: AgentType[] = ['claude', 'cursor', 'opencode']
+            const agents: AgentType[] = ['claude', 'cursor', 'opencode', 'gemini']
             
             for (const agent of agents) {
                 const vars: EnvVars = {}
@@ -187,7 +189,7 @@ export function SettingsModal({ open, onClose }: Props) {
         <div className="flex flex-col h-full">
             <div className="border-b border-slate-800">
                 <div className="flex">
-                    {(['claude', 'cursor', 'opencode'] as AgentType[]).map(agent => (
+                    {(['claude', 'cursor', 'opencode', 'gemini'] as AgentType[]).map(agent => (
                         <button
                             key={agent}
                             onClick={() => setActiveAgentTab(agent)}
@@ -280,6 +282,18 @@ export function SettingsModal({ open, onClose }: Props) {
                                 <ul className="mt-2 space-y-1 list-disc list-inside">
                                     <li>OPENAI_API_KEY - Your OpenAI API key</li>
                                     <li>OPENCODE_MODEL - Model to use</li>
+                                </ul>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeAgentTab === 'gemini' && (
+                        <div className="mt-6 p-3 bg-slate-800/50 border border-slate-700 rounded">
+                            <div className="text-xs text-slate-400">
+                                <strong>Common Gemini variables:</strong>
+                                <ul className="mt-2 space-y-1 list-disc list-inside">
+                                    <li>GOOGLE_API_KEY - Your Google AI Studio API key</li>
+                                    <li>GEMINI_MODEL - Model to use (e.g., gemini-1.5-pro)</li>
                                 </ul>
                             </div>
                         </div>
