@@ -64,15 +64,27 @@ export function TerminalGrid() {
         }
     }
     
-    // Listen for terminal reset events
+    // Listen for terminal reset events and focus terminal events
     useEffect(() => {
         const handleTerminalReset = () => {
             setTerminalKey(prev => prev + 1)
         }
         
+        const handleFocusTerminal = () => {
+            if (isBottomCollapsed) {
+                const expandedSize = lastExpandedBottomPercent || 35
+                setSizes([100 - expandedSize, expandedSize])
+                setIsBottomCollapsed(false)
+            }
+        }
+        
         window.addEventListener('schaltwerk:reset-terminals', handleTerminalReset)
-        return () => window.removeEventListener('schaltwerk:reset-terminals', handleTerminalReset)
-    }, [])
+        window.addEventListener('schaltwerk:focus-terminal', handleFocusTerminal)
+        return () => {
+            window.removeEventListener('schaltwerk:reset-terminals', handleTerminalReset)
+            window.removeEventListener('schaltwerk:focus-terminal', handleFocusTerminal)
+        }
+    }, [isBottomCollapsed, lastExpandedBottomPercent])
 
     // Focus appropriate terminal when selection changes
     useEffect(() => {

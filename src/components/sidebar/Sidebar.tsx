@@ -316,6 +316,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             const sessionKey = selection.kind === 'orchestrator' ? 'orchestrator' : (selection.payload || 'unknown')
             setFocusForSession(sessionKey, 'terminal')
             setCurrentFocus('terminal')
+            window.dispatchEvent(new CustomEvent('schaltwerk:focus-terminal'))
         },
         isDiffViewerOpen
     })
