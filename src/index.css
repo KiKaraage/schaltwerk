@@ -38,6 +38,16 @@ body,
   color: inherit;
 }
 
+/* Improve rasterization of box-drawing characters in ASCII logo */
+.ascii-logo {
+  font-family: Menlo, Monaco, Consolas, "Liberation Mono", monospace !important;
+  font-variant-ligatures: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  line-height: 1.18; /* slightly more spacing to avoid descender clipping */
+}
+
 .select-text ::-moz-selection {
   background-color: rgba(59, 130, 246, 0.5);
   color: inherit;

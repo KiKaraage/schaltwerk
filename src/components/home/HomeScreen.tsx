@@ -122,9 +122,6 @@ export function HomeScreen({ onOpenProject }: HomeScreenProps) {
           <div className="inline-flex items-center gap-3">
             <AsciiBuilderLogo colorClassName="text-cyan-400" />
           </div>
-          <p className="text-slate-400 mt-4 text-sm">
-            Visual interface for managing agentic CLI sessions
-          </p>
         </div>
 
         {error && (

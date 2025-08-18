@@ -99,7 +99,8 @@ describe('HomeScreen', () => {
 
     expect(await screen.findByText(/not a git repository/i)).toBeInTheDocument()
     // should not navigate
-    expect(screen.queryByText(/visual interface for managing/i)).toBeInTheDocument()
+    // Subtitle removed from HomeScreen; ensure page still renders core CTA
+    expect(screen.getByRole('button', { name: /open repository/i })).toBeInTheDocument()
   })
 
   it('keyboard: pressing Enter on focused open button opens dialog', async () => {

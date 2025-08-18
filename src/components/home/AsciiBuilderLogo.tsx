@@ -135,7 +135,8 @@ export function AsciiBuilderLogo({
     }
 
     const fov = 42 // pseudo focal length; higher = less perspective
-    const idleWobble = true
+    // Disable idle wobble to prevent stray dots below the logo
+    const idleWobble = false
 
     // Reusable buffers
     const depth = new Float32Array(width * height)
@@ -231,7 +232,7 @@ export function AsciiBuilderLogo({
   return (
     <pre
       ref={preRef}
-      className={`${colorClassName} text-[10px] sm:text-xs md:text-sm lg:text-base xl:text-lg 2xl:text-xl font-mono leading-[1.05] select-none`}
+      className={`${colorClassName} ascii-logo text-[10px] sm:text-xs md:text-sm lg:text-base xl:text-lg 2xl:text-xl font-mono select-none`}
       aria-label="SCHALTWERK animated logo"
     />
   )
