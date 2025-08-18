@@ -10,6 +10,22 @@ Schaltwerk is a Tauri-based desktop application that provides a visual interface
 - **Diff Viewer**: Integrated diff viewing with review capabilities
 - **Keyboard Navigation**: Comprehensive keyboard shortcuts for efficient workflow
 
+## Installation
+
+### Via Homebrew (Internal Users)
+```bash
+# One-time setup
+brew tap 2mawi2/tap https://github.com/2mawi2/homebrew-tap
+
+# Install
+brew install --cask schaltwerk
+
+# Launch
+open -a Schaltwerk
+```
+
+First launch requires security approval (right-click → Open).
+
 ## Quick Start
 
 ### Development
@@ -57,6 +73,18 @@ See the [full documentation](./docs/) for detailed guides and references.
 - `src-tauri/src/` - Rust application logic
 - Terminal PTY management
 - Process lifecycle handling
+
+## Releasing New Versions
+
+```bash
+just release        # Patch release (0.1.0 -> 0.1.1)
+just release minor  # Minor release (0.1.0 -> 0.2.0)
+just release major  # Major release (0.1.0 -> 1.0.0)
+just release 1.2.3  # Specific version
+```
+
+GitHub Actions automatically builds and updates Homebrew tap.
+Users update via: `brew upgrade --cask schaltwerk`
 
 ## Development Setup
 

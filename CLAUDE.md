@@ -396,6 +396,59 @@ MCP server notifies Rust backend via webhooks:
 
 When adding new keyboard shortcuts to the application, ensure they are also documented in the SettingsModal (`src/components/modals/SettingsModal.tsx`) to keep the keyboard shortcuts reference up-to-date.
 
+## Release Process
+
+### Creating a New Release
+
+To release a new version of Schaltwerk:
+
+```bash
+# Automatic patch release (0.1.0 -> 0.1.1)
+just release
+
+# Minor release (0.1.0 -> 0.2.0)
+just release minor
+
+# Major release (0.1.0 -> 1.0.0)
+just release major
+
+# Specific version
+just release 1.2.3
+```
+
+This command automatically:
+- Updates version in `tauri.conf.json` and `Cargo.toml`
+- Commits the version bump
+- Creates and pushes a git tag
+- Triggers GitHub Actions to build and distribute
+
+3. **GitHub Actions Automation**
+   The release workflow will automatically:
+   - Build universal macOS binary (Intel + ARM)
+   - Create ad-hoc signed DMG
+   - Create GitHub release with artifacts
+   - Update `2mawi2/homebrew-tap` repository
+
+4. **Manual Trigger (Alternative)**
+   ```bash
+   # Go to Actions tab on GitHub
+   # Select "Release" workflow
+   # Click "Run workflow"
+   # Enter version (e.g., 0.1.0)
+   ```
+
+### Prerequisites for Releases
+- **HOMEBREW_TAP_TOKEN**: GitHub secret with repo access to `2mawi2/homebrew-tap`
+- **Repository Access**: Write permissions to both repos
+
+### Distribution
+Users install via Homebrew:
+```bash
+brew tap 2mawi2/tap https://github.com/2mawi2/homebrew-tap
+brew install --cask schaltwerk
+open -a Schaltwerk
+```
+
 ### Testing MCP Changes
 ```bash
 # Test MCP draft creation

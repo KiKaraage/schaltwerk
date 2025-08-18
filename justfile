@@ -1,5 +1,74 @@
 # Para UI Development Commands
 
+# Release a new version (automatically bumps version, commits, tags, and pushes)
+release version="patch":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    echo "🚀 Starting release process..."
+    
+    # Get current version from tauri.conf.json
+    CURRENT_VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
+    echo "📌 Current version: $CURRENT_VERSION"
+    
+    # Calculate new version based on argument (patch, minor, major, or specific version)
+    if [[ "{{version}}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        NEW_VERSION="{{version}}"
+    else
+        IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+        case "{{version}}" in
+            major)
+                NEW_VERSION="$((MAJOR + 1)).0.0"
+                ;;
+            minor)
+                NEW_VERSION="$MAJOR.$((MINOR + 1)).0"
+                ;;
+            patch|*)
+                NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+                ;;
+        esac
+    fi
+    
+    echo "📦 New version: $NEW_VERSION"
+    
+    # Update version in tauri.conf.json
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s/\"version\": \"$CURRENT_VERSION\"/\"version\": \"$NEW_VERSION\"/" src-tauri/tauri.conf.json
+    else
+        sed -i "s/\"version\": \"$CURRENT_VERSION\"/\"version\": \"$NEW_VERSION\"/" src-tauri/tauri.conf.json
+    fi
+    
+    # Update version in Cargo.toml
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "s/^version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" src-tauri/Cargo.toml
+    else
+        sed -i "s/^version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" src-tauri/Cargo.toml
+    fi
+    
+    # Update Cargo.lock
+    cd src-tauri && cargo update -p schaltwerk && cd ..
+    
+    # Commit version bump
+    git add src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+    git commit -m "chore: bump version to $NEW_VERSION"
+    
+    # Create and push tag
+    git tag "v$NEW_VERSION"
+    
+    echo "📤 Pushing to remote..."
+    git push origin HEAD
+    git push origin "v$NEW_VERSION"
+    
+    echo "✅ Release v$NEW_VERSION created successfully!"
+    echo ""
+    echo "🔄 GitHub Actions will now:"
+    echo "  • Build universal macOS binary"
+    echo "  • Create GitHub release"
+    echo "  • Update Homebrew tap"
+    echo ""
+    echo "📊 Monitor progress at:"
+    echo "  https://github.com/2mawi2/para-ui/actions"
+
 # Install the application to ~/Applications
 install:
     #!/usr/bin/env bash

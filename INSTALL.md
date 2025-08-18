@@ -6,13 +6,13 @@ For users with access to the private repository:
 
 ```bash
 # 1. Add the private Homebrew tap (one-time setup)
-brew tap 2mawi2/tap https://github.com/2mawi2/homebrew-tap.git
+brew tap 2mawi2/tap https://github.com/2mawi2/homebrew-tap
 
 # 2. Install Schaltwerk
-brew install schaltwerk
+brew install --cask schaltwerk
 
 # 3. Launch the application
-schaltwerk
+open -a Schaltwerk
 ```
 
 ## First Launch Setup
