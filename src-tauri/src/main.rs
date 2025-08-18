@@ -26,6 +26,11 @@ use tokio::sync::OnceCell;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 
+// Import database traits for method access
+use crate::para_core::db_sessions::SessionMethods;
+use crate::para_core::db_app_config::AppConfigMethods;
+use crate::para_core::db_project_config::ProjectConfigMethods;
+
 static PROJECT_MANAGER: OnceCell<Arc<ProjectManager>> = OnceCell::const_new();
 static SETTINGS_MANAGER: OnceCell<Arc<Mutex<SettingsManager>>> = OnceCell::const_new();
 

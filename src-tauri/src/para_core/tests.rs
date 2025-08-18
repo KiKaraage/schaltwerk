@@ -11,6 +11,14 @@ use std::process::Command;
 #[cfg(test)]
 use anyhow::Result;
 
+// Import database traits for method access in tests
+#[cfg(test)]
+use crate::para_core::db_sessions::SessionMethods;
+#[cfg(test)]
+use crate::para_core::db_git_stats::GitStatsMethods;
+#[cfg(test)]
+use crate::para_core::db_project_config::ProjectConfigMethods;
+
 #[cfg(test)]
 struct TestEnvironment {
         _repo_dir: TempDir,  // Keep alive to prevent cleanup

@@ -7,6 +7,10 @@ use chrono::Utc;
 use rand::Rng;
 use crate::para_core::{
     database::Database,
+    db_sessions::SessionMethods,
+    db_git_stats::GitStatsMethods,
+    db_app_config::AppConfigMethods,
+    db_project_config::ProjectConfigMethods,
     git,
     types::{Session, SessionStatus, SessionState, SessionInfo, SessionStatusType, SessionType, EnrichedSession, DiffStats},
 };

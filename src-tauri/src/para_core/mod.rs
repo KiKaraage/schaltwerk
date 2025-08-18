@@ -1,4 +1,9 @@
 pub mod database;
+pub mod db_schema;
+pub mod db_sessions;
+pub mod db_git_stats;
+pub mod db_app_config;
+pub mod db_project_config;
 pub mod git;
 // pub mod mcp;  // Temporarily disabled - will be used for MCP server later
 pub mod session;

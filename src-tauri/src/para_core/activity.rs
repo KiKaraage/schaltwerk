@@ -7,6 +7,8 @@ use chrono::{Utc, DateTime, TimeZone};
 use anyhow::Result;
 use crate::para_core::{
     database::Database,
+    db_sessions::SessionMethods,
+    db_git_stats::GitStatsMethods,
     git,
 };
 use tauri::{AppHandle, Emitter};

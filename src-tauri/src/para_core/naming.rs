@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use crate::para_core::{Database, git};
+use crate::para_core::{Database, db_sessions::SessionMethods, git};
 use std::path::Path;
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
