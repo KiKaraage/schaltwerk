@@ -9,7 +9,7 @@ interface Props {
 
 type AgentType = 'claude' | 'cursor' | 'opencode'
 type EnvVars = Record<string, string>
-type SettingsCategory = 'appearance' | 'environment' | 'projects'
+type SettingsCategory = 'appearance' | 'keyboard' | 'environment' | 'projects'
 
 interface CategoryConfig {
     id: SettingsCategory
@@ -24,6 +24,15 @@ const CATEGORIES: CategoryConfig[] = [
         icon: (
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+            </svg>
+        )
+    },
+    {
+        id: 'keyboard',
+        label: 'Keyboard Shortcuts',
+        icon: (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1h-3a1 1 0 01-1-1v-3a1 1 0 011-1h1a2 2 0 100-4H7a1 1 0 01-1-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
             </svg>
         )
     },
@@ -416,10 +425,99 @@ fi`}
         </div>
     )
 
+    const renderKeyboardShortcuts = () => (
+        <div className="flex flex-col h-full">
+            <div className="flex-1 overflow-y-auto p-6">
+                <div className="space-y-6">
+                    <div>
+                        <h3 className="text-sm font-medium text-slate-200 mb-4">Navigation</h3>
+                        <div className="bg-slate-800/50 border border-slate-700 rounded p-4">
+                            <ul className="space-y-2 text-sm">
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">Switch to Orchestrator</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + 1</kbd>
+                                </li>
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">Switch to Session 1-8</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + 2-9</kbd>
+                                </li>
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">Previous Session</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + ↑</kbd>
+                                </li>
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">Next Session</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + ↓</kbd>
+                                </li>
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">Focus Sidebar</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + ←</kbd>
+                                </li>
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">Focus Claude</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + →</kbd>
+                                </li>
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">Focus Claude Session</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + T</kbd>
+                                </li>
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">Focus Terminal</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + /</kbd>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h3 className="text-sm font-medium text-slate-200 mb-4">Session Management</h3>
+                        <div className="bg-slate-800/50 border border-slate-700 rounded p-4">
+                            <ul className="space-y-2 text-sm">
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">New Session</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + N</kbd>
+                                </li>
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">New Draft</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + Shift + N</kbd>
+                                </li>
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">Cancel Session</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + D</kbd>
+                                </li>
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">Force Cancel Session</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + Shift + D</kbd>
+                                </li>
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">Mark Ready for Review</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + R</kbd>
+                                </li>
+                                <li className="flex justify-between items-center">
+                                    <span className="text-slate-300">Open Diff Viewer</span>
+                                    <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Cmd/Ctrl + G</kbd>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div className="p-4 bg-slate-800/30 border border-slate-700 rounded">
+                        <div className="text-xs text-slate-400">
+                            <p className="mb-2">Note: Use <kbd className="px-1 py-0.5 bg-slate-700 rounded text-xs">Ctrl</kbd> instead of <kbd className="px-1 py-0.5 bg-slate-700 rounded text-xs">Cmd</kbd> on Windows/Linux systems.</p>
+                            <p>Keyboard shortcuts work globally throughout the application and can be used to efficiently navigate between sessions and manage your workflow.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+
     const renderSettingsContent = () => {
         switch (activeCategory) {
             case 'appearance':
                 return renderAppearanceSettings()
+            case 'keyboard':
+                return renderKeyboardShortcuts()
             case 'environment':
                 return renderEnvironmentSettings()
             case 'projects':

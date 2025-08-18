@@ -392,6 +392,10 @@ MCP server notifies Rust backend via webhooks:
 - `POST /webhook/session-added` - When session becomes active
 - `POST /webhook/session-removed` - When session is deleted
 
+## Keyboard Shortcuts Documentation
+
+When adding new keyboard shortcuts to the application, ensure they are also documented in the SettingsModal (`src/components/modals/SettingsModal.tsx`) to keep the keyboard shortcuts reference up-to-date.
+
 ### Testing MCP Changes
 ```bash
 # Test MCP draft creation
