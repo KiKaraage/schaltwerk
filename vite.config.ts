@@ -54,9 +54,6 @@ export default defineConfig(({ command }) => ({
           if (id.includes('highlight.js')) {
             return 'highlight-vendor';
           }
-          if (id.includes('react-diff-viewer')) {
-            return 'diff-vendor';
-          }
           if (id.includes('clsx') || id.includes('react-icons') || id.includes('react-split')) {
             return 'ui-vendor';
           }
@@ -75,7 +72,7 @@ export default defineConfig(({ command }) => ({
     target: 'es2020',
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'xterm', 'xterm-addon-fit', '@tauri-apps/api', 'clsx', 'highlight.js'],
+    include: ['react', 'react-dom', 'xterm', '@tauri-apps/api', 'clsx', 'highlight.js'],
     esbuildOptions: {
       target: 'es2020',
     },

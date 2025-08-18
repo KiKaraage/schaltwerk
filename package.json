@@ -25,12 +25,9 @@
     "check": "npm run test"
   },
   "dependencies": {
-    "@tailwindcss/typography": "^0.5.16",
     "@tauri-apps/api": "^2.7.0",
     "@tauri-apps/plugin-dialog": "^2.3.2",
-    "@tauri-apps/plugin-opener": "^2.4.0",
     "@types/diff": "^7.0.2",
-    "@types/highlight.js": "^9.12.4",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
     "@xterm/addon-fit": "^0.10.0",
@@ -42,16 +39,13 @@
     "highlight.js": "^11.11.1",
     "postcss": "^8.5.6",
     "react": "^19.1.1",
-    "react-diff-viewer-continued": "^4.0.6",
     "react-dom": "^19.1.1",
     "react-icons": "^5.5.0",
     "react-markdown": "^10.1.0",
     "react-split": "^2.0.14",
     "remark-gfm": "^4.0.1",
     "tailwindcss": "^3.4.17",
-    "xterm": "^5.3.0",
-    "xterm-addon-fit": "^0.8.0",
-    "xterm-addon-search": "^0.13.0"
+    "xterm": "^5.3.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.7.1",
