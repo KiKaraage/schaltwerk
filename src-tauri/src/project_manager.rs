@@ -93,6 +93,12 @@ pub struct ProjectManager {
     current_project: Arc<RwLock<Option<PathBuf>>>,
 }
 
+impl Default for ProjectManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProjectManager {
     pub fn new() -> Self {
         Self {

@@ -11,6 +11,12 @@ pub struct TerminalManager {
     app_handle: Arc<RwLock<Option<AppHandle>>>,
 }
 
+impl Default for TerminalManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TerminalManager {
     pub fn new() -> Self {
         let backend = Arc::new(LocalPtyAdapter::new());

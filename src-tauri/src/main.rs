@@ -18,6 +18,7 @@ mod projects;
 mod project_manager;
 mod settings;
 mod mcp_api;
+mod commands;
 
 use std::sync::Arc;
 use project_manager::ProjectManager;
@@ -26,25 +27,23 @@ use tokio::sync::OnceCell;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 
-// Import database traits for method access
-use crate::para_core::db_sessions::SessionMethods;
-use crate::para_core::db_app_config::AppConfigMethods;
-use crate::para_core::db_project_config::ProjectConfigMethods;
+// Import all commands
+use commands::*;
 
-static PROJECT_MANAGER: OnceCell<Arc<ProjectManager>> = OnceCell::const_new();
-static SETTINGS_MANAGER: OnceCell<Arc<Mutex<SettingsManager>>> = OnceCell::const_new();
+pub static PROJECT_MANAGER: OnceCell<Arc<ProjectManager>> = OnceCell::const_new();
+pub static SETTINGS_MANAGER: OnceCell<Arc<Mutex<SettingsManager>>> = OnceCell::const_new();
 
 #[derive(Clone, Debug)]
-struct QueuedMessage {
-    message: String,
-    message_type: String,
-    timestamp: u64,
+pub struct QueuedMessage {
+    pub message: String,
+    pub message_type: String,
+    pub timestamp: u64,
 }
 
-type MessageQueue = Arc<Mutex<HashMap<String, Vec<QueuedMessage>>>>;
-static QUEUED_MESSAGES: OnceCell<MessageQueue> = OnceCell::const_new();
+pub type MessageQueue = Arc<Mutex<HashMap<String, Vec<QueuedMessage>>>>;
+pub static QUEUED_MESSAGES: OnceCell<MessageQueue> = OnceCell::const_new();
 
-fn parse_agent_command(command: &str) -> Result<(String, String, Vec<String>), String> {
+pub fn parse_agent_command(command: &str) -> Result<(String, String, Vec<String>), String> {
     // Command format: "cd /path/to/worktree && {claude|cursor-agent|<path>/opencode|opencode|gemini} [args]"
     let parts: Vec<&str> = command.split(" && ").collect();
     if parts.len() != 2 {
@@ -124,25 +123,25 @@ fn parse_agent_command(command: &str) -> Result<(String, String, Vec<String>), S
     Ok((cwd, agent_name.to_string(), args))
 }
 
-async fn get_project_manager() -> Arc<ProjectManager> {
+pub async fn get_project_manager() -> Arc<ProjectManager> {
     PROJECT_MANAGER.get_or_init(|| async {
         Arc::new(ProjectManager::new())
     }).await.clone()
 }
 
-async fn get_terminal_manager() -> Result<Arc<terminal::TerminalManager>, String> {
+pub async fn get_terminal_manager() -> Result<Arc<terminal::TerminalManager>, String> {
     let manager = get_project_manager().await;
     manager.current_terminal_manager().await
         .map_err(|e| format!("Failed to get terminal manager: {e}"))
 }
 
-async fn get_para_core() -> Result<Arc<tokio::sync::Mutex<para_core::SchaltwerkCore>>, String> {
+pub async fn get_para_core() -> Result<Arc<tokio::sync::Mutex<para_core::SchaltwerkCore>>, String> {
     let manager = get_project_manager().await;
     manager.current_para_core().await
         .map_err(|e| format!("Failed to get para core: {e}"))
 }
 
-async fn get_message_queue() -> MessageQueue {
+pub async fn get_message_queue() -> MessageQueue {
     QUEUED_MESSAGES.get_or_init(|| async {
         Arc::new(Mutex::new(HashMap::new()))
     }).await.clone()
@@ -237,157 +236,12 @@ async fn start_terminal_monitoring(app: tauri::AppHandle) {
     });
 }
 
-#[tauri::command]
-async fn para_core_list_enriched_sessions() -> Result<Vec<para_core::EnrichedSession>, String> {
-    log::debug!("Listing enriched sessions from para_core");
-    
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    let manager = core.session_manager();
-    
-    match manager.list_enriched_sessions() {
-        Ok(sessions) => {
-            log::debug!("Found {} sessions", sessions.len());
-            Ok(sessions)
-        },
-        Err(e) => {
-            log::error!("Failed to list enriched sessions: {e}");
-            Err(format!("Failed to get sessions: {e}"))
-        }
-    }
-}
-
-#[tauri::command]
-async fn create_terminal(app: tauri::AppHandle, id: String, cwd: String) -> Result<String, String> {
-    let manager = get_terminal_manager().await?;
-    manager.set_app_handle(app.clone()).await;
-    manager.create_terminal(id.clone(), cwd).await?;
-    
-    // Check for and deliver any queued messages for this terminal
-    let queue = get_message_queue().await;
-    let mut queue_lock = queue.lock().await;
-    if let Some(messages) = queue_lock.remove(&id) {
-        log::info!("Delivering {} queued messages to terminal {}", messages.len(), id);
-        drop(queue_lock); // Release the lock before async operations
-        
-        for queued_msg in messages {
-            let message = &queued_msg.message;
-            let formatted_message = match queued_msg.message_type.as_str() {
-                "system" => format!("\n📢 System: {message}\n"),
-                _ => format!("\n💬 Follow-up: {message}\n"),
-            };
-            
-            if let Err(e) = manager.write_terminal(id.clone(), formatted_message.as_bytes().to_vec()).await {
-                log::warn!("Failed to deliver queued message to terminal {id}: {e}");
-            } else {
-                log::info!("Successfully delivered queued message to terminal {id}");
-            }
-            
-            // Also emit event for frontend notification
-            use tauri::Emitter;
-            #[derive(serde::Serialize, Clone)]
-            struct FollowUpMessagePayload {
-                session_name: String,
-                message: String,
-                message_type: String,
-                timestamp: u64,
-                terminal_id: String,
-            }
-            
-            let session_name = if id.starts_with("session-") {
-                id.split('-').nth(1).unwrap_or("unknown").to_string()
-            } else {
-                "orchestrator".to_string()
-            };
-            
-            let message_payload = FollowUpMessagePayload {
-                session_name,
-                message: queued_msg.message,
-                message_type: queued_msg.message_type,
-                timestamp: queued_msg.timestamp,
-                terminal_id: id.clone(),
-            };
-            
-            if let Err(e) = app.emit("schaltwerk:follow-up-message", &message_payload) {
-                log::error!("Failed to emit queued follow-up-message event: {e}");
-            }
-        }
-    }
-    
-    Ok(id)
-}
-
-#[tauri::command]
-async fn write_terminal(id: String, data: String) -> Result<(), String> {
-    let manager = get_terminal_manager().await?;
-    manager.write_terminal(id, data.into_bytes()).await
-}
-
-#[tauri::command]
-async fn resize_terminal(id: String, cols: u16, rows: u16) -> Result<(), String> {
-    let manager = get_terminal_manager().await?;
-    manager.resize_terminal(id, cols, rows).await
-}
-
-#[tauri::command]
-async fn close_terminal(id: String) -> Result<(), String> {
-    let manager = get_terminal_manager().await?;
-    manager.close_terminal(id).await
-}
-
-#[tauri::command]
-async fn terminal_exists(id: String) -> Result<bool, String> {
-    let manager = get_terminal_manager().await?;
-    manager.terminal_exists(&id).await
-}
-
-#[tauri::command]
-async fn get_terminal_buffer(id: String) -> Result<String, String> {
-    let manager = get_terminal_manager().await?;
-    manager.get_terminal_buffer(id).await
-}
-
-#[tauri::command]
-async fn get_terminal_activity_status(id: String) -> Result<(bool, u64), String> {
-    let manager = get_terminal_manager().await?;
-    manager.get_terminal_activity_status(id).await
-}
-
-#[tauri::command]
-async fn get_all_terminal_activity() -> Result<Vec<(String, bool, u64)>, String> {
-    let manager = get_terminal_manager().await?;
-    Ok(manager.get_all_terminal_activity().await)
-}
-
-#[tauri::command]
-async fn get_current_directory() -> Result<String, String> {
-    // Use the current active project path if available, otherwise fallback to current directory
-    let manager = get_project_manager().await;
-    if let Ok(project) = manager.current_project().await {
-        Ok(project.path.to_string_lossy().to_string())
-    } else {
-        // Fallback for when no project is active (needed for Claude sessions)
-        let current_dir = std::env::current_dir()
-            .map_err(|e| format!("Failed to get current directory: {e}"))?;
-        
-        if current_dir.file_name().and_then(|n| n.to_str()) == Some("src-tauri") {
-            current_dir.parent()
-                .map(|p| p.to_string_lossy().to_string())
-                .ok_or_else(|| "Failed to get parent directory".to_string())
-        } else {
-            Ok(current_dir.to_string_lossy().to_string())
-        }
-    }
-}
-
-use std::process::Command;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Incoming as IncomingBody, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 use http_body_util::BodyExt;
-static MCP_SERVER_PROCESS: OnceCell<Arc<tokio::sync::Mutex<Option<std::process::Child>>>> = OnceCell::const_new();
 
 async fn start_webhook_server(app: tauri::AppHandle) {
     async fn handle_webhook(
@@ -640,730 +494,7 @@ async fn start_webhook_server(app: tauri::AppHandle) {
     }
 }
 
-#[tauri::command]
-async fn start_mcp_server(_port: Option<u16>) -> Result<(), String> {
-    let process_mutex = MCP_SERVER_PROCESS.get_or_init(|| async {
-        Arc::new(tokio::sync::Mutex::new(None))
-    }).await;
-    
-    let mut process_guard = process_mutex.lock().await;
-    
-    // Check if already running
-    if let Some(ref mut process) = *process_guard {
-        match process.try_wait() {
-            Ok(Some(status)) => {
-                log::info!("Previous MCP server process exited with status: {status:?}");
-                // Process has exited, continue to start new one
-            }
-            Ok(None) => {
-                // Process is still running
-                log::info!("MCP server is already running");
-                return Ok(());
-            }
-            Err(e) => {
-                log::warn!("Error checking MCP server status: {e}");
-                // Error checking status, continue to start new one
-            }
-        }
-    }
-    
-    // Get the path to the MCP server - always look relative to the source file location
-    // This ensures we find it regardless of working directory
-    let mcp_server_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .ok_or_else(|| "Failed to get project root".to_string())?
-        .join("mcp-server")
-        .join("build")
-        .join("schaltwerk-mcp-server.js");
-    
-    log::info!("MCP server path: {}", mcp_server_path.display());
-    
-    if !mcp_server_path.exists() {
-        let error = format!("MCP server not found at: {}", mcp_server_path.display());
-        log::error!("{error}");
-        return Err(error);
-    }
-    
-    log::info!("Starting MCP server process with node...");
-    
-    // Start the MCP server as a subprocess
-    let child = Command::new("node")
-        .arg(&mcp_server_path)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| {
-            let error = format!("Failed to start MCP server: {e}");
-            log::error!("{error}");
-            error
-        })?;
-    
-    log::info!("MCP server process started successfully with PID: {:?}", child.id());
-    
-    *process_guard = Some(child);
-    
-    Ok(())
-}
-
 use tauri::Emitter;
-
-#[tauri::command]
-async fn para_core_create_session(app: tauri::AppHandle, name: String, prompt: Option<String>, base_branch: Option<String>, user_edited_name: Option<bool>) -> Result<para_core::Session, String> {
-    // Consider it auto-generated only if it matches docker-style pattern
-    // AND the user did not edit the field explicitly.
-    let looks_docker_style = name.contains('_') && name.split('_').count() == 2;
-    let was_user_edited = user_edited_name.unwrap_or(false);
-    let was_auto_generated = looks_docker_style && !was_user_edited;
-    
-    let core = get_para_core().await?;
-    let core_lock = core.lock().await;
-    let manager = core_lock.session_manager();
-    
-    let session = manager.create_session_with_auto_flag(&name, prompt.as_deref(), base_branch.as_deref(), was_auto_generated)
-        .map_err(|e| format!("Failed to create session: {e}"))?;
-
-    // Clone what we need for the background task
-    let session_name_clone = session.name.clone();
-    let app_handle = app.clone();
-    
-    // Emit session-added event for frontend to merge incrementally
-    #[derive(serde::Serialize, Clone)]
-    struct SessionAddedPayload {
-        session_name: String,
-        branch: String,
-        worktree_path: String,
-        parent_branch: String,
-    }
-    let _ = app.emit(
-        "schaltwerk:session-added",
-        SessionAddedPayload {
-            session_name: session.name.clone(),
-            branch: session.branch.clone(),
-            worktree_path: session.worktree_path.to_string_lossy().to_string(),
-            parent_branch: session.parent_branch.clone(),
-        },
-    );
-
-    // Drop the lock before spawning the background task
-    drop(core_lock);
-    
-    // Spawn background task to generate display name if needed
-    // Run even without an explicit prompt; the generator has a sensible default
-    if was_auto_generated {
-        log::info!("Session '{name}' was auto-generated, spawning name generation task");
-        tokio::spawn(async move {
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            
-            // Get session info and database reference
-            let (session_info, db_clone) = {
-                let core = match get_para_core().await {
-                    Ok(c) => c,
-                    Err(e) => {
-                        log::warn!("Cannot get para_core for session '{session_name_clone}': {e}");
-                        return;
-                    }
-                };
-                let core = core.lock().await;
-                let manager = core.session_manager();
-                let session = match manager.get_session(&session_name_clone) {
-                    Ok(s) => s,
-                    Err(e) => { 
-                        log::warn!("Cannot load session '{session_name_clone}' for naming: {e}"); 
-                        return; 
-                    }
-                };
-                log::info!("Session '{}' loaded: pending_name_generation={}, original_agent_type={:?}", 
-                    session_name_clone, session.pending_name_generation, session.original_agent_type);
-                
-                if !session.pending_name_generation {
-                    log::info!("Session '{session_name_clone}' does not have pending_name_generation flag, skipping");
-                    return;
-                }
-                let agent = session.original_agent_type.clone()
-                    .unwrap_or_else(|| core.db.get_agent_type().unwrap_or_else(|_| "claude".to_string()));
-                
-                log::info!("Using agent '{agent}' for name generation of session '{session_name_clone}'");
-                
-                // Clone what we need and release the lock
-                (
-                    (session.id.clone(), session.worktree_path.clone(), session.repository_path.clone(), session.branch.clone(), agent, session.initial_prompt.clone()),
-                    core.db.clone()
-                )
-            };
-            
-            let (session_id, worktree_path, repo_path, current_branch, agent, initial_prompt) = session_info;
-            
-            log::info!("Starting name generation for session '{}' with prompt: {:?}", 
-                session_name_clone, initial_prompt.as_ref().map(|p| {
-                    let max_len = 50;
-                    if p.len() <= max_len {
-                        p.as_str()
-                    } else {
-                        let mut end = max_len;
-                        while !p.is_char_boundary(end) && end > 0 {
-                            end -= 1;
-                        }
-                        &p[..end]
-                    }
-                }));
-            
-            // Now do the async operation without holding any locks
-            let ctx = crate::para_core::naming::SessionRenameContext {
-                db: &db_clone,
-                session_id: &session_id,
-                worktree_path: &worktree_path,
-                repo_path: &repo_path,
-                current_branch: &current_branch,
-                agent_type: &agent,
-                initial_prompt: initial_prompt.as_deref(),
-            };
-            match crate::para_core::naming::generate_display_name_and_rename_branch(ctx).await {
-                Ok(Some(display_name)) => {
-                    log::info!("Successfully generated display name '{display_name}' for session '{session_name_clone}'");
-                    
-                    // Re-acquire lock only to get the updated sessions list
-                    let core = match get_para_core().await {
-                        Ok(c) => c,
-                        Err(e) => {
-                            log::warn!("Cannot get para_core for sessions refresh: {e}");
-                            return;
-                        }
-                    };
-                    let core = core.lock().await;
-                    let manager = core.session_manager();
-                    if let Ok(sessions) = manager.list_enriched_sessions() {
-                        log::info!("Emitting sessions-refreshed event after name generation");
-                        if let Err(e) = app_handle.emit("schaltwerk:sessions-refreshed", &sessions) {
-                            log::warn!("Could not emit sessions refreshed: {e}");
-                        }
-                    }
-                }
-                Ok(None) => { 
-                    log::warn!("Name generation returned None for session '{session_name_clone}'");
-                    let _ = db_clone.set_pending_name_generation(&session_id, false); 
-                }
-                Err(e) => {
-                    log::error!("Failed to generate display name for session '{session_name_clone}': {e}");
-                    let _ = db_clone.set_pending_name_generation(&session_id, false);
-                }
-            }
-        });
-    } else {
-        log::info!("Session '{}' was_auto_generated={}, has_prompt={}, skipping name generation", 
-            name, was_auto_generated, prompt.is_some());
-    }
-
-    Ok(session)
-}
-
-#[tauri::command]
-async fn para_core_list_sessions() -> Result<Vec<para_core::Session>, String> {
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    let manager = core.session_manager();
-    
-    manager.list_sessions()
-        .map_err(|e| format!("Failed to list sessions: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_get_session(name: String) -> Result<para_core::Session, String> {
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    let manager = core.session_manager();
-    
-    manager.get_session(&name)
-        .map_err(|e| format!("Failed to get session: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_cancel_session(app: tauri::AppHandle, name: String) -> Result<(), String> {
-    log::info!("Starting cancel session: {name}");
-    
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    let manager = core.session_manager();
-    
-    match manager.cancel_session(&name) {
-        Ok(()) => {
-            log::info!("Successfully canceled session: {name}");
-            #[derive(serde::Serialize, Clone)]
-            struct SessionRemovedPayload { session_name: String }
-            let _ = app.emit(
-                "schaltwerk:session-removed",
-                SessionRemovedPayload { session_name: name.clone() },
-            );
-            // Best-effort: close known session terminals to avoid orphaned PTYs
-            if let Ok(manager) = get_terminal_manager().await {
-                let ids = vec![
-                    format!("session-{}-top", name),
-                    format!("session-{}-bottom", name),
-                    format!("session-{}-right", name),
-                ];
-                for id in ids {
-                    if let Ok(true) = manager.terminal_exists(&id).await {
-                        if let Err(e) = manager.close_terminal(id.clone()).await {
-                            log::warn!("Failed to close terminal {id} on cancel: {e}");
-                        }
-                    }
-                }
-            }
-            Ok(())
-        },
-        Err(e) => {
-            log::error!("Failed to cancel session {name}: {e}");
-            Err(format!("Failed to cancel session: {e}"))
-        }
-    }
-}
-
-
-#[tauri::command]
-async fn para_core_update_git_stats(session_id: String) -> Result<(), String> {
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    let manager = core.session_manager();
-    
-    manager.update_git_stats(&session_id)
-        .map_err(|e| format!("Failed to update git stats: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_cleanup_orphaned_worktrees() -> Result<(), String> {
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    let manager = core.session_manager();
-    
-    manager.cleanup_orphaned_worktrees()
-        .map_err(|e| format!("Failed to cleanup orphaned worktrees: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_start_claude(session_name: String) -> Result<String, String> {
-    log::info!("Starting Claude for session: {session_name}");
-    
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    let manager = core.session_manager();
-    
-    let command = manager.start_claude_in_session(&session_name)
-        .map_err(|e| {
-            log::error!("Failed to build Claude command for session {session_name}: {e}");
-            format!("Failed to start Claude in session: {e}")
-        })?;
-    
-    log::info!("Claude command for session {session_name}: {command}");
-    
-    // Parse command to extract working directory, agent name, and arguments
-    let (cwd, agent_name, agent_args) = parse_agent_command(&command)?;
-    
-    // Create terminal with the appropriate agent
-    let terminal_id = format!("session-{session_name}-top");
-    let terminal_manager = get_terminal_manager().await?;
-    
-    // Close existing terminal if it exists
-    if terminal_manager.terminal_exists(&terminal_id).await? {
-        terminal_manager.close_terminal(terminal_id.clone()).await?;
-    }
-    
-    // Determine agent type and fetch environment variables
-    let agent_type = if agent_name == "claude" {
-        "claude"
-    } else if agent_name == "cursor-agent" {
-        "cursor"
-    } else if agent_name.contains("opencode") {
-        "opencode"
-    } else if agent_name.contains("gemini") {
-        "gemini"
-    } else {
-        "claude" // default
-    };
-    
-    let env_vars = if let Some(settings_manager) = SETTINGS_MANAGER.get() {
-        let manager = settings_manager.lock().await;
-        manager.get_agent_env_vars(agent_type)
-            .into_iter()
-            .collect::<Vec<(String, String)>>()
-    } else {
-        vec![]
-    };
-    
-    // Create new terminal with the agent directly
-    log::info!("Creating terminal with {agent_name} directly: {terminal_id} with {} env vars", env_vars.len());
-    
-    // Detect OpenCode regardless of absolute path or PATH usage
-    let is_opencode = agent_name == "opencode" || agent_name.ends_with("/opencode");
-    
-    terminal_manager.create_terminal_with_app(
-        terminal_id.clone(),
-        cwd,
-        agent_name.clone(),
-        agent_args,
-        env_vars,
-    ).await?;
-    
-    // For TUI applications like OpenCode, ensure proper initial sizing
-    // OpenCode needs extra time to initialize and respond to resize signals
-    if is_opencode {
-        // Spawn a background task to handle delayed resizing
-        // This prevents blocking the main thread
-        let terminal_manager_clone = terminal_manager.clone();
-        let terminal_id_clone = terminal_id.clone();
-        tokio::spawn(async move {
-            // Wait for OpenCode to fully initialize its TUI
-            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-            
-            // Send resize to ensure proper initial layout
-            let _ = terminal_manager_clone.resize_terminal(terminal_id_clone.clone(), 136, 48).await;
-            
-            // Wait a bit longer then send final resize
-            tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
-            let _ = terminal_manager_clone.resize_terminal(terminal_id_clone.clone(), 136, 48).await;
-            
-            // One final resize after frontend has settled
-            tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
-            let _ = terminal_manager_clone.resize_terminal(terminal_id_clone, 136, 48).await;
-        });
-    }
-    
-    // For Gemini, we need to paste the draft content after the agent starts
-    // because Gemini doesn't properly handle initial prompts like Claude does
-    let is_gemini = agent_name == "gemini" || agent_name.ends_with("/gemini");
-    if is_gemini {
-        // Get the session to check if it has draft content that needs to be pasted
-        if let Ok(session) = manager.get_session(&session_name) {
-            if let Some(initial_prompt) = session.initial_prompt {
-                if !initial_prompt.trim().is_empty() {
-                    // Spawn a background task to paste the content after Gemini initializes
-                    let terminal_manager_clone = terminal_manager.clone();
-                    let terminal_id_clone = terminal_id.clone();
-                    tokio::spawn(async move {
-                        // Wait for Gemini to fully initialize
-                        tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
-                        
-                        // Paste the draft content with proper formatting
-                        let formatted_content = format!("{initial_prompt}\n");
-                        if let Err(e) = terminal_manager_clone.write_terminal(
-                            terminal_id_clone.clone(), 
-                            formatted_content.as_bytes().to_vec()
-                        ).await {
-                            log::warn!("Failed to paste draft content to Gemini terminal {terminal_id_clone}: {e}");
-                        } else {
-                            log::info!("Successfully pasted draft content to Gemini terminal {terminal_id_clone}");
-                        }
-                    });
-                }
-            }
-        }
-    }
-    
-    log::info!("Successfully started Claude in terminal: {terminal_id}");
-    Ok(command)
-}
-
-#[tauri::command]
-async fn para_core_start_claude_orchestrator(terminal_id: String) -> Result<String, String> {
-    log::info!("Starting Claude for orchestrator in terminal: {terminal_id}");
-    
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    let manager = core.session_manager();
-    
-    let command = manager.start_claude_in_orchestrator()
-        .map_err(|e| format!("Failed to start Claude in orchestrator: {e}"))?;
-    
-    log::info!("Claude command for orchestrator: {command}");
-    
-    // Parse command to extract working directory, agent name, and arguments
-    let (cwd, agent_name, agent_args) = parse_agent_command(&command)?;
-    
-    // Create terminal with the appropriate agent
-    let terminal_manager = get_terminal_manager().await?;
-    
-    // Close existing terminal if it exists
-    if terminal_manager.terminal_exists(&terminal_id).await? {
-        terminal_manager.close_terminal(terminal_id.clone()).await?;
-    }
-    
-    // Determine agent type and fetch environment variables
-    let agent_type = if agent_name == "claude" {
-        "claude"
-    } else if agent_name == "cursor-agent" {
-        "cursor"
-    } else if agent_name.contains("opencode") {
-        "opencode"
-    } else if agent_name.contains("gemini") {
-        "gemini"
-    } else {
-        "claude" // default
-    };
-    
-    let env_vars = if let Some(settings_manager) = SETTINGS_MANAGER.get() {
-        let manager = settings_manager.lock().await;
-        manager.get_agent_env_vars(agent_type)
-            .into_iter()
-            .collect::<Vec<(String, String)>>()
-    } else {
-        vec![]
-    };
-    
-    // Create new terminal with the agent directly
-    log::info!("Creating terminal with {agent_name} directly: {terminal_id} with {} env vars", env_vars.len());
-    
-    // Detect OpenCode regardless of absolute path or PATH usage
-    let is_opencode = agent_name == "opencode" || agent_name.ends_with("/opencode");
-    
-    terminal_manager.create_terminal_with_app(
-        terminal_id.clone(),
-        cwd,
-        agent_name.clone(),
-        agent_args,
-        env_vars,
-    ).await?;
-    
-    // For TUI applications like OpenCode, ensure proper initial sizing
-    // OpenCode needs extra time to initialize and respond to resize signals
-    if is_opencode {
-        // Spawn a background task to handle delayed resizing
-        // This prevents blocking the main thread
-        let terminal_manager_clone = terminal_manager.clone();
-        let terminal_id_clone = terminal_id.clone();
-        tokio::spawn(async move {
-            // Wait for OpenCode to fully initialize its TUI
-            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-            
-            // Send resize to ensure proper initial layout
-            let _ = terminal_manager_clone.resize_terminal(terminal_id_clone.clone(), 136, 48).await;
-            
-            // Wait a bit longer then send final resize
-            tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
-            let _ = terminal_manager_clone.resize_terminal(terminal_id_clone.clone(), 136, 48).await;
-            
-            // One final resize after frontend has settled
-            tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
-            let _ = terminal_manager_clone.resize_terminal(terminal_id_clone, 136, 48).await;
-        });
-    }
-    
-    log::info!("Successfully started Claude in terminal: {terminal_id}");
-    Ok(command)
-}
-
-#[tauri::command]
-async fn para_core_set_skip_permissions(enabled: bool) -> Result<(), String> {
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    
-    core.db.set_skip_permissions(enabled)
-        .map_err(|e| format!("Failed to set skip permissions: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_get_skip_permissions() -> Result<bool, String> {
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    
-    core.db.get_skip_permissions()
-        .map_err(|e| format!("Failed to get skip permissions: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_set_agent_type(agent_type: String) -> Result<(), String> {
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    
-    core.db.set_agent_type(&agent_type)
-        .map_err(|e| format!("Failed to set agent type: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_get_agent_type() -> Result<String, String> {
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    
-    core.db.get_agent_type()
-        .map_err(|e| format!("Failed to get agent type: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_get_font_sizes() -> Result<(i32, i32), String> {
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    
-    core.db.get_font_sizes()
-        .map_err(|e| format!("Failed to get font sizes: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_set_font_sizes(terminal_font_size: i32, ui_font_size: i32) -> Result<(), String> {
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    
-    core.db.set_font_sizes(terminal_font_size, ui_font_size)
-        .map_err(|e| format!("Failed to set font sizes: {e}"))
-}
-
-#[tauri::command]
-async fn open_in_vscode(worktree_path: String) -> Result<(), String> {
-    log::info!("Opening VSCode for worktree: {worktree_path}");
-    
-    let output = std::process::Command::new("code")
-        .arg(&worktree_path)
-        .output()
-        .map_err(|e| {
-            log::error!("Failed to execute VSCode command: {e}");
-            format!("Failed to open VSCode: {e}")
-        })?;
-    
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        log::error!("VSCode command failed: {stderr}");
-        return Err(format!("VSCode command failed: {stderr}"));
-    }
-    
-    log::info!("Successfully opened VSCode for: {worktree_path}");
-    Ok(())
-}
-
-#[tauri::command]
-async fn para_core_mark_session_ready(name: String, auto_commit: bool) -> Result<bool, String> {
-    log::info!("Marking session {name} as reviewed (auto_commit: {auto_commit})");
-    
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    let manager = core.session_manager();
-    
-    manager.mark_session_ready(&name, auto_commit)
-        .map_err(|e| format!("Failed to mark session as reviewed: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_unmark_session_ready(name: String) -> Result<(), String> {
-    log::info!("Unmarking session {name} as reviewed");
-    
-    let core = get_para_core().await?;
-    let core = core.lock().await;
-    let manager = core.session_manager();
-    
-    manager.unmark_session_ready(&name)
-        .map_err(|e| format!("Failed to unmark session as reviewed: {e}"))
-}
-
-#[tauri::command]
-async fn get_agent_env_vars(agent_type: String) -> Result<HashMap<String, String>, String> {
-    let settings_manager = SETTINGS_MANAGER
-        .get()
-        .ok_or_else(|| "Settings manager not initialized".to_string())?;
-    
-    let manager = settings_manager.lock().await;
-    Ok(manager.get_agent_env_vars(&agent_type))
-}
-
-#[tauri::command]
-async fn set_agent_env_vars(agent_type: String, env_vars: HashMap<String, String>) -> Result<(), String> {
-    let settings_manager = SETTINGS_MANAGER
-        .get()
-        .ok_or_else(|| "Settings manager not initialized".to_string())?;
-    
-    let mut manager = settings_manager.lock().await;
-    manager.set_agent_env_vars(&agent_type, env_vars)
-}
-
-#[tauri::command]
-async fn get_terminal_ui_preferences() -> Result<settings::TerminalUIPreferences, String> {
-    let settings_manager = SETTINGS_MANAGER
-        .get()
-        .ok_or_else(|| "Settings manager not initialized".to_string())?;
-    
-    let manager = settings_manager.lock().await;
-    Ok(manager.get_terminal_ui_preferences())
-}
-
-#[tauri::command]
-async fn set_terminal_collapsed(is_collapsed: bool) -> Result<(), String> {
-    let settings_manager = SETTINGS_MANAGER
-        .get()
-        .ok_or_else(|| "Settings manager not initialized".to_string())?;
-    
-    let mut manager = settings_manager.lock().await;
-    manager.set_terminal_collapsed(is_collapsed)
-}
-
-#[tauri::command]
-async fn set_terminal_divider_position(position: f64) -> Result<(), String> {
-    let settings_manager = SETTINGS_MANAGER
-        .get()
-        .ok_or_else(|| "Settings manager not initialized".to_string())?;
-    
-    let mut manager = settings_manager.lock().await;
-    manager.set_terminal_divider_position(position)
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ProjectSettings {
-    setup_script: String,
-}
-
-#[tauri::command]
-async fn get_project_settings() -> Result<ProjectSettings, String> {
-    let project = PROJECT_MANAGER
-        .get()
-        .ok_or_else(|| "Project manager not initialized".to_string())?
-        .current_project()
-        .await
-        .map_err(|e| format!("Failed to get current project: {e}"))?;
-    
-    let core = project.para_core.lock().await;
-    let db = core.database();
-    
-    let setup_script = db.get_project_setup_script(&project.path)
-        .map_err(|e| format!("Failed to get project setup script: {e}"))?
-        .unwrap_or_default();
-    
-    Ok(ProjectSettings { setup_script })
-}
-
-#[tauri::command]
-async fn set_project_settings(settings: ProjectSettings) -> Result<(), String> {
-    let project = PROJECT_MANAGER
-        .get()
-        .ok_or_else(|| "Project manager not initialized".to_string())?
-        .current_project()
-        .await
-        .map_err(|e| format!("Failed to get current project: {e}"))?;
-    
-    let core = project.para_core.lock().await;
-    let db = core.database();
-    
-    db.set_project_setup_script(&project.path, &settings.setup_script)
-        .map_err(|e| format!("Failed to set project setup script: {e}"))?;
-    
-    Ok(())
-}
-
-#[cfg(test)]
-mod project_settings_tests {
-    use super::*;
-    
-    #[test]
-    fn test_project_settings_serialization() {
-        let settings = ProjectSettings {
-            setup_script: "#!/bin/bash\necho test".to_string(),
-        };
-        
-        // Serialize to JSON
-        let json = serde_json::to_string(&settings).unwrap();
-        assert!(json.contains("setupScript"), "Should use camelCase field name");
-        assert!(!json.contains("setup_script"), "Should not use snake_case field name");
-        
-        // Deserialize from JSON with camelCase
-        let json_input = r#"{"setupScript":"echo hello"}"#;
-        let deserialized: ProjectSettings = serde_json::from_str(json_input).unwrap();
-        assert_eq!(deserialized.setup_script, "echo hello");
-    }
-}
 
 fn main() {
     // Initialize logging
@@ -1376,6 +507,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            // Terminal commands
             create_terminal,
             write_terminal,
             resize_terminal,
@@ -1384,8 +516,12 @@ fn main() {
             get_terminal_buffer,
             get_terminal_activity_status,
             get_all_terminal_activity,
+            // Utility commands
             get_current_directory,
+            open_in_vscode,
+            // MCP commands
             start_mcp_server,
+            // Para core commands
             para_core_create_session,
             para_core_list_sessions,
             para_core_list_enriched_sessions,
@@ -1409,16 +545,18 @@ fn main() {
             para_core_update_draft_content,
             para_core_append_draft_content,
             para_core_list_sessions_by_state,
-            open_in_vscode,
+            // Open apps commands (from module)
             open_apps::get_default_open_app,
             open_apps::set_default_open_app,
             open_apps::list_available_open_apps,
             open_apps::open_in_app,
+            // Diff commands (from module)
             diff_commands::get_changed_files_from_main,
             diff_commands::get_file_diff_from_main,
             diff_commands::get_current_branch_name,
             diff_commands::get_base_branch_name,
             diff_commands::get_commit_comparison_info,
+            // Project commands
             get_recent_projects,
             add_recent_project,
             update_recent_project_timestamp,
@@ -1429,6 +567,7 @@ fn main() {
             initialize_project,
             get_project_default_branch,
             list_project_branches,
+            // Settings commands
             get_project_default_base_branch,
             set_project_default_base_branch,
             get_agent_env_vars,
@@ -1496,7 +635,7 @@ fn main() {
                 });
                 
                 // Stop MCP server if running
-                if let Some(process_mutex) = MCP_SERVER_PROCESS.get() {
+                if let Some(process_mutex) = commands::mcp::get_mcp_server_process().get() {
                     if let Ok(mut guard) = process_mutex.try_lock() {
                         if let Some(mut process) = guard.take() {
                             let _ = process.kill();
@@ -1507,217 +646,6 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-}
-
-#[tauri::command]
-fn get_recent_projects() -> Result<Vec<projects::RecentProject>, String> {
-    let history = projects::ProjectHistory::load()
-        .map_err(|e| format!("Failed to load project history: {e}"))?;
-    Ok(history.get_recent_projects())
-}
-
-#[tauri::command]
-fn add_recent_project(path: String) -> Result<(), String> {
-    let mut history = projects::ProjectHistory::load()
-        .map_err(|e| format!("Failed to load project history: {e}"))?;
-    history.add_project(&path)
-        .map_err(|e| format!("Failed to add project: {e}"))?;
-    Ok(())
-}
-
-#[tauri::command]
-fn update_recent_project_timestamp(path: String) -> Result<(), String> {
-    let mut history = projects::ProjectHistory::load()
-        .map_err(|e| format!("Failed to load project history: {e}"))?;
-    history.update_timestamp(&path)
-        .map_err(|e| format!("Failed to update project: {e}"))?;
-    Ok(())
-}
-
-#[tauri::command]
-fn remove_recent_project(path: String) -> Result<(), String> {
-    let mut history = projects::ProjectHistory::load()
-        .map_err(|e| format!("Failed to load project history: {e}"))?;
-    history.remove_project(&path)
-        .map_err(|e| format!("Failed to remove project: {e}"))?;
-    Ok(())
-}
-
-#[tauri::command]
-fn is_git_repository(path: String) -> Result<bool, String> {
-    Ok(projects::is_git_repository(std::path::Path::new(&path)))
-}
-
-#[tauri::command]
-fn directory_exists(path: String) -> Result<bool, String> {
-    Ok(projects::directory_exists(std::path::Path::new(&path)))
-}
-
-#[tauri::command]
-fn create_new_project(name: String, parent_path: String) -> Result<String, String> {
-    let project_path = projects::create_new_project(&name, &parent_path)
-        .map_err(|e| format!("{e}"))?;
-    
-    Ok(project_path.to_str()
-        .ok_or_else(|| "Invalid path encoding".to_string())?
-        .to_string())
-}
-
-#[tauri::command]
-async fn initialize_project(path: String) -> Result<(), String> {
-    let path = std::path::PathBuf::from(path);
-    let manager = get_project_manager().await;
-    
-    // Switch to the project (creates it if it doesn't exist)
-    manager.switch_to_project(path)
-        .await
-        .map_err(|e| format!("Failed to initialize project: {e}"))?;
-    
-    Ok(())
-}
-
-#[tauri::command]
-async fn get_project_default_branch() -> Result<String, String> {
-    let manager = get_project_manager().await;
-    if let Ok(project) = manager.current_project().await {
-        crate::para_core::git::get_default_branch(&project.path)
-            .map_err(|e| format!("Failed to get default branch: {e}"))
-    } else {
-        // No active project, try current directory
-        let current_dir = std::env::current_dir()
-            .map_err(|e| format!("Failed to get current directory: {e}"))?;
-        crate::para_core::git::get_default_branch(&current_dir)
-            .map_err(|e| format!("Failed to get default branch: {e}"))
-    }
-}
-
-#[tauri::command]
-async fn list_project_branches() -> Result<Vec<String>, String> {
-    let manager = get_project_manager().await;
-    if let Ok(project) = manager.current_project().await {
-        crate::para_core::git::list_branches(&project.path)
-            .map_err(|e| format!("Failed to list branches: {e}"))
-    } else {
-        // No active project, try current directory
-        let current_dir = std::env::current_dir()
-            .map_err(|e| format!("Failed to get current directory: {e}"))?;
-        crate::para_core::git::list_branches(&current_dir)
-            .map_err(|e| format!("Failed to list branches: {e}"))
-    }
-}
-
-#[tauri::command]
-async fn get_project_default_base_branch() -> Result<Option<String>, String> {
-    let para_core = get_para_core().await?;
-    let core = para_core.lock().await;
-    core.db.get_default_base_branch()
-        .map_err(|e| format!("Failed to get default base branch: {e}"))
-}
-
-#[tauri::command]
-async fn set_project_default_base_branch(branch: Option<String>) -> Result<(), String> {
-    let para_core = get_para_core().await?;
-    let core = para_core.lock().await;
-    core.db.set_default_base_branch(branch.as_deref())
-        .map_err(|e| format!("Failed to set default base branch: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_create_draft_session(app: tauri::AppHandle, name: String, draft_content: String) -> Result<para_core::Session, String> {
-    log::info!("Creating draft session: {name}");
-    
-    let core = get_para_core().await?;
-    let core_lock = core.lock().await;
-    let manager = core_lock.session_manager();
-    
-    let session = manager.create_draft_session(&name, &draft_content)
-        .map_err(|e| format!("Failed to create draft session: {e}"))?;
-    
-    // Emit sessions-refreshed event to trigger UI updates
-    // We emit with empty array since UI components will fetch what they need
-    // (drafts via list_sessions_by_state, sessions via list_enriched_sessions)
-    log::info!("Emitting sessions-refreshed event after creating draft session");
-    if let Err(e) = app.emit("schaltwerk:sessions-refreshed", &Vec::<para_core::EnrichedSession>::new()) {
-        log::warn!("Could not emit sessions refreshed: {e}");
-    }
-    
-    Ok(session)
-}
-
-#[tauri::command]
-async fn para_core_start_draft_session(app: tauri::AppHandle, name: String, base_branch: Option<String>) -> Result<(), String> {
-    log::info!("Starting draft session: {name}");
-    
-    let core = get_para_core().await?;
-    let core_lock = core.lock().await;
-    let manager = core_lock.session_manager();
-    
-    manager.start_draft_session(&name, base_branch.as_deref())
-        .map_err(|e| format!("Failed to start draft session: {e}"))?;
-    
-    // Emit sessions-refreshed event after starting draft
-    if let Ok(sessions) = manager.list_enriched_sessions() {
-        log::info!("Emitting sessions-refreshed event after starting draft session");
-        if let Err(e) = app.emit("schaltwerk:sessions-refreshed", &sessions) {
-            log::warn!("Could not emit sessions refreshed: {e}");
-        }
-    }
-    
-    Ok(())
-}
-
-#[tauri::command]
-async fn para_core_update_session_state(name: String, state: String) -> Result<(), String> {
-    log::info!("Updating session state: {name} -> {state}");
-    
-    let session_state = state.parse::<para_core::SessionState>()
-        .map_err(|e| format!("Invalid session state: {e}"))?;
-    
-    let core = get_para_core().await?;
-    let core_lock = core.lock().await;
-    let manager = core_lock.session_manager();
-    
-    manager.update_session_state(&name, session_state)
-        .map_err(|e| format!("Failed to update session state: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_update_draft_content(name: String, content: String) -> Result<(), String> {
-    log::info!("Updating draft content for session: {name}");
-    
-    let core = get_para_core().await?;
-    let core_lock = core.lock().await;
-    let manager = core_lock.session_manager();
-    
-    manager.update_draft_content(&name, &content)
-        .map_err(|e| format!("Failed to update draft content: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_append_draft_content(name: String, content: String) -> Result<(), String> {
-    log::info!("Appending to draft content for session: {name}");
-    
-    let core = get_para_core().await?;
-    let core_lock = core.lock().await;
-    let manager = core_lock.session_manager();
-    
-    manager.append_draft_content(&name, &content)
-        .map_err(|e| format!("Failed to append draft content: {e}"))
-}
-
-#[tauri::command]
-async fn para_core_list_sessions_by_state(state: String) -> Result<Vec<para_core::Session>, String> {
-    log::info!("Listing sessions by state: {state}");
-    
-    let session_state = state.parse::<para_core::SessionState>()
-        .map_err(|e| format!("Invalid session state: {e}"))?;
-    
-    let core = get_para_core().await?;
-    let core_lock = core.lock().await;
-    let manager = core_lock.session_manager();
-    
-    manager.list_sessions_by_state(session_state)
-        .map_err(|e| format!("Failed to list sessions by state: {e}"))
 }
 
 #[cfg(test)]
