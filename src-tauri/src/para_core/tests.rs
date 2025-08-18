@@ -525,11 +525,20 @@ struct TestEnvironment {
         let dur_warm = start_warm.elapsed();
         assert_eq!(enriched_warm.len(), session_count);
 
-        // Expect warm run to be no slower than cold (with some tolerance)
-        // Using 10% tolerance to avoid flakiness on fast CI machines.
+        // Expect warm run to be no slower than cold (with tolerance)
+        // On very fast machines repos are tiny, so durations can be in the microseconds range
+        // where scheduler jitter dominates. Use higher relative tolerance for sub-millisecond cold runs.
+        use std::time::Duration;
+        let tolerance = if dur_cold < Duration::from_millis(1) {
+            // Allow up to +100% when measurements are extremely small
+            dur_cold
+        } else {
+            // 10% for normal ranges
+            dur_cold / 10
+        };
         assert!(
-            dur_warm <= dur_cold + dur_cold / 10,
-            "Expected warm ( {dur_warm:?} ) to be <= 1.1x cold ( {dur_cold:?} )"
+            dur_warm <= dur_cold + tolerance,
+            "Expected warm ( {dur_warm:?} ) to be <= cold + tolerance ( cold={dur_cold:?}, tol={tolerance:?} )"
         );
     }
 

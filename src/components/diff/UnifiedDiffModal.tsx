@@ -312,39 +312,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     }
   }, [isOpen, filePath, viewMode])
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (showCommentForm) {
-          setShowCommentForm(false)
-          setCommentFormPosition(null)
-          lineSelection.clearSelection()
-        } else if (isOpen) {
-          onClose()
-        }
-      } else if (isOpen && !showCommentForm) {
-        // Arrow key navigation for file list when modal is open and comment form is not shown
-        if (e.key === 'ArrowUp') {
-          e.preventDefault()
-          e.stopPropagation()
-          if (selectedFileIndex > 0) {
-            const newIndex = selectedFileIndex - 1
-            scrollToFile(files[newIndex].path, newIndex)
-          }
-        } else if (e.key === 'ArrowDown') {
-          e.preventDefault()
-          e.stopPropagation()
-          if (selectedFileIndex < files.length - 1) {
-            const newIndex = selectedFileIndex + 1
-            scrollToFile(files[newIndex].path, newIndex)
-          }
-        }
-      }
-    }
-    
-    window.addEventListener('keydown', handleKeyDown, true) // Use capture phase to handle before other listeners
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [isOpen, showCommentForm, onClose, lineSelection, selectedFileIndex, files, scrollToFile])
+  // Keyboard handler moved below after handleFinishReview is defined
 
 
   const language = useMemo(() => getFileLanguage(selectedFile || ''), [selectedFile])
@@ -506,6 +474,57 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
     }
   }, [currentReview, sessionName, formatReviewForPrompt, clearReview, onClose, setSelection, setFocusForSession, setCurrentFocus])
 
+  // Global keyboard shortcuts for the diff modal (placed after handleFinishReview definition)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl+Enter to finish review when modal is open
+      const isMac = navigator.userAgent.includes('Mac')
+      const modifierPressed = isMac ? e.metaKey : e.ctrlKey
+      if (isOpen && modifierPressed && e.key === 'Enter') {
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName?.toLowerCase()
+        const isEditable = (target as any)?.isContentEditable
+        // Avoid triggering while typing in inputs or when comment form is open
+        if (!showCommentForm && tag !== 'textarea' && tag !== 'input' && !isEditable) {
+          e.preventDefault()
+          e.stopPropagation()
+          handleFinishReview()
+          return
+        }
+      }
+
+      if (e.key === 'Escape') {
+        if (showCommentForm) {
+          setShowCommentForm(false)
+          setCommentFormPosition(null)
+          lineSelection.clearSelection()
+        } else if (isOpen) {
+          onClose()
+        }
+      } else if (isOpen && !showCommentForm) {
+        // Arrow key navigation for file list when modal is open and comment form is not shown
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          e.stopPropagation()
+          if (selectedFileIndex > 0) {
+            const newIndex = selectedFileIndex - 1
+            scrollToFile(files[newIndex].path, newIndex)
+          }
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          e.stopPropagation()
+          if (selectedFileIndex < files.length - 1) {
+            const newIndex = selectedFileIndex + 1
+            scrollToFile(files[newIndex].path, newIndex)
+          }
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true) // capture phase
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [isOpen, showCommentForm, onClose, lineSelection, selectedFileIndex, files, scrollToFile, handleFinishReview])
+
   const getFileIcon = (changeType: string) => {
     switch (changeType) {
       case 'added': return <VscDiffAdded className="text-green-500" />
@@ -632,7 +651,12 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
                     className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
                   >
                     <VscCheck />
-                    Finish Review ({currentReview.comments.length} comment{currentReview.comments.length > 1 ? 's' : ''})
+                    <span>
+                      Finish Review ({currentReview.comments.length} comment{currentReview.comments.length > 1 ? 's' : ''})
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-300">
+                      ⌘↩
+                    </span>
                   </button>
                 </div>
               )}
