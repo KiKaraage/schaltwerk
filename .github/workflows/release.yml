@@ -184,16 +184,26 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
 
-      - name: Download release info
+      - name: Download and prepare DMG
         run: |
           VERSION="${{ github.event.inputs.version || github.ref_name }}"
           VERSION="${VERSION#v}"
           
-          # Download DMG to calculate SHA256
-          curl -L "https://github.com/2mawi2/para-ui/releases/download/v${VERSION}/Schaltwerk-${VERSION}-universal.dmg" -o Schaltwerk.dmg
-          SHA256=$(shasum -a 256 Schaltwerk.dmg | cut -d' ' -f1)
+          # Download DMG from GitHub release
+          curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/2mawi2/para-ui/releases/tags/v${VERSION}" | \
+            jq -r '.assets[] | select(.name | endswith(".dmg")) | .url' | \
+            xargs curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/octet-stream" -o "Schaltwerk-${VERSION}-universal.dmg"
+          
+          # Calculate SHA256
+          SHA256=$(shasum -a 256 "Schaltwerk-${VERSION}-universal.dmg" | cut -d' ' -f1)
           echo "SHA256=${SHA256}" >> $GITHUB_ENV
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          
+          # Copy DMG to homebrew-tap for distribution
+          mkdir -p homebrew-tap/releases
+          cp "Schaltwerk-${VERSION}-universal.dmg" homebrew-tap/releases/
 
       - name: Update Schaltwerk Cask
         run: |
@@ -203,7 +213,7 @@ jobs:
             version "${{ env.VERSION }}"
             sha256 "${{ env.SHA256 }}"
 
-            url "https://github.com/2mawi2/para-ui/releases/download/v#{version}/Schaltwerk-#{version}-universal.dmg"
+            url "https://github.com/2mawi2/homebrew-tap/raw/main/releases/Schaltwerk-#{version}-universal.dmg"
             name "Schaltwerk"
             desc "Visual interface for managing Para sessions"
             homepage "https://github.com/2mawi2/para-ui"
@@ -236,7 +246,7 @@ jobs:
           cd homebrew-tap
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add Casks/schaltwerk.rb
+          git add Casks/schaltwerk.rb releases/
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
