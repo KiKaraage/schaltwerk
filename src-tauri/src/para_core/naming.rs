@@ -121,7 +121,7 @@ pub async fn generate_display_name(
     initial_prompt: Option<&str>,
 ) -> Result<Option<String>> {
     log::info!("generate_display_name called: session_id={}, agent_type={}, prompt={:?}", 
-        session_id, agent_type, initial_prompt.map(|p| &p[..p.len().min(50)]));
+        session_id, agent_type, initial_prompt.map(truncate_prompt));
     
     let base_prompt = initial_prompt.unwrap_or("Name this coding session succinctly");
     let truncated = truncate_prompt(base_prompt);
