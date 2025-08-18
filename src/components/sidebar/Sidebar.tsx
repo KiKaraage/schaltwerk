@@ -49,16 +49,7 @@ interface EnrichedSession {
 }
 
 
-interface TerminalStuckNotification {
-    terminal_id: string
-    session_id?: string
-    elapsed_seconds: number
-}
-
-interface TerminalUnstuckNotification {
-    terminal_id: string
-    session_id?: string
-}
+// Removed legacy terminal-stuck idle handling; we rely on last-edited timestamps only
 
 interface FollowUpMessageNotification {
     session_name: string
@@ -96,8 +87,9 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
         return 'name'
     })
     const [loading, setLoading] = useState(true)
-    const [stuckTerminals, setStuckTerminals] = useState<Set<string>>(new Set())
+    // Removed: stuckTerminals; idle is computed from last edit timestamps
     const [sessionsWithNotifications, setSessionsWithNotifications] = useState<Set<string>>(new Set())
+    const [idleByTime, setIdleByTime] = useState<Set<string>>(new Set())
     const [markReadyModal, setMarkReadyModal] = useState<{ open: boolean; sessionName: string; hasUncommitted: boolean }>({
         open: false,
         sessionName: '',
@@ -105,6 +97,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
     })
     const [switchOrchestratorModal, setSwitchOrchestratorModal] = useState(false)
     const sidebarRef = useRef<HTMLDivElement>(null)
+    const IDLE_THRESHOLD_MS = 5 * 60 * 1000 // 5 minutes
     
     // Extract sorting logic
     const applySortMode = useCallback((sessionList: EnrichedSession[], mode: typeof sortMode) => {
@@ -164,6 +157,28 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
         return [...sortedUnreviewed, ...sortedReviewed]
     }, [sessions, filterMode, sortMode, applySortMode])
 
+    // Compute time-based idle sessions from last activity
+    useEffect(() => {
+        const recomputeIdle = () => {
+            const now = Date.now()
+            const next = new Set<string>()
+            for (const s of sessions) {
+                const ts: number | undefined = (s.info as any).last_modified_ts
+                const isDraft = s.info.session_state === 'draft' || s.info.status === 'draft'
+                const isReviewed = !!s.info.ready_to_merge
+                if (typeof ts === 'number' && !isDraft && !isReviewed && now - ts >= IDLE_THRESHOLD_MS) {
+                    next.add(s.info.session_id)
+                }
+            }
+            setIdleByTime(next)
+        }
+
+        // Run immediately and then every 30s
+        recomputeIdle()
+        const t = setInterval(recomputeIdle, 30_000)
+        return () => clearInterval(t)
+    }, [sessions])
+
     const handleSelectOrchestrator = async () => {
         await setSelection({ kind: 'orchestrator' })
     }
@@ -172,13 +187,6 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
         const session = sortedSessions[index]
         if (session) {
             const s = session.info
-            
-            // Clear stuck terminal indicator when user selects the session
-            setStuckTerminals(prev => {
-                const updated = new Set(prev)
-                updated.delete(s.session_id)
-                return updated
-            })
             
             // Clear follow-up message notification when user selects the session
             setSessionsWithNotifications(prev => {
@@ -587,30 +595,8 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
             })
             unlisteners.push(u4)
             
-            // Listen for stuck terminal notifications
-            const u5 = await listen<TerminalStuckNotification>('schaltwerk:terminal-stuck', (event) => {
-                const { session_id } = event.payload
-                if (session_id) {
-                    setStuckTerminals(prev => new Set([...prev, session_id]))
-                }
-            })
-            unlisteners.push(u5)
-            
-            // Listen for unstuck terminal notifications
-            const u6 = await listen<TerminalUnstuckNotification>('schaltwerk:terminal-unstuck', (event) => {
-                const { session_id } = event.payload
-                if (session_id) {
-                    setStuckTerminals(prev => {
-                        const updated = new Set(prev)
-                        updated.delete(session_id)
-                        return updated
-                    })
-                }
-            })
-            unlisteners.push(u6)
-            
             // Listen for follow-up message notifications
-            const u7 = await listen<FollowUpMessageNotification>('schaltwerk:follow-up-message', (event) => {
+            const u5 = await listen<FollowUpMessageNotification>('schaltwerk:follow-up-message', (event) => {
                 const { session_name, message, message_type } = event.payload
                 
                 // Add visual notification badge for the session
@@ -644,7 +630,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                     console.log(`💬 User message for session ${session_name}: ${message}`)
                 }
             })
-            unlisteners.push(u7)
+            unlisteners.push(u5)
         }
         attach()
         
@@ -758,7 +744,7 @@ export function Sidebar({ isDiffViewerOpen }: SidebarProps) {
                 ) : (
                     sortedSessions.map((session, i) => {
                         const isSelected = selection.kind === 'session' && selection.payload === session.info.session_id
-                        const hasStuckTerminals = stuckTerminals.has(session.info.session_id)
+                        const hasStuckTerminals = idleByTime.has(session.info.session_id)
                         const hasFollowUpMessage = sessionsWithNotifications.has(session.info.session_id)
 
                         return (

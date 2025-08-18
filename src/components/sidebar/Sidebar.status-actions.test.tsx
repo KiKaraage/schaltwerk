@@ -108,33 +108,28 @@ describe('Sidebar status indicators and actions', () => {
     })
   })
 
-  it('shows idle indicator when terminal stuck event received and clears on select', async () => {
+  it('shows idle indicator when last edit is older than threshold', async () => {
+    // Arrange sessions with last_modified timestamps
+    const now = Date.now()
+    const sessions: EnrichedSession[] = [
+      { info: { session_id: 's1', branch: 'para/s1', worktree_path: '/p/s1', base_branch: 'main', merge_mode: 'rebase', status: 'active', is_current: false, session_type: 'worktree', ready_to_merge: false, last_modified: new Date(now - 6 * 60 * 1000).toISOString() }, terminals: [] },
+      { info: { session_id: 's2', branch: 'para/s2', worktree_path: '/p/s2', base_branch: 'main', merge_mode: 'rebase', status: 'active', is_current: false, session_type: 'worktree', ready_to_merge: false, last_modified: new Date(now - 2 * 60 * 1000).toISOString() }, terminals: [] },
+    ]
+
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === 'para_core_list_enriched_sessions') return sessions
+      if (cmd === 'para_core_list_sessions_by_state') return []
+      return undefined as any
+    })
+
     renderWithProviders(<Sidebar />)
 
-    await waitFor(() => {
-      const items = screen.getAllByRole('button').filter(b => (b.textContent || '').includes('para/'))
-      expect(items.length).toBe(2)
-    })
-
-    // Trigger terminal stuck for s1
-    const stuckCb = (listen as any).__last?.['schaltwerk:terminal-stuck']
-    expect(typeof stuckCb).toBe('function')
-    stuckCb({ payload: { terminal_id: 'session-s1-top', session_id: 's1', elapsed_seconds: 61 } })
-
-    // Idle indicator appears (text 'idle')
+    // Idle indicator appears only for s1 (older than 5 minutes)
     await waitFor(() => {
       const s1Btn = screen.getAllByRole('button').find(b => /s1/.test(b.textContent || ''))!
+      const s2Btn = screen.getAllByRole('button').find(b => /s2/.test(b.textContent || ''))!
       expect(s1Btn.textContent).toMatch(/idle/i)
-    })
-
-    // Select s1 to clear stuck indicator
-    const s1Btn = screen.getAllByRole('button').find(b => /s1/.test(b.textContent || ''))!
-    fireEvent.click(s1Btn)
-
-    // After selection, the idle indicator should go away
-    await waitFor(() => {
-      const s1Btn2 = screen.getAllByRole('button').find(b => /s1/.test(b.textContent || ''))!
-      expect(s1Btn2.textContent).not.toMatch(/idle/i)
+      expect(s2Btn.textContent).not.toMatch(/idle/i)
     })
   })
 })
