@@ -7,6 +7,7 @@ pub mod types;
 pub mod claude;
 pub mod cursor;
 pub mod opencode;
+pub mod gemini;
 pub mod naming;
 #[cfg(test)]
 mod tests;

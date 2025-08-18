@@ -5,11 +5,11 @@ import { useClaudeSession } from '../../hooks/useClaudeSession'
 interface Props {
     open: boolean
     onClose: () => void
-    onSwitch: (agentType: 'claude' | 'cursor' | 'opencode') => void | Promise<void>
+    onSwitch: (agentType: 'claude' | 'cursor' | 'opencode' | 'gemini') => void | Promise<void>
 }
 
 export function SwitchOrchestratorModal({ open, onClose, onSwitch }: Props) {
-    const [agentType, setAgentType] = useState<'claude' | 'cursor' | 'opencode'>('claude')
+    const [agentType, setAgentType] = useState<'claude' | 'cursor' | 'opencode' | 'gemini'>('claude')
     const [switching, setSwitching] = useState(false)
     const { getAgentType } = useClaudeSession()
     const switchRef = useRef<() => void>(() => {})
@@ -31,7 +31,7 @@ export function SwitchOrchestratorModal({ open, onClose, onSwitch }: Props) {
     useEffect(() => {
         if (open) {
             setSwitching(false)
-            getAgentType().then(type => setAgentType(type as 'claude' | 'cursor' | 'opencode'))
+            getAgentType().then(type => setAgentType(type as 'claude' | 'cursor' | 'opencode' | 'gemini'))
         }
     }, [open, getAgentType])
     
@@ -56,7 +56,7 @@ export function SwitchOrchestratorModal({ open, onClose, onSwitch }: Props) {
     
     return (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
-            <div className="w-[480px] max-w-[95vw] bg-slate-900 border border-slate-700 rounded-xl shadow-xl overflow-hidden">
+            <div className="w-[480px] max-w-[95vw] bg-slate-900 border border-slate-700 rounded-xl shadow-xl">
                 <div className="px-4 py-3 border-b border-slate-800 text-slate-200 font-medium">
                     Switch Orchestrator Model
                 </div>

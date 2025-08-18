@@ -40,7 +40,7 @@ type MessageQueue = Arc<Mutex<HashMap<String, Vec<QueuedMessage>>>>;
 static QUEUED_MESSAGES: OnceCell<MessageQueue> = OnceCell::const_new();
 
 fn parse_agent_command(command: &str) -> Result<(String, String, Vec<String>), String> {
-    // Command format: "cd /path/to/worktree && {claude|cursor-agent|<path>/opencode|opencode} [args]"
+    // Command format: "cd /path/to/worktree && {claude|cursor-agent|<path>/opencode|opencode|gemini} [args]"
     let parts: Vec<&str> = command.split(" && ").collect();
     if parts.len() != 2 {
         return Err(format!("Invalid command format: {command}"));
@@ -62,14 +62,15 @@ fn parse_agent_command(command: &str) -> Result<(String, String, Vec<String>), S
 
     // Normalize/validate the agent token
     let is_opencode = agent_token == "opencode" || agent_token.ends_with("/opencode");
+    let is_gemini = agent_token == "gemini" || agent_token.ends_with("/gemini");
     let agent_name = if agent_token == "claude" {
         "claude"
     } else if agent_token == "cursor-agent" {
         "cursor-agent"
-    } else if is_opencode {
+    } else if is_opencode || is_gemini {
         agent_token
     } else {
-        return Err(format!("Second part doesn't start with 'claude', 'cursor-agent', or 'opencode': {command}"));
+        return Err(format!("Second part doesn't start with 'claude', 'cursor-agent', 'opencode', or 'gemini': {command}"));
     };
 
     // Split the rest into arguments, handling quoted strings
@@ -968,6 +969,8 @@ async fn para_core_start_claude(session_name: String) -> Result<String, String> 
         "cursor"
     } else if agent_name.contains("opencode") {
         "opencode"
+    } else if agent_name.contains("gemini") {
+        "gemini"
     } else {
         "claude" // default
     };
@@ -990,7 +993,7 @@ async fn para_core_start_claude(session_name: String) -> Result<String, String> 
     terminal_manager.create_terminal_with_app(
         terminal_id.clone(),
         cwd,
-        agent_name,
+        agent_name.clone(),
         agent_args,
         env_vars,
     ).await?;
@@ -1017,6 +1020,37 @@ async fn para_core_start_claude(session_name: String) -> Result<String, String> 
             tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
             let _ = terminal_manager_clone.resize_terminal(terminal_id_clone, 136, 48).await;
         });
+    }
+    
+    // For Gemini, we need to paste the draft content after the agent starts
+    // because Gemini doesn't properly handle initial prompts like Claude does
+    let is_gemini = agent_name == "gemini" || agent_name.ends_with("/gemini");
+    if is_gemini {
+        // Get the session to check if it has draft content that needs to be pasted
+        if let Ok(session) = manager.get_session(&session_name) {
+            if let Some(initial_prompt) = session.initial_prompt {
+                if !initial_prompt.trim().is_empty() {
+                    // Spawn a background task to paste the content after Gemini initializes
+                    let terminal_manager_clone = terminal_manager.clone();
+                    let terminal_id_clone = terminal_id.clone();
+                    tokio::spawn(async move {
+                        // Wait for Gemini to fully initialize
+                        tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+                        
+                        // Paste the draft content with proper formatting
+                        let formatted_content = format!("{initial_prompt}\n");
+                        if let Err(e) = terminal_manager_clone.write_terminal(
+                            terminal_id_clone.clone(), 
+                            formatted_content.as_bytes().to_vec()
+                        ).await {
+                            log::warn!("Failed to paste draft content to Gemini terminal {terminal_id_clone}: {e}");
+                        } else {
+                            log::info!("Successfully pasted draft content to Gemini terminal {terminal_id_clone}");
+                        }
+                    });
+                }
+            }
+        }
     }
     
     log::info!("Successfully started Claude in terminal: {terminal_id}");
@@ -1054,6 +1088,8 @@ async fn para_core_start_claude_orchestrator(terminal_id: String) -> Result<Stri
         "cursor"
     } else if agent_name.contains("opencode") {
         "opencode"
+    } else if agent_name.contains("gemini") {
+        "gemini"
     } else {
         "claude" // default
     };
@@ -1076,7 +1112,7 @@ async fn para_core_start_claude_orchestrator(terminal_id: String) -> Result<Stri
     terminal_manager.create_terminal_with_app(
         terminal_id.clone(),
         cwd,
-        agent_name,
+        agent_name.clone(),
         agent_args,
         env_vars,
     ).await?;
@@ -1742,6 +1778,33 @@ mod tests {
         assert_eq!(cwd, "/repo");
         assert_eq!(agent, "/opt/bin/opencode");
         assert_eq!(args, vec!["--continue"]);
+    }
+
+    #[test]
+    fn test_parse_agent_command_gemini_with_prompt() {
+        let cmd = r#"cd /tmp/work && gemini --yolo --prompt-interactive "test prompt""#;
+        let (cwd, agent, args) = parse_agent_command(cmd).unwrap();
+        assert_eq!(cwd, "/tmp/work");
+        assert_eq!(agent, "gemini");
+        assert_eq!(args, vec!["--yolo", "--prompt-interactive", "test prompt"]);
+    }
+
+    #[test]
+    fn test_parse_agent_command_gemini_resume() {
+        let cmd = r#"cd /repo && gemini"#;
+        let (cwd, agent, args) = parse_agent_command(cmd).unwrap();
+        assert_eq!(cwd, "/repo");
+        assert_eq!(agent, "gemini");
+        assert_eq!(args, Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_parse_agent_command_gemini_absolute_path() {
+        let cmd = r#"cd /tmp/work && /usr/local/bin/gemini --prompt-interactive "hello world""#;
+        let (cwd, agent, args) = parse_agent_command(cmd).unwrap();
+        assert_eq!(cwd, "/tmp/work");
+        assert_eq!(agent, "/usr/local/bin/gemini");
+        assert_eq!(args, vec!["--prompt-interactive", "hello world"]);
     }
 
     // Tests removed: get_current_directory now uses active project instead of current working directory

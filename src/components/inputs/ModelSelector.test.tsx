@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ModelSelector } from './ModelSelector'
 
-function setup(initial: 'claude' | 'cursor' = 'claude', disabled = false) {
+function setup(initial: 'claude' | 'cursor' | 'opencode' | 'gemini' = 'claude', disabled = false) {
   const onChange = vi.fn()
   render(<ModelSelector value={initial} onChange={onChange} disabled={disabled} />)
   return { onChange }
@@ -25,9 +25,11 @@ describe('ModelSelector', () => {
     const toggle = screen.getByRole('button', { name: /Claude/i })
     await user.click(toggle)
 
-    // Ensure both options are present
+    // Ensure all options are present
     expect(screen.getAllByRole('button', { name: 'Claude' })).toHaveLength(2)
     expect(screen.getByRole('button', { name: 'Cursor' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'OpenCode' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Gemini' })).toBeInTheDocument()
   })
 
   test('changes selection on option click and closes menu', async () => {
@@ -80,7 +82,7 @@ describe('ModelSelector', () => {
   test('falls back to default model when given invalid value', () => {
     const onChange = vi.fn()
     // Force an invalid value through casts to exercise fallback
-    render(<ModelSelector value={'invalid' as unknown as 'claude' | 'cursor'} onChange={onChange} />)
+    render(<ModelSelector value={'invalid' as unknown as 'claude' | 'cursor' | 'opencode' | 'gemini'} onChange={onChange} />)
     expect(screen.getByRole('button', { name: /Claude/i })).toBeInTheDocument()
   })
 
@@ -96,5 +98,22 @@ describe('ModelSelector', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
 
     fetchSpy.mockRestore()
+  })
+
+  test('can select Gemini model', async () => {
+    const user = userEvent.setup()
+    const { onChange } = setup('claude')
+    
+    await user.click(screen.getByRole('button', { name: /Claude/i }))
+    await user.click(screen.getByRole('button', { name: 'Gemini' }))
+    
+    expect(onChange).toHaveBeenCalledWith('gemini')
+  })
+
+  test('renders Gemini with orange color indicator', () => {
+    setup('gemini')
+    const toggle = screen.getByRole('button', { name: /Gemini/i })
+    expect(toggle).toBeInTheDocument()
+    expect(toggle.querySelector('.bg-orange-500')).toBeTruthy()
   })
 })

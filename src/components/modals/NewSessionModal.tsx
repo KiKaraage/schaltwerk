@@ -27,7 +27,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
     const [loadingBranches, setLoadingBranches] = useState(false)
     const [isValidBranch, setIsValidBranch] = useState(true)
     const [skipPermissions, setSkipPermissions] = useState(false)
-    const [agentType, setAgentType] = useState<'claude' | 'cursor' | 'opencode'>('claude')
+    const [agentType, setAgentType] = useState<'claude' | 'cursor' | 'opencode' | 'gemini'>('claude')
     const [validationError, setValidationError] = useState('')
     const [creating, setCreating] = useState(false)
     const [createAsDraft, setCreateAsDraft] = useState(false)
@@ -44,7 +44,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
         await saveSkipPermissions(checked)
     }
 
-    const handleAgentTypeChange = async (type: 'claude' | 'cursor' | 'opencode') => {
+    const handleAgentTypeChange = async (type: 'claude' | 'cursor' | 'opencode' | 'gemini') => {
         setAgentType(type)
         await saveAgentType(type)
     }
@@ -173,7 +173,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
                 .finally(() => setLoadingBranches(false))
             
             getSkipPermissions().then(setSkipPermissions)
-            getAgentType().then(type => setAgentType(type as 'claude' | 'cursor' | 'opencode'))
+            getAgentType().then(type => setAgentType(type as 'claude' | 'cursor' | 'opencode' | 'gemini'))
             
             // Focus the prompt textarea when modal opens
             setTimeout(() => {
@@ -232,7 +232,7 @@ export function NewSessionModal({ open, onClose, onCreate }: Props) {
 
     return (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
-            <div className="w-[720px] max-w-[95vw] bg-slate-900 border border-slate-700 rounded-xl shadow-xl overflow-hidden">
+            <div className="w-[720px] max-w-[95vw] bg-slate-900 border border-slate-700 rounded-xl shadow-xl">
                 <div className="px-4 py-3 border-b border-slate-800 text-slate-200 font-medium">Start new task</div>
                 <div className="p-4 space-y-4">
                     <div>
