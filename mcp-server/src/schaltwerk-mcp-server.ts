@@ -577,8 +577,8 @@ ${session.initial_prompt ? `- Initial Prompt: ${session.initial_prompt}` : ''}`
             display_name: s.display_name || s.name,
             status: s.status === 'draft' ? 'draft' : (s.ready_to_merge ? 'reviewed' : 'new'),
             state: s.session_state,
-            created_at: s.created_at ? new Date(s.created_at).toISOString() : null,
-            last_activity: s.last_activity ? new Date(s.last_activity).toISOString() : null,
+            created_at: s.created_at && !isNaN(new Date(s.created_at).getTime()) ? new Date(s.created_at).toISOString() : null,
+            last_activity: s.last_activity && !isNaN(new Date(s.last_activity).getTime()) ? new Date(s.last_activity).toISOString() : null,
             agent_type: s.original_agent_type || 'claude',
             branch: s.branch,
             worktree_path: s.worktree_path,
@@ -593,14 +593,14 @@ ${session.initial_prompt ? `- Initial Prompt: ${session.initial_prompt}` : ''}`
             // Format as human-readable text
             const lines = sessions.map((s: Session) => {
               if (s.status === 'draft') {
-                const created = s.created_at ? new Date(s.created_at).toLocaleDateString() : 'unknown'
+                const created = s.created_at && !isNaN(new Date(s.created_at).getTime()) ? new Date(s.created_at).toLocaleDateString() : 'unknown'
                 const contentLength = s.draft_content?.length || 0
                 const name = s.display_name || s.name
                 return `[DRAFT] ${name} - Created: ${created}, Content: ${contentLength} chars`
               } else {
                 const reviewed = s.ready_to_merge ? '[REVIEWED]' : '[NEW]'
                 const agent = s.original_agent_type || 'unknown'
-                const modified = s.last_activity ? new Date(s.last_activity).toLocaleString() : 'never'
+                const modified = s.last_activity && !isNaN(new Date(s.last_activity).getTime()) ? new Date(s.last_activity).toLocaleString() : 'never'
                 const name = s.display_name || s.name
                 return `${reviewed} ${name} - Agent: ${agent}, Modified: ${modified}`
               }
