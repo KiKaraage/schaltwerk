@@ -61,9 +61,16 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
   const [loadingAllFiles, setLoadingAllFiles] = useState(true)
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const rightScrollContainerRef = useRef<HTMLDivElement>(null)
   const fileRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const suppressAutoSelectRef = useRef(false)
+  const leftScrollRafRef = useRef<number | null>(null)
+  const rightScrollRafRef = useRef<number | null>(null)
+  const didInitialScrollRef = useRef(false)
+  const lastInitialFilePathRef = useRef<string | null>(null)
   
   const [viewMode, setViewMode] = useState<'unified' | 'split'>('unified')
+  const [visibleFilePath, setVisibleFilePath] = useState<string | null>(null)
   const [showCommentForm, setShowCommentForm] = useState(false)
   const [expandedSections, setExpandedSections] = useState<Set<string | number>>(new Set())
   const [commentFormPosition, setCommentFormPosition] = useState<{ x: number, y: number } | null>(null)
@@ -178,25 +185,93 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
   }, [sessionName, filePath, loadAllFileDiffs])
 
   const scrollToFile = useCallback((path: string, index?: number) => {
+    // Temporarily suppress auto-selection while we programmatically scroll
+    suppressAutoSelectRef.current = true
     setSelectedFile(path)
     setFileError(null)
     if (index !== undefined) {
       setSelectedFileIndex(index)
     }
     
-    // Scroll to the file section
-    const fileElement = fileRefs.current.get(path)
-    if (fileElement && scrollContainerRef.current) {
-      fileElement.scrollIntoView({ behavior: 'auto', block: 'start' })
-    }
+    // Scroll to the file section with proper sticky offsets
+    // Defer to next frame to ensure styling/layout updates are applied
+    requestAnimationFrame(() => {
+      const fileElement = fileRefs.current.get(path)
+      const container = viewMode === 'split' ? rightScrollContainerRef.current : scrollContainerRef.current
+      if (fileElement && container) {
+        const containerRect = container.getBoundingClientRect()
+        const elementRect = fileElement.getBoundingClientRect()
+        const stickyOffsetPx = viewMode === 'split' ? 28 /* tailwind top-7 */ : 0
+        const delta = elementRect.top - containerRect.top
+        container.scrollTop += delta - stickyOffsetPx
+      }
+    })
     
     lineSelectionRef.current.clearSelection()
     setShowCommentForm(false)
     setCommentFormPosition(null)
-  }, [])
+    // Re-enable auto-selection shortly after scrolling completes
+    window.setTimeout(() => {
+      suppressAutoSelectRef.current = false
+    }, 250)
+  }, [viewMode])
 
-  // Removed automatic scroll monitoring to prevent jumping
-  // The selected file should only change when explicitly clicked in the sidebar
+  // Auto-select file while user scrolls without affecting scroll position
+  useEffect(() => {
+    if (!isOpen) return
+
+    const updateSelectionForRoot = (rootEl: HTMLElement, rafRef: React.MutableRefObject<number | null>) => {
+      if (suppressAutoSelectRef.current) return
+      if (files.length === 0) return
+      if (rafRef.current !== null) return
+      rafRef.current = window.requestAnimationFrame(() => {
+        rafRef.current = null
+        const rootTop = rootEl.getBoundingClientRect().top
+        let bestPath: string | null = null
+        let bestDist = Number.POSITIVE_INFINITY
+        for (const file of files) {
+          const el = fileRefs.current.get(file.path)
+          if (!el) continue
+          const rect = el.getBoundingClientRect()
+          const dist = Math.abs(rect.top - rootTop)
+          if (dist < bestDist) {
+            bestDist = dist
+            bestPath = file.path
+          }
+        }
+        if (bestPath && bestPath !== visibleFilePath) {
+          setVisibleFilePath(bestPath)
+        }
+      })
+    }
+
+    const leftRoot = scrollContainerRef.current
+    const rightRoot = viewMode === 'split' ? rightScrollContainerRef.current : null
+    if (!leftRoot && !rightRoot) return
+
+    const onLeftScroll = () => leftRoot && updateSelectionForRoot(leftRoot, leftScrollRafRef)
+    const onRightScroll = () => rightRoot && updateSelectionForRoot(rightRoot, rightScrollRafRef)
+
+    leftRoot?.addEventListener('scroll', onLeftScroll, { passive: true })
+    rightRoot?.addEventListener('scroll', onRightScroll, { passive: true })
+
+    // Initial sync once content is ready
+    if (leftRoot) updateSelectionForRoot(leftRoot, leftScrollRafRef)
+    if (rightRoot) updateSelectionForRoot(rightRoot, rightScrollRafRef)
+
+    return () => {
+      leftRoot?.removeEventListener('scroll', onLeftScroll)
+      rightRoot?.removeEventListener('scroll', onRightScroll)
+      if (leftScrollRafRef.current != null) {
+        cancelAnimationFrame(leftScrollRafRef.current)
+        leftScrollRafRef.current = null
+      }
+      if (rightScrollRafRef.current != null) {
+        cancelAnimationFrame(rightScrollRafRef.current)
+        rightScrollRafRef.current = null
+      }
+    }
+  }, [isOpen, viewMode, files, visibleFilePath])
 
   useEffect(() => {
     if (isOpen) {
@@ -208,16 +283,34 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
   }, [isOpen, loadChangedFiles])
 
   useEffect(() => {
-    if (selectedFile && isOpen && filePath) {
-      // Initial scroll to selected file
-      setTimeout(() => {
-        const fileElement = fileRefs.current.get(selectedFile)
-        if (fileElement && scrollContainerRef.current) {
-          fileElement.scrollIntoView({ behavior: 'auto', block: 'start' })
-        }
-      }, 100)
+    // Reset initial scroll state when modal re-opens or when a different file is passed in
+    if (!isOpen) {
+      didInitialScrollRef.current = false
+      lastInitialFilePathRef.current = null
+      return
     }
-  }, [selectedFile, isOpen, filePath])
+    if (filePath !== lastInitialFilePathRef.current) {
+      didInitialScrollRef.current = false
+    }
+    if (isOpen && filePath && !didInitialScrollRef.current) {
+      const targetPath = filePath
+      suppressAutoSelectRef.current = true
+      setTimeout(() => {
+        const fileElement = fileRefs.current.get(targetPath)
+        const container = viewMode === 'split' ? rightScrollContainerRef.current : scrollContainerRef.current
+        if (fileElement && container) {
+          const containerRect = container.getBoundingClientRect()
+          const elementRect = fileElement.getBoundingClientRect()
+          const stickyOffsetPx = viewMode === 'split' ? 28 : 0
+          const delta = elementRect.top - containerRect.top
+          container.scrollTop += delta - stickyOffsetPx
+        }
+        window.setTimeout(() => { suppressAutoSelectRef.current = false }, 250)
+      }, 100)
+      didInitialScrollRef.current = true
+      lastInitialFilePathRef.current = filePath
+    }
+  }, [isOpen, filePath, viewMode])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -489,13 +582,14 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
               <div className="flex-1 overflow-y-auto">
                 {files.map(file => {
                   const commentCount = getCommentsForFile(file.path).length
+                  const isLeftSelected = (visibleFilePath ?? selectedFile) === file.path
                   return (
                     <div
                       key={file.path}
                       className={clsx(
                         "px-3 py-2 cursor-pointer hover:bg-slate-800/50 transition-colors",
                         "flex items-center gap-2",
-                        selectedFile === file.path && "bg-slate-800"
+                        isLeftSelected && "bg-slate-800"
                       )}
                       onClick={() => scrollToFile(file.path, files.indexOf(file))}
                     >
@@ -721,7 +815,7 @@ export function UnifiedDiffModal({ filePath, isOpen, onClose }: UnifiedDiffModal
                           )
                         })}
                       </div>
-                      <div className="flex-1 overflow-auto font-mono text-sm">
+                      <div className="flex-1 overflow-auto font-mono text-sm" ref={rightScrollContainerRef}>
                         <div className="sticky top-0 bg-slate-900 px-3 py-1 text-xs font-medium border-b border-slate-800 z-20">
                           {branchInfo?.currentBranch || 'Current'}
                         </div>
