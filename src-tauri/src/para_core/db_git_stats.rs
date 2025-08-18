@@ -45,6 +45,7 @@ impl GitStatsMethods for Database {
                 lines_removed: row.get(3)?,
                 has_uncommitted: row.get(4)?,
                 calculated_at: Utc.timestamp_opt(row.get(5)?, 0).unwrap(),
+                last_diff_change_ts: None,
             })
         });
         match result {

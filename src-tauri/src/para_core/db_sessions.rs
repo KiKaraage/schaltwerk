@@ -13,7 +13,9 @@ pub trait SessionMethods {
     fn list_all_active_sessions(&self) -> Result<Vec<Session>>;
     fn list_sessions_by_state(&self, repo_path: &Path, state: SessionState) -> Result<Vec<Session>>;
     fn update_session_status(&self, id: &str, status: SessionStatus) -> Result<()>;
+    #[cfg(test)]
     fn update_session_activity(&self, id: &str, timestamp: chrono::DateTime<chrono::Utc>) -> Result<()>;
+    fn set_session_activity(&self, id: &str, timestamp: chrono::DateTime<chrono::Utc>) -> Result<()>;
     fn update_session_display_name(&self, id: &str, display_name: &str) -> Result<()>;
     fn update_session_branch(&self, id: &str, new_branch: &str) -> Result<()>;
     fn update_session_ready_to_merge(&self, id: &str, ready: bool) -> Result<()>;
@@ -169,7 +171,7 @@ impl SessionMethods for Database {
                     draft_content, session_state
              FROM sessions
              WHERE repository_path = ?1
-             ORDER BY ready_to_merge ASC, COALESCE(last_activity, updated_at) DESC"
+             ORDER BY ready_to_merge ASC, last_activity DESC"
         )?;
         
         let sessions = stmt.query_map(
@@ -218,7 +220,7 @@ impl SessionMethods for Database {
                     draft_content, session_state
              FROM sessions
              WHERE status = 'active'
-             ORDER BY ready_to_merge ASC, COALESCE(last_activity, updated_at) DESC"
+             ORDER BY ready_to_merge ASC, last_activity DESC"
         )?;
         
         let sessions = stmt.query_map(
@@ -269,6 +271,7 @@ impl SessionMethods for Database {
         Ok(())
     }
     
+    #[cfg(test)]
     fn update_session_activity(&self, id: &str, timestamp: chrono::DateTime<chrono::Utc>) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         
@@ -279,6 +282,15 @@ impl SessionMethods for Database {
             params![timestamp.timestamp(), id],
         )?;
         
+        Ok(())
+    }
+
+    fn set_session_activity(&self, id: &str, timestamp: chrono::DateTime<chrono::Utc>) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET last_activity = ?1 WHERE id = ?2",
+            params![timestamp.timestamp(), id],
+        )?;
         Ok(())
     }
     
@@ -333,7 +345,7 @@ impl SessionMethods for Database {
                     draft_content, session_state
              FROM sessions
              WHERE repository_path = ?1 AND session_state = ?2
-             ORDER BY ready_to_merge ASC, COALESCE(last_activity, updated_at) DESC"
+             ORDER BY ready_to_merge ASC, last_activity DESC"
         )?;
         
         let sessions = stmt.query_map(

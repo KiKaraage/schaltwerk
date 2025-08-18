@@ -601,16 +601,22 @@ fn main() {
                 start_terminal_monitoring(monitor_handle).await;
             });
             tauri::async_runtime::spawn(async move {
-                match get_para_core().await {
-                    Ok(core) => {
-                        let db = {
-                            let core_lock = core.lock().await;
-                            Arc::new(core_lock.db.clone())
-                        };
-                        para_core::activity::start_activity_tracking_with_app(db, app_handle);
-                    }
-                    Err(e) => {
-                        log::debug!("No active project for activity tracking: {e}");
+                use tokio::time::{sleep, Duration};
+                // Retry until a project is initialized, then start tracking once
+                loop {
+                    match get_para_core().await {
+                        Ok(core) => {
+                            let db = {
+                                let core_lock = core.lock().await;
+                                Arc::new(core_lock.db.clone())
+                            };
+                            para_core::activity::start_activity_tracking_with_app(db, app_handle.clone());
+                            break;
+                        }
+                        Err(e) => {
+                            log::debug!("No active project for activity tracking: {e}");
+                            sleep(Duration::from_secs(2)).await;
+                        }
                     }
                 }
             });

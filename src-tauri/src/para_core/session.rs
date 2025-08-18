@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{OnceLock, Mutex as StdMutex, Arc};
 use anyhow::{Result, anyhow};
 use uuid::Uuid;
-use chrono::Utc;
+use chrono::{Utc, TimeZone};
 use rand::Rng;
 use crate::para_core::{
     database::Database,
@@ -297,8 +297,13 @@ impl SessionManager {
         let _ = self.db.set_session_original_settings(&session.id, &global_agent, global_skip);
         
         let mut git_stats = git::calculate_git_stats_fast(&worktree_path, &parent_branch)?;
-        git_stats.session_id = session_id;
+        git_stats.session_id = session_id.clone();
         self.db.save_git_stats(&git_stats)?;
+        if let Some(ts) = git_stats.last_diff_change_ts {
+            if let Some(dt) = chrono::Utc.timestamp_opt(ts, 0).single() {
+                let _ = self.db.set_session_activity(&session_id, dt);
+            }
+        }
         
         // Session persisted successfully; reservation no longer needed
         self.unreserve_name(&unique_name);
@@ -507,7 +512,7 @@ impl SessionManager {
                 merge_mode: "rebase".to_string(),
                 status: status_type,
                 created_at: Some(session.created_at),
-                last_modified: session.last_activity.or(Some(session.updated_at)),
+                last_modified: session.last_activity,
                 has_uncommitted_changes: Some(has_uncommitted),
                 is_current: false,
                 session_type: SessionType::Worktree,
@@ -822,6 +827,11 @@ impl SessionManager {
         let mut git_stats = git::calculate_git_stats_fast(&session.worktree_path, &parent_branch)?;
         git_stats.session_id = session.id.clone();
         self.db.save_git_stats(&git_stats)?;
+        if let Some(ts) = git_stats.last_diff_change_ts {
+            if let Some(dt) = chrono::Utc.timestamp_opt(ts, 0).single() {
+                let _ = self.db.set_session_activity(&session.id, dt);
+            }
+        }
         
         Ok(())
     }

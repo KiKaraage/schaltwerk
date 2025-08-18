@@ -1,9 +1,14 @@
+#[cfg(test)]
 use std::path::Path;
 use std::sync::Arc;
+#[cfg(test)]
 use std::time::UNIX_EPOCH;
 use tokio::time::{interval, Duration};
+#[cfg(test)]
 use walkdir::WalkDir;
-use chrono::{Utc, DateTime, TimeZone};
+use chrono::{Utc, TimeZone};
+#[cfg(test)]
+use chrono::DateTime;
 use anyhow::Result;
 use crate::para_core::{
     database::Database,
@@ -57,31 +62,26 @@ impl<E: EventEmitter> ActivityTracker<E> {
         let active_sessions = self.db.list_all_active_sessions()?;
         
         for session in active_sessions {
-            if let Ok(Some(timestamp)) = self.get_last_modification(&session.worktree_path) {
-                self.db.update_session_activity(&session.id, timestamp)?;
-                // Emit activity update event
-                let payload = SessionActivityUpdated {
-                    session_id: session.id.clone(),
-                    session_name: session.name.clone(),
-                    last_activity_ts: timestamp.timestamp(),
-                };
-                let _ = self.emitter.emit_session_activity(payload);
-            }
-            
-            if self.db.should_update_stats(&session.id)? {
-                // Skip stats for missing worktrees; they may have been deleted externally
-                if !session.worktree_path.exists() {
-                    log::warn!(
-                        "Skipping git stats for missing worktree: {}",
-                        session.worktree_path.display()
-                    );
-                } else {
-                    match git::calculate_git_stats_fast(&session.worktree_path, &session.parent_branch) {
-                        Ok(mut stats) => {
-                            stats.session_id = session.id.clone();
-                            if let Err(e) = self.db.save_git_stats(&stats) {
-                                log::warn!("Failed to save git stats for {}: {}", session.name, e);
-                            }
+            self.refresh_stats_and_activity_for_session(&session)?;
+        }
+        
+        Ok(())
+    }
+    
+    fn refresh_stats_and_activity_for_session(&self, session: &crate::para_core::types::Session) -> Result<bool> {
+        // Prefer diff-aware last change time via git stats; fall back to filesystem walk only if unavailable
+        let mut emitted_activity = false;
+        
+        if session.worktree_path.exists() {
+            match git::calculate_git_stats_fast(&session.worktree_path, &session.parent_branch) {
+                Ok(mut stats) => {
+                    stats.session_id = session.id.clone();
+
+                    // Update DB stats periodically as before
+                    if self.db.should_update_stats(&session.id)? {
+                        if let Err(e) = self.db.save_git_stats(&stats) {
+                            log::warn!("Failed to save git stats for {}: {}", session.name, e);
+                        } else {
                             // Emit git stats update event
                             let payload = SessionGitStatsUpdated {
                                 session_id: session.id.clone(),
@@ -93,20 +93,38 @@ impl<E: EventEmitter> ActivityTracker<E> {
                             };
                             let _ = self.emitter.emit_session_git_stats(payload);
                         }
-                        Err(e) => {
-                            log::warn!(
-                                "Failed to compute git stats for {}: {}",
-                                session.name, e
-                            );
+                    }
+
+                    if let Some(mut ts) = stats.last_diff_change_ts {
+                        // Clamp future timestamps to now to avoid monotonic lock-in from clock skew
+                        let now = Utc::now().timestamp();
+                        if ts > now + 120 { ts = now; }
+                        // Persist as last_activity if monotonically newer
+                        if let Some(dt) = Utc.timestamp_opt(ts, 0).single() {
+                            // Use strict set to ensure UI reflects the new diff-aware time (even if earlier/later)
+                            self.db.set_session_activity(&session.id, dt)?;
+                            let payload = SessionActivityUpdated {
+                                session_id: session.id.clone(),
+                                session_name: session.name.clone(),
+                                last_activity_ts: ts,
+                            };
+                            let _ = self.emitter.emit_session_activity(payload);
+                            emitted_activity = true;
                         }
                     }
                 }
+                Err(e) => {
+                    log::warn!("Failed to compute fast git stats for {}: {}", session.name, e);
+                }
             }
         }
-        
-        Ok(())
+
+        // No filesystem walk fallback: if diff timestamp was not derived, do not emit or set last_activity
+
+        Ok(emitted_activity)
     }
     
+    #[cfg(test)]
     fn get_last_modification(&self, path: &Path) -> Result<Option<DateTime<Utc>>> {
         if !path.exists() {
             return Ok(None);
@@ -178,7 +196,13 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
     use crate::para_core::database::Database;
+        use crate::para_core::db_sessions::SessionMethods;
+        use crate::para_core::types::{Session, SessionStatus, SessionState};
+        use chrono::Utc;
+        #[cfg(test)]
+        use crate::para_core::git::{create_worktree_from_base, get_current_branch};
     
+    #[derive(Clone)]
     struct MockEmitter {
         activity_events: Arc<Mutex<Vec<SessionActivityUpdated>>>,
         git_stats_events: Arc<Mutex<Vec<SessionGitStatsUpdated>>>,
@@ -307,4 +331,117 @@ mod tests {
         let result = tracker.get_last_modification(temp_dir.path()).unwrap();
         assert!(result.is_some());
     }
+
+        #[test]
+        fn test_refresh_uses_git_diff_for_untracked_and_staged_changes() {
+            let temp = TempDir::new().unwrap();
+            let repo_path = temp.path().to_path_buf();
+
+            // init repo
+            std::process::Command::new("git").args(["init"]).current_dir(&repo_path).output().unwrap();
+            std::process::Command::new("git").args(["config","user.email","test@example.com"]).current_dir(&repo_path).output().unwrap();
+            std::process::Command::new("git").args(["config","user.name","Test User"]).current_dir(&repo_path).output().unwrap();
+            std::fs::write(repo_path.join("README.md"), "Initial").unwrap();
+            std::process::Command::new("git").args(["add","."]).current_dir(&repo_path).output().unwrap();
+            std::process::Command::new("git").args(["commit","-m","init"]).current_dir(&repo_path).output().unwrap();
+
+            // create worktree
+            let worktree_path = repo_path.join(".schaltwerk").join("worktrees").join("test-session");
+            let parent_branch = get_current_branch(&repo_path).unwrap();
+            create_worktree_from_base(&repo_path, "schaltwerk/test-session", &worktree_path, &parent_branch).unwrap();
+
+            // DB and session
+            let db_path = temp.path().join("test.db");
+            let db = Arc::new(Database::new(Some(db_path)).unwrap());
+            let mock_emitter = MockEmitter::new();
+            let tracker = ActivityTracker::new(db.clone(), mock_emitter.clone());
+
+            let session = Session {
+                id: "s-1".into(),
+                name: "test-session".into(),
+                display_name: None,
+                repository_path: repo_path.clone(),
+                repository_name: "repo".into(),
+                branch: "schaltwerk/test-session".into(),
+                parent_branch: parent_branch.clone(),
+                worktree_path: worktree_path.clone(),
+                status: SessionStatus::Active,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                last_activity: None,
+                initial_prompt: None,
+                ready_to_merge: false,
+                original_agent_type: None,
+                original_skip_permissions: None,
+                pending_name_generation: false,
+                was_auto_generated: false,
+                draft_content: None,
+                session_state: SessionState::Running,
+            };
+            db.create_session(&session).unwrap();
+
+            // Create untracked file (should be detected)
+            std::fs::write(worktree_path.join("untracked.txt"), "hi").unwrap();
+            // Create staged change
+            std::fs::write(worktree_path.join("staged.txt"), "stage me").unwrap();
+            std::process::Command::new("git").args(["add","staged.txt"]).current_dir(&worktree_path).output().unwrap();
+
+            let emitted = tracker.refresh_stats_and_activity_for_session(&session).unwrap();
+            assert!(emitted, "Should emit activity for changed files");
+
+            // Verify DB updated
+            let updated = db.get_session_by_id(&session.id).unwrap();
+            assert!(updated.last_activity.is_some());
+
+            // Verify events emitted
+            let events = mock_emitter.get_activity_events();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].session_name, session.name);
+        }
+
+        #[test]
+        fn test_refresh_falls_back_to_filesystem_when_git_fails() {
+            let temp = TempDir::new().unwrap();
+            let db_path = temp.path().join("test.db");
+            let db = Arc::new(Database::new(Some(db_path)).unwrap());
+            let mock_emitter = MockEmitter::new();
+            let tracker = ActivityTracker::new(db.clone(), mock_emitter.clone());
+
+            // Non-repo directory with a file
+            let dir = temp.path().join("nonrepo");
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("file.txt"), "x").unwrap();
+
+            let session = Session {
+                id: "s-2".into(),
+                name: "fallback".into(),
+                display_name: None,
+                repository_path: temp.path().to_path_buf(),
+                repository_name: "repo".into(),
+                branch: "schaltwerk/fallback".into(),
+                parent_branch: "main".into(),
+                worktree_path: dir.clone(),
+                status: SessionStatus::Active,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                last_activity: None,
+                initial_prompt: None,
+                ready_to_merge: false,
+                original_agent_type: None,
+                original_skip_permissions: None,
+                pending_name_generation: false,
+                was_auto_generated: false,
+                draft_content: None,
+                session_state: SessionState::Running,
+            };
+            db.create_session(&session).unwrap();
+
+            let emitted = tracker.refresh_stats_and_activity_for_session(&session).unwrap();
+            // We removed filesystem fallback: should not emit anything when git stats are unavailable
+            assert!(!emitted, "Should not emit when git stats unavailable");
+            let updated = db.get_session_by_id(&session.id).unwrap();
+            assert!(updated.last_activity.is_none());
+            let events = mock_emitter.get_activity_events();
+            assert_eq!(events.len(), 0);
+        }
 }

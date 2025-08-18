@@ -110,6 +110,9 @@ pub struct GitStats {
     pub lines_removed: u32,
     pub has_uncommitted: bool,
     pub calculated_at: DateTime<Utc>,
+    // Timestamp (unix seconds) of the most recent meaningful diff change:
+    // max(latest commit ahead of base, latest mtime among uncommitted changed files)
+    pub last_diff_change_ts: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
