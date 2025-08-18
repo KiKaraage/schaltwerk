@@ -203,6 +203,36 @@ body.is-split-dragging [class*="transition-"] {
   scrollbar-color: rgba(100, 116, 139, 0.3) transparent;
 }
 
+/* Markdown Editor Scrollbar Styles */
+.markdown-editor-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(71, 85, 105, 0.8) rgba(30, 41, 59, 0.3);
+}
+
+.markdown-editor-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.markdown-editor-scroll::-webkit-scrollbar-track {
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 5px;
+}
+
+.markdown-editor-scroll::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.9);
+  border-radius: 5px;
+  border: 2px solid rgba(30, 41, 59, 0.5);
+}
+
+.markdown-editor-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 1);
+}
+
+.markdown-editor-scroll::-webkit-scrollbar-corner {
+  background: rgba(30, 41, 59, 0.5);
+}
+
 html,
 body,
 #root {

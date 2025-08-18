@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import { VscCopy } from 'react-icons/vsc'
+
+const MarkdownEditor = lazy(() => import('./MarkdownEditor').then(m => ({ default: m.MarkdownEditor })))
 
 interface Props {
   sessionName: string
@@ -65,11 +65,6 @@ export function DraftContentView({ sessionName, editable = true, debounceMs = 10
     }
   }
 
-  const render = useMemo(() => (
-    <div className="prose prose-sm prose-invert max-w-none">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-    </div>
-  ), [content])
 
   if (loading) {
     return <div className="h-full flex items-center justify-center text-slate-400">Loading…</div>
@@ -92,12 +87,18 @@ export function DraftContentView({ sessionName, editable = true, debounceMs = 10
             {copying ? 'Copied!' : 'Copy'}
           </button>
         </div>
-        <textarea
-          className="flex-1 w-full bg-slate-900 text-slate-100 px-3 py-2 outline-none border-0 resize-none font-mono text-sm"
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Enter task description in markdown…"
-        />
+        <Suspense fallback={
+          <div className="flex-1 flex items-center justify-center text-slate-400">
+            Loading editor...
+          </div>
+        }>
+          <MarkdownEditor
+            value={content}
+            onChange={setContent}
+            placeholder="Enter task description in markdown…"
+            className="flex-1"
+          />
+        </Suspense>
       </div>
     )
   }
@@ -116,8 +117,19 @@ export function DraftContentView({ sessionName, editable = true, debounceMs = 10
           {copying ? 'Copied!' : 'Copy'}
         </button>
       </div>
-      <div className="flex-1 overflow-auto p-3">
-        {render}
+      <div className="flex-1 overflow-auto">
+        <Suspense fallback={
+          <div className="h-full flex items-center justify-center text-slate-400">
+            Loading content...
+          </div>
+        }>
+          <MarkdownEditor
+            value={content}
+            onChange={() => {}}
+            readOnly={true}
+            className="h-full"
+          />
+        </Suspense>
       </div>
     </div>
   )

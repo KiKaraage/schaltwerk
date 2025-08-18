@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import { VscEdit, VscPlay, VscTrash, VscSave, VscClose, VscAdd, VscCopy } from 'react-icons/vsc'
 import { ConfirmModal } from '../modals/ConfirmModal'
 import clsx from 'clsx'
+
+const MarkdownEditor = lazy(() => import('./MarkdownEditor').then(m => ({ default: m.MarkdownEditor })))
 
 interface DraftSession {
   name: string
@@ -236,13 +236,20 @@ export function DraftTaskPanel() {
                     </button>
                   </div>
                 </div>
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full h-48 px-3 py-2 text-sm bg-slate-900 border border-slate-700 rounded focus:outline-none focus:border-slate-500 text-slate-200 font-mono resize-none"
-                  placeholder="Enter task description in markdown..."
-                  autoFocus
-                />
+                <div className="h-48 border border-slate-700 rounded overflow-hidden">
+                  <Suspense fallback={
+                    <div className="h-full flex items-center justify-center text-slate-400">
+                      Loading editor...
+                    </div>
+                  }>
+                    <MarkdownEditor
+                      value={editContent}
+                      onChange={setEditContent}
+                      placeholder="Enter task description in markdown..."
+                      className="h-full"
+                    />
+                  </Suspense>
+                </div>
               </div>
             ) : (
               <>
@@ -255,28 +262,17 @@ export function DraftTaskPanel() {
                 
                 <div className="mb-3">
                   {(draft.draft_content || draft.initial_prompt) ? (
-                    <div className="text-xs text-slate-300 bg-slate-900/50 rounded p-2 max-h-20 overflow-hidden">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
-                          ul: ({ children }) => <ul className="list-disc list-inside ml-2">{children}</ul>,
-                          ol: ({ children }) => <ol className="list-decimal list-inside ml-2">{children}</ol>,
-                          code: ({ children, ...props }: any) => {
-                            const inline = !props.className?.includes('language-')
-                            return inline ? (
-                              <code className="bg-slate-800 px-1 rounded text-xs" {...props}>{children}</code>
-                            ) : (
-                              <code className="block bg-slate-800 p-1 rounded text-xs mt-1" {...props}>{children}</code>
-                            )
-                          },
-                          h1: ({ children }) => <h1 className="font-bold">{children}</h1>,
-                          h2: ({ children }) => <h2 className="font-bold">{children}</h2>,
-                          h3: ({ children }) => <h3 className="font-bold">{children}</h3>,
-                        }}
-                      >
-                        {getPreview(draft.draft_content || draft.initial_prompt)}
-                      </ReactMarkdown>
+                    <div className="text-xs text-slate-300 bg-slate-900/50 rounded overflow-hidden max-h-20">
+                      <Suspense fallback={
+                        <div className="p-2 text-slate-400">Loading preview...</div>
+                      }>
+                        <MarkdownEditor
+                          value={getPreview(draft.draft_content || draft.initial_prompt)}
+                          onChange={() => {}}
+                          readOnly={true}
+                          className="h-20"
+                        />
+                      </Suspense>
                     </div>
                   ) : (
                     <p className="text-xs text-slate-500 italic">No content</p>
