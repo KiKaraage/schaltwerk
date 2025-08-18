@@ -397,9 +397,13 @@ mod tests {
     
 #[test]
     fn test_continue_with_session_id() {
-        // Save the original value if it exists
+        // Save and clear any existing OPENCODE_BIN to ensure clean test environment
         let original_value = std::env::var("OPENCODE_BIN").ok();
+        std::env::remove_var("OPENCODE_BIN");
+        
+        // Now set our test value
         std::env::set_var("OPENCODE_BIN", "/custom/bin/opencode");
+        
         let session_info = OpenCodeSessionInfo {
             id: "ses_743dfa323ffe5EQMH4dv6COsh1".to_string(),
             has_history: true,
@@ -411,6 +415,7 @@ mod tests {
             false,
         );
         assert_eq!(cmd, r#"cd /path/to/worktree && /custom/bin/opencode --session "ses_743dfa323ffe5EQMH4dv6COsh1""#);
+        
         // Restore the original value or remove if it didn't exist
         match original_value {
             Some(val) => std::env::set_var("OPENCODE_BIN", val),
