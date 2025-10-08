@@ -30,3 +30,19 @@ pub fn clipboard_write_text(text: String) -> Result<(), String> {
         Err(format!("pbcopy exited with status: {status}"))
     }
 }
+
+/// Write plain text to the system clipboard using arboard (Linux - supports Wayland & X11)
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn clipboard_write_text(text: String) -> Result<(), String> {
+    use arboard::Clipboard;
+
+    let mut clipboard = Clipboard::new()
+        .map_err(|e| format!("Failed to initialize clipboard: {}", e))?;
+
+    clipboard
+        .set_text(text)
+        .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+
+    Ok(())
+}

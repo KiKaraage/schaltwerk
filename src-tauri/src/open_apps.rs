@@ -7,6 +7,9 @@ use std::process::Command;
 
 const OPEN_BIN: &str = "/usr/bin/open";
 
+#[cfg(target_os = "linux")]
+const XDG_OPEN_BIN: &str = "xdg-open";
+
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct OpenApp {
     pub id: String,   // e.g., "finder", "cursor", "vscode", "ghostty", "warp", "terminal"
@@ -14,56 +17,214 @@ pub struct OpenApp {
     pub kind: String, // "editor" | "terminal" | "system"
 }
 
+#[cfg(target_os = "linux")]
+fn detect_linux_file_managers() -> Vec<OpenApp> {
+    let mut apps = Vec::new();
+
+    for (binary, name) in [
+        ("nautilus", "Files (Nautilus)"),
+        ("dolphin", "Dolphin"),
+        ("thunar", "Thunar"),
+        ("pcmanfm", "PCManFM"),
+        ("nemo", "Nemo"),
+    ] {
+        if which::which(binary).is_ok() {
+            apps.push(OpenApp {
+                id: binary.into(),
+                name: name.into(),
+                kind: "system".into(),
+            });
+        }
+    }
+
+    apps
+}
+
+#[cfg(target_os = "linux")]
+fn detect_linux_terminals() -> Vec<OpenApp> {
+    let mut apps = Vec::new();
+
+    for (binary, name) in [
+        ("ptyxis", "Ptyxis"),
+        ("gnome-terminal", "GNOME Terminal"),
+        ("konsole", "Konsole"),
+        ("alacritty", "Alacritty"),
+        ("kitty", "Kitty"),
+        ("xfce4-terminal", "Xfce Terminal"),
+        ("tilix", "Tilix"),
+    ] {
+        if which::which(binary).is_ok() {
+            apps.push(OpenApp {
+                id: binary.into(),
+                name: name.into(),
+                kind: "terminal".into(),
+            });
+        }
+    }
+
+    apps
+}
+
+#[cfg(target_os = "linux")]
+fn open_with_linux(app_id: &str, path: &str) -> Result<(), String> {
+    let result = match app_id {
+        "nautilus" | "dolphin" | "thunar" | "pcmanfm" | "nemo" => {
+            Command::new(app_id).arg(path).status()
+        }
+        "ptyxis" => Command::new("ptyxis")
+            .arg("--working-directory")
+            .arg(path)
+            .status(),
+        "gnome-terminal" | "xfce4-terminal" => Command::new(app_id)
+            .arg("--working-directory")
+            .arg(path)
+            .status(),
+        "konsole" => Command::new("konsole").arg("--workdir").arg(path).status(),
+        "alacritty" => Command::new("alacritty")
+            .arg("--working-directory")
+            .arg(path)
+            .status(),
+        "kitty" => Command::new("kitty").arg("--directory").arg(path).status(),
+        "tilix" => Command::new("tilix")
+            .arg("--working-directory")
+            .arg(path)
+            .status(),
+        _ => Command::new(XDG_OPEN_BIN).arg(path).status(),
+    };
+
+    result
+        .map_err(|e| format!("Failed to open with {}: {}", app_id, e))?
+        .success()
+        .then_some(())
+        .ok_or_else(|| format!("{} is not installed or failed to open", app_id))
+}
+
 fn detect_available_apps() -> Vec<OpenApp> {
-    // Show all common macOS apps and let error handling deal with missing ones
-    // This avoids sandbox permission issues with app detection
-    vec![
-        OpenApp {
-            id: "finder".into(),
-            name: "Finder".into(),
-            kind: "system".into(),
-        },
-        OpenApp {
-            id: "cursor".into(),
-            name: "Cursor".into(),
-            kind: "editor".into(),
-        },
-        OpenApp {
-            id: "vscode".into(),
-            name: "VS Code".into(),
-            kind: "editor".into(),
-        },
-        OpenApp {
-            id: "intellij".into(),
-            name: "IntelliJ IDEA".into(),
-            kind: "editor".into(),
-        },
-        OpenApp {
-            id: "ghostty".into(),
-            name: "Ghostty".into(),
-            kind: "terminal".into(),
-        },
-        OpenApp {
-            id: "warp".into(),
-            name: "Warp".into(),
-            kind: "terminal".into(),
-        },
-        OpenApp {
-            id: "terminal".into(),
-            name: "Terminal".into(),
-            kind: "terminal".into(),
-        },
-    ]
+    #[cfg(target_os = "linux")]
+    {
+        let mut apps = Vec::new();
+        apps.extend(detect_linux_file_managers());
+        apps.extend(detect_linux_terminals());
+        
+        let editors_and_terminals = vec![
+            OpenApp {
+                id: "ghostty".into(),
+                name: "Ghostty".into(),
+                kind: "terminal".into(),
+            },
+            OpenApp {
+                id: "cursor".into(),
+                name: "Cursor".into(),
+                kind: "editor".into(),
+            },
+            OpenApp {
+                id: "vscode".into(),
+                name: "VS Code".into(),
+                kind: "editor".into(),
+            },
+            OpenApp {
+                id: "intellij".into(),
+                name: "IntelliJ IDEA".into(),
+                kind: "editor".into(),
+            },
+            OpenApp {
+                id: "zed".into(),
+                name: "Zed".into(),
+                kind: "editor".into(),
+            },
+            OpenApp {
+                id: "codium".into(),
+                name: "VSCodium".into(),
+                kind: "editor".into(),
+            },
+            OpenApp {
+                id: "windsurf".into(),
+                name: "Windsurf".into(),
+                kind: "editor".into(),
+            },
+        ];
+        apps.extend(editors_and_terminals);
+        
+        return apps;
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        vec![
+            OpenApp {
+                id: "finder".into(),
+                name: "Finder".into(),
+                kind: "system".into(),
+            },
+            OpenApp {
+                id: "cursor".into(),
+                name: "Cursor".into(),
+                kind: "editor".into(),
+            },
+            OpenApp {
+                id: "vscode".into(),
+                name: "VS Code".into(),
+                kind: "editor".into(),
+            },
+            OpenApp {
+                id: "intellij".into(),
+                name: "IntelliJ IDEA".into(),
+                kind: "editor".into(),
+            },
+            OpenApp {
+                id: "zed".into(),
+                name: "Zed".into(),
+                kind: "editor".into(),
+            },
+            OpenApp {
+                id: "codium".into(),
+                name: "VSCodium".into(),
+                kind: "editor".into(),
+            },
+            OpenApp {
+                id: "windsurf".into(),
+                name: "Windsurf".into(),
+                kind: "editor".into(),
+            },
+            OpenApp {
+                id: "ghostty".into(),
+                name: "Ghostty".into(),
+                kind: "terminal".into(),
+            },
+            OpenApp {
+                id: "warp".into(),
+                name: "Warp".into(),
+                kind: "terminal".into(),
+            },
+            OpenApp {
+                id: "terminal".into(),
+                name: "Terminal".into(),
+                kind: "terminal".into(),
+            },
+        ]
+    }
 }
 
 fn open_path_in(app_id: &str, path: &str) -> Result<(), String> {
     let working_dir = resolve_working_directory(path)?;
+
+    #[cfg(target_os = "linux")]
+    {
+        let linux_apps = [
+            "nautilus", "dolphin", "thunar", "pcmanfm", "nemo",
+            "ptyxis", "gnome-terminal", "konsole", "alacritty", "kitty", "xfce4-terminal", "tilix",
+        ];
+        if linux_apps.contains(&app_id) {
+            return open_with_linux(app_id, working_dir.as_str());
+        }
+    }
 
     if app_id == "ghostty" {
         return open_path_in_ghostty(working_dir.as_str());
     }
 
     let result = match app_id {
+        #[cfg(target_os = "macos")]
         "finder" => Command::new(OPEN_BIN).arg(working_dir.as_str()).status(),
         "cursor" => {
             // Try CLI first, fall back to open -a
@@ -76,6 +237,68 @@ fn open_path_in(app_id: &str, path: &str) -> Result<(), String> {
             }
         }
         "intellij" => return open_path_in_intellij(working_dir.as_str()),
+        "zed" => {
+            if which::which("zed").is_ok() {
+                Command::new("zed").arg(working_dir.as_str()).status()
+            } else {
+                #[cfg(target_os = "macos")]
+                {
+                    Command::new(OPEN_BIN)
+                        .args(["-a", "Zed", working_dir.as_str()])
+                        .status()
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "Zed CLI not found",
+                    ))
+                }
+            }
+        }
+        "codium" => {
+            #[cfg(target_os = "linux")]
+            let binary = "codium";
+            #[cfg(target_os = "macos")]
+            let binary = "vscodium";
+
+            if which::which(binary).is_ok() {
+                Command::new(binary).arg(working_dir.as_str()).status()
+            } else {
+                #[cfg(target_os = "macos")]
+                {
+                    Command::new(OPEN_BIN)
+                        .args(["-a", "VSCodium", working_dir.as_str()])
+                        .status()
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "codium CLI not found",
+                    ))
+                }
+            }
+        }
+        "windsurf" => {
+            if which::which("windsurf").is_ok() {
+                Command::new("windsurf").arg(working_dir.as_str()).status()
+            } else {
+                #[cfg(target_os = "macos")]
+                {
+                    Command::new(OPEN_BIN)
+                        .args(["-a", "Windsurf", working_dir.as_str()])
+                        .status()
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "Windsurf CLI not found",
+                    ))
+                }
+            }
+        }
         "vscode" => {
             // Try CLI first, fall back to open -a
             if which::which("code").is_ok() {
@@ -112,6 +335,9 @@ fn open_path_in(app_id: &str, path: &str) -> Result<(), String> {
             let app_name = match app_id {
                 "cursor" => "Cursor",
                 "vscode" => "VS Code",
+                "zed" => "Zed",
+                "codium" => "VSCodium",
+                "windsurf" => "Windsurf",
                 "warp" => "Warp",
                 "terminal" => "Terminal",
                 "ghostty" => "Ghostty",
@@ -124,6 +350,9 @@ fn open_path_in(app_id: &str, path: &str) -> Result<(), String> {
             let app_name = match app_id {
                 "cursor" => "Cursor",
                 "vscode" => "VS Code",
+                "zed" => "Zed",
+                "codium" => "VSCodium",
+                "windsurf" => "Windsurf",
                 "warp" => "Warp",
                 "terminal" => "Terminal",
                 "finder" => "Finder",
