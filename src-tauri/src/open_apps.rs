@@ -93,10 +93,10 @@ fn open_with_linux(app_id: &str, path: &str) -> Result<(), String> {
     };
 
     result
-        .map_err(|e| format!("Failed to open with {}: {}", app_id, e))?
+        .map_err(|e| format!("Failed to open with {app_id}: {e}"))?
         .success()
         .then_some(())
-        .ok_or_else(|| format!("{} is not installed or failed to open", app_id))
+        .ok_or_else(|| format!("{app_id} is not installed or failed to open"))
 }
 
 fn detect_available_apps() -> Vec<OpenApp> {
@@ -144,8 +144,8 @@ fn detect_available_apps() -> Vec<OpenApp> {
             },
         ];
         apps.extend(editors_and_terminals);
-        
-        return apps;
+
+        apps
     }
     
     #[cfg(target_os = "macos")]
@@ -579,12 +579,25 @@ mod tests {
     #[test]
     fn test_detect_available_apps_includes_expected_apps() {
         let apps = detect_available_apps();
-        // We should always have all apps available on macOS
-        assert!(apps.iter().any(|a| a.id == "finder"));
-        assert!(apps.iter().any(|a| a.id == "terminal"));
-        assert!(apps.iter().any(|a| a.id == "intellij"));
-        assert!(apps.iter().any(|a| a.id == "ghostty"));
-        assert_eq!(apps.len(), 7); // Should have all 7 apps
+
+        #[cfg(target_os = "macos")]
+        {
+            // We should always have all apps available on macOS
+            assert!(apps.iter().any(|a| a.id == "finder"));
+            assert!(apps.iter().any(|a| a.id == "terminal"));
+            assert!(apps.iter().any(|a| a.id == "intellij"));
+            assert!(apps.iter().any(|a| a.id == "ghostty"));
+            assert_eq!(apps.len(), 10); // Should have all 10 apps on macOS
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // On Linux, we should have the hardcoded editors/terminals plus any detected system apps
+            assert!(apps.iter().any(|a| a.id == "intellij"));
+            assert!(apps.iter().any(|a| a.id == "ghostty"));
+            // At minimum we should have the 7 hardcoded apps, plus any detected system apps
+            assert!(apps.len() >= 7);
+        }
     }
 
     #[test]

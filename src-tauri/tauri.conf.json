@@ -38,14 +38,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "app",
-      "dmg",
-      "appimage",
-      "deb",
-      "rpm",
-      "tar.gz"
-    ],
+    "targets": "all",
     "publisher": "Marius Wichtner",
     "copyright": "© 2024 Marius Wichtner",
     "category": "DeveloperTools",
