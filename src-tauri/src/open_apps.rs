@@ -45,13 +45,16 @@ fn detect_linux_terminals() -> Vec<OpenApp> {
     let mut apps = Vec::new();
 
     for (binary, name) in [
-        ("ptyxis", "Ptyxis"),
-        ("gnome-terminal", "GNOME Terminal"),
-        ("konsole", "Konsole"),
         ("alacritty", "Alacritty"),
+        ("gnome-terminal", "GNOME Terminal"),
+        ("kgx", "Console"),
         ("kitty", "Kitty"),
-        ("xfce4-terminal", "Xfce Terminal"),
+        ("konsole", "Konsole"),
+        ("ptyxis", "Ptyxis"),
         ("tilix", "Tilix"),
+        ("wezterm", "Wezterm"),
+        ("xfce4-terminal", "Xfce Terminal"),
+        ("zellij", "Zellij"),
     ] {
         if which::which(binary).is_ok() {
             apps.push(OpenApp {
@@ -75,7 +78,11 @@ fn open_with_linux(app_id: &str, path: &str) -> Result<(), String> {
             .arg("--working-directory")
             .arg(path)
             .status(),
-        "gnome-terminal" | "xfce4-terminal" => Command::new(app_id)
+        "gnome-terminal" => Command::new("gnome-terminal")
+            .arg("--working-directory")
+            .arg(path)
+            .status(),
+        "xfce4-terminal" => Command::new("xfce4-terminal")
             .arg("--working-directory")
             .arg(path)
             .status(),
@@ -86,6 +93,20 @@ fn open_with_linux(app_id: &str, path: &str) -> Result<(), String> {
             .status(),
         "kitty" => Command::new("kitty").arg("--directory").arg(path).status(),
         "tilix" => Command::new("tilix")
+            .arg("--working-directory")
+            .arg(path)
+            .status(),
+        "wezterm" => Command::new("wezterm")
+            .arg("start")
+            .arg("--cwd")
+            .arg(path)
+            .status(),
+        "zellij" => Command::new("zellij")
+            .arg("launch")
+            .arg("--cwd")
+            .arg(path)
+            .status(),
+        "kgx" => Command::new("kgx")
             .arg("--working-directory")
             .arg(path)
             .status(),
@@ -105,7 +126,7 @@ fn detect_available_apps() -> Vec<OpenApp> {
         let mut apps = Vec::new();
         apps.extend(detect_linux_file_managers());
         apps.extend(detect_linux_terminals());
-        
+
         let editors_and_terminals = vec![
             OpenApp {
                 id: "ghostty".into(),
@@ -127,27 +148,12 @@ fn detect_available_apps() -> Vec<OpenApp> {
                 name: "IntelliJ IDEA".into(),
                 kind: "editor".into(),
             },
-            OpenApp {
-                id: "zed".into(),
-                name: "Zed".into(),
-                kind: "editor".into(),
-            },
-            OpenApp {
-                id: "codium".into(),
-                name: "VSCodium".into(),
-                kind: "editor".into(),
-            },
-            OpenApp {
-                id: "windsurf".into(),
-                name: "Windsurf".into(),
-                kind: "editor".into(),
-            },
         ];
         apps.extend(editors_and_terminals);
 
         apps
     }
-    
+
     #[cfg(target_os = "macos")]
     {
         vec![
@@ -169,21 +175,6 @@ fn detect_available_apps() -> Vec<OpenApp> {
             OpenApp {
                 id: "intellij".into(),
                 name: "IntelliJ IDEA".into(),
-                kind: "editor".into(),
-            },
-            OpenApp {
-                id: "zed".into(),
-                name: "Zed".into(),
-                kind: "editor".into(),
-            },
-            OpenApp {
-                id: "codium".into(),
-                name: "VSCodium".into(),
-                kind: "editor".into(),
-            },
-            OpenApp {
-                id: "windsurf".into(),
-                name: "Windsurf".into(),
                 kind: "editor".into(),
             },
             OpenApp {
@@ -211,8 +202,21 @@ fn open_path_in(app_id: &str, path: &str) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         let linux_apps = [
-            "nautilus", "dolphin", "thunar", "pcmanfm", "nemo",
-            "ptyxis", "gnome-terminal", "konsole", "alacritty", "kitty", "xfce4-terminal", "tilix",
+            "nautilus",
+            "dolphin",
+            "thunar",
+            "pcmanfm",
+            "nemo",
+            "alacritty",
+            "gnome-terminal",
+            "kgx",
+            "konsole",
+            "kitty",
+            "ptyxis",
+            "tilix",
+            "wezterm",
+            "xfce4-terminal",
+            "zellij",
         ];
         if linux_apps.contains(&app_id) {
             return open_with_linux(app_id, working_dir.as_str());
@@ -237,68 +241,6 @@ fn open_path_in(app_id: &str, path: &str) -> Result<(), String> {
             }
         }
         "intellij" => return open_path_in_intellij(working_dir.as_str()),
-        "zed" => {
-            if which::which("zed").is_ok() {
-                Command::new("zed").arg(working_dir.as_str()).status()
-            } else {
-                #[cfg(target_os = "macos")]
-                {
-                    Command::new(OPEN_BIN)
-                        .args(["-a", "Zed", working_dir.as_str()])
-                        .status()
-                }
-                #[cfg(not(target_os = "macos"))]
-                {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        "Zed CLI not found",
-                    ))
-                }
-            }
-        }
-        "codium" => {
-            #[cfg(target_os = "linux")]
-            let binary = "codium";
-            #[cfg(target_os = "macos")]
-            let binary = "vscodium";
-
-            if which::which(binary).is_ok() {
-                Command::new(binary).arg(working_dir.as_str()).status()
-            } else {
-                #[cfg(target_os = "macos")]
-                {
-                    Command::new(OPEN_BIN)
-                        .args(["-a", "VSCodium", working_dir.as_str()])
-                        .status()
-                }
-                #[cfg(not(target_os = "macos"))]
-                {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        "codium CLI not found",
-                    ))
-                }
-            }
-        }
-        "windsurf" => {
-            if which::which("windsurf").is_ok() {
-                Command::new("windsurf").arg(working_dir.as_str()).status()
-            } else {
-                #[cfg(target_os = "macos")]
-                {
-                    Command::new(OPEN_BIN)
-                        .args(["-a", "Windsurf", working_dir.as_str()])
-                        .status()
-                }
-                #[cfg(not(target_os = "macos"))]
-                {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        "Windsurf CLI not found",
-                    ))
-                }
-            }
-        }
         "vscode" => {
             // Try CLI first, fall back to open -a
             if which::which("code").is_ok() {
@@ -335,9 +277,6 @@ fn open_path_in(app_id: &str, path: &str) -> Result<(), String> {
             let app_name = match app_id {
                 "cursor" => "Cursor",
                 "vscode" => "VS Code",
-                "zed" => "Zed",
-                "codium" => "VSCodium",
-                "windsurf" => "Windsurf",
                 "warp" => "Warp",
                 "terminal" => "Terminal",
                 "ghostty" => "Ghostty",
@@ -350,9 +289,6 @@ fn open_path_in(app_id: &str, path: &str) -> Result<(), String> {
             let app_name = match app_id {
                 "cursor" => "Cursor",
                 "vscode" => "VS Code",
-                "zed" => "Zed",
-                "codium" => "VSCodium",
-                "windsurf" => "Windsurf",
                 "warp" => "Warp",
                 "terminal" => "Terminal",
                 "finder" => "Finder",
