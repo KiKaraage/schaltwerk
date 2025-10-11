@@ -531,8 +531,9 @@ mod tests {
             // On Linux, we should have the hardcoded editors/terminals plus any detected system apps
             assert!(apps.iter().any(|a| a.id == "intellij"));
             assert!(apps.iter().any(|a| a.id == "ghostty"));
-            // At minimum we should have the 7 hardcoded apps, plus any detected system apps
-            assert!(apps.len() >= 7);
+            // At minimum we should have the 4 hardcoded apps (cursor, vscode, intellij, ghostty)
+            // plus any detected system apps (file managers and terminals)
+            assert!(apps.len() >= 4);
         }
     }
 
