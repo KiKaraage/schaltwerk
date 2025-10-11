@@ -214,16 +214,14 @@ async fn get_default_open_app() -> Result<String, String> {
             .or_else(|e| {
                 let fallback_app = get_fallback_app();
                 log::warn!(
-                    "Failed to load default open app from database: {e}. Falling back to {}",
-                    fallback_app
+                    "Failed to load default open app from database: {e}. Falling back to {fallback_app}"
                 );
                 Ok(fallback_app.into())
             }),
         Err(e) => {
             let fallback_app = get_fallback_app();
             log::warn!(
-                "Failed to access app config database: {e}. Falling back to {}",
-                fallback_app
+                "Failed to access app config database: {e}. Falling back to {fallback_app}"
             );
             Ok(fallback_app.into())
         }
