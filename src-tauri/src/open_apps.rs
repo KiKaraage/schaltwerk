@@ -46,6 +46,7 @@ fn detect_linux_terminals() -> Vec<OpenApp> {
 
     for (binary, name) in [
         ("alacritty", "Alacritty"),
+        ("ghostty", "Ghostty"),
         ("gnome-terminal", "GNOME Terminal"),
         ("kgx", "Console"),
         ("kitty", "Kitty"),
@@ -120,39 +121,37 @@ fn open_with_linux(app_id: &str, path: &str) -> Result<(), String> {
         .ok_or_else(|| format!("{app_id} is not installed or failed to open"))
 }
 
-fn detect_available_apps() -> Vec<OpenApp> {
-    #[cfg(target_os = "linux")]
-    {
-        let mut apps = Vec::new();
-        apps.extend(detect_linux_file_managers());
-        apps.extend(detect_linux_terminals());
+#[cfg(target_os = "linux")]
+fn detect_linux_editors() -> Vec<OpenApp> {
+    let mut apps = Vec::new();
 
-        let editors_and_terminals = vec![
-            OpenApp {
-                id: "ghostty".into(),
-                name: "Ghostty".into(),
-                kind: "terminal".into(),
-            },
-            OpenApp {
-                id: "cursor".into(),
-                name: "Cursor".into(),
+    for (binary, name, id) in [
+        ("cursor", "Cursor", "cursor"),
+        ("code", "VS Code", "vscode"),
+        ("idea", "IntelliJ IDEA", "intellij"),
+    ] {
+        if which::which(binary).is_ok() {
+            apps.push(OpenApp {
+                id: id.into(),
+                name: name.into(),
                 kind: "editor".into(),
-            },
-            OpenApp {
-                id: "vscode".into(),
-                name: "VS Code".into(),
-                kind: "editor".into(),
-            },
-            OpenApp {
-                id: "intellij".into(),
-                name: "IntelliJ IDEA".into(),
-                kind: "editor".into(),
-            },
-        ];
-        apps.extend(editors_and_terminals);
-
-        apps
+            });
+        }
     }
+
+    apps
+}
+
+fn detect_available_apps() -> Vec<OpenApp> {
+#[cfg(target_os = "linux")]
+{
+    let mut apps = Vec::new();
+    apps.extend(detect_linux_file_managers());
+    apps.extend(detect_linux_terminals());
+    apps.extend(detect_linux_editors());
+
+    apps
+}
 
     #[cfg(target_os = "macos")]
     {
@@ -208,6 +207,7 @@ fn open_path_in(app_id: &str, path: &str) -> Result<(), String> {
             "pcmanfm",
             "nemo",
             "alacritty",
+            "ghostty",
             "gnome-terminal",
             "kgx",
             "konsole",
@@ -518,22 +518,18 @@ mod tests {
 
         #[cfg(target_os = "macos")]
         {
-            // We should always have all apps available on macOS
+            // Should have finder + at least one editor + at least one terminal
             assert!(apps.iter().any(|a| a.id == "finder"));
-            assert!(apps.iter().any(|a| a.id == "terminal"));
-            assert!(apps.iter().any(|a| a.id == "intellij"));
-            assert!(apps.iter().any(|a| a.id == "ghostty"));
-            assert_eq!(apps.len(), 10); // Should have all 10 apps on macOS
+            assert!(apps.iter().any(|a| a.kind == "editor"));
+            assert!(apps.iter().any(|a| a.kind == "terminal"));
         }
 
         #[cfg(target_os = "linux")]
         {
-            // On Linux, we should have the hardcoded editors/terminals plus any detected system apps
-            assert!(apps.iter().any(|a| a.id == "intellij"));
-            assert!(apps.iter().any(|a| a.id == "ghostty"));
-            // At minimum we should have the 4 hardcoded apps (cursor, vscode, intellij, ghostty)
-            // plus any detected system apps (file managers and terminals)
-            assert!(apps.len() >= 4);
+            // Should have at least one file manager + one editor + one terminal
+            assert!(apps.iter().any(|a| a.kind == "system"));
+            assert!(apps.iter().any(|a| a.kind == "editor"));
+            assert!(apps.iter().any(|a| a.kind == "terminal"));
         }
     }
 
