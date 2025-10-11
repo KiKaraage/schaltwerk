@@ -89,7 +89,68 @@ fn extend_process_path() {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+fn extend_process_path() {
+    use std::collections::HashSet;
+    use std::env;
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    const EXTRA_PATHS: &[&str] = &[
+        "/usr/local/bin",
+        "/usr/local/sbin",
+        "/usr/bin",
+        "/usr/sbin",
+        "/bin",
+        "/sbin",
+    ];
+
+    let mut current_paths: Vec<PathBuf> = env::var_os("PATH")
+        .map(|value| env::split_paths(&value).collect())
+        .unwrap_or_default();
+
+    let mut seen: HashSet<PathBuf> = current_paths.iter().cloned().collect();
+
+    for candidate in EXTRA_PATHS {
+        let path = PathBuf::from(candidate);
+        if seen.insert(path.clone()) {
+            current_paths.push(path);
+        }
+    }
+
+    let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+    let shell_arg = if shell.contains("fish") {
+        "-c"
+    } else {
+        "-lc"
+    };
+
+    if let Ok(output) = Command::new(&shell)
+        .arg(shell_arg)
+        .arg("echo -n $PATH")
+        .output()
+    {
+        if output.status.success() {
+            if let Ok(login_path) = String::from_utf8(output.stdout) {
+                for segment in login_path.split(':').filter(|s| !s.is_empty()) {
+                    let path = PathBuf::from(segment);
+                    if seen.insert(path.clone()) {
+                        current_paths.push(path);
+                    }
+                }
+            }
+        }
+    }
+
+    if let Ok(joined) = env::join_paths(&current_paths) {
+        env::set_var("PATH", &joined);
+        if let Some(path_str) = joined.to_str() {
+            log::info!("[startup] PATH after extend_process_path: {path_str}");
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn extend_process_path() {}
 
 // Import all commands
@@ -751,7 +812,8 @@ fn main() {
             check_for_updates_now,
             schaltwerk_core_log_frontend_message,
             // Clipboard
-            #[cfg(target_os = "macos")] commands::clipboard::clipboard_write_text,
+            commands::clipboard::clipboard_write_text,
+            commands::clipboard::clipboard_read_text,
             // MCP commands
             start_mcp_server,
             // Para core commands
