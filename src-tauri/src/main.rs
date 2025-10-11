@@ -119,11 +119,7 @@ fn extend_process_path() {
     }
 
     let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
-    let shell_arg = if shell.contains("fish") {
-        "-c"
-    } else {
-        "-lc"
-    };
+    let shell_arg = if shell.contains("fish") { "-c" } else { "-lc" };
 
     if let Ok(output) = Command::new(&shell)
         .arg(shell_arg)
@@ -195,20 +191,41 @@ fn open_global_app_config_db() -> Result<schaltwerk::schaltwerk_core::Database, 
     }
 }
 
+fn get_fallback_app() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "finder"
+    }
+    #[cfg(target_os = "linux")]
+    {
+        "nautilus"
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        "explorer"
+    }
+}
+
 #[tauri::command]
 async fn get_default_open_app() -> Result<String, String> {
     match open_global_app_config_db() {
         Ok(db) => schaltwerk::open_apps::get_default_open_app_from_db(&db)
             .map_err(|e| format!("Failed to load default open app: {e}"))
             .or_else(|e| {
+                let fallback_app = get_fallback_app();
                 log::warn!(
-                    "Failed to load default open app from database: {e}. Falling back to Finder"
+                    "Failed to load default open app from database: {e}. Falling back to {}",
+                    fallback_app
                 );
-                Ok("finder".into())
+                Ok(fallback_app.into())
             }),
         Err(e) => {
-            log::warn!("Failed to access app config database: {e}. Falling back to Finder");
-            Ok("finder".into())
+            let fallback_app = get_fallback_app();
+            log::warn!(
+                "Failed to access app config database: {e}. Falling back to {}",
+                fallback_app
+            );
+            Ok(fallback_app.into())
         }
     }
 }
