@@ -22,7 +22,7 @@ export const displayNameForAgent = (agent: AgentType) => {
         case 'droid':
             return 'Droid'
         case 'qwen':
-            return 'QWEN'
+            return 'Qwen'
         default:
             return 'Claude'
     }
