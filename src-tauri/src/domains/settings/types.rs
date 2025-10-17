@@ -10,6 +10,7 @@ pub struct AgentCliArgs {
     pub codex: String,
     pub droid: String,
     pub qwen: String,
+    pub amp: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -20,6 +21,7 @@ pub struct AgentInitialCommands {
     pub codex: String,
     pub droid: String,
     pub qwen: String,
+    pub amp: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -30,6 +32,7 @@ pub struct AgentEnvVars {
     pub codex: HashMap<String, String>,
     pub droid: HashMap<String, String>,
     pub qwen: HashMap<String, String>,
+    pub amp: HashMap<String, String>,
     pub terminal: HashMap<String, String>,
 }
 
@@ -126,6 +129,7 @@ pub struct AgentBinaryConfigs {
     pub codex: Option<AgentBinaryConfig>,
     pub droid: Option<AgentBinaryConfig>,
     pub qwen: Option<AgentBinaryConfig>,
+    pub amp: Option<AgentBinaryConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
