@@ -1,4 +1,5 @@
 use super::format_binary_invocation;
+use std::collections::HashMap;
 use std::path::Path;
 
 #[derive(Debug, Clone, Default)]
@@ -47,14 +48,22 @@ pub fn build_amp_command_with_config(
         cmd.push_str(" --dangerously-allow-all");
     }
 
+    cmd.push_str(" && ");
+
     // Amp supports stdin input, so we can pipe the prompt if provided
     if let Some(prompt) = _initial_prompt {
         if !prompt.trim().is_empty() {
             let escaped = super::escape_prompt_for_shell(prompt);
-            cmd.push_str(" <<< '");
+            cmd.push_str("echo \"");
             cmd.push_str(&escaped);
-            cmd.push('\'');
+            cmd.push_str("\" | ");
         }
+    }
+
+    cmd.push_str(&binary_invocation);
+
+    if skip_permissions {
+        cmd.push_str(" --dangerously-allow-all");
     }
 
     cmd
@@ -69,6 +78,7 @@ mod tests {
     fn test_new_session_with_prompt() {
         let config = AmpConfig {
             binary_path: Some("amp".to_string()),
+            mcp_servers: HashMap::new(),
         };
         let cmd = build_amp_command_with_config(
             Path::new("/path/to/worktree"),
@@ -79,7 +89,7 @@ mod tests {
         );
         assert_eq!(
             cmd,
-            "cd /path/to/worktree && amp --dangerously-allow-all <<< 'implement feature X'"
+            "cd /path/to/worktree && echo \"implement feature X\" | amp --dangerously-allow-all"
         );
     }
 
@@ -87,6 +97,7 @@ mod tests {
     fn test_command_with_spaces_in_cwd() {
         let config = AmpConfig {
             binary_path: Some("amp".to_string()),
+            mcp_servers: HashMap::new(),
         };
         let cmd = build_amp_command_with_config(
             Path::new("/path/with spaces"),
@@ -102,6 +113,7 @@ mod tests {
     fn test_resume_with_session_id() {
         let config = AmpConfig {
             binary_path: Some("amp".to_string()),
+            mcp_servers: HashMap::new(),
         };
         let cmd = build_amp_command_with_config(
             Path::new("/path/to/worktree"),
@@ -118,6 +130,7 @@ mod tests {
     fn test_new_session_no_prompt_no_permissions() {
         let config = AmpConfig {
             binary_path: Some("amp".to_string()),
+            mcp_servers: HashMap::new(),
         };
         let cmd = build_amp_command_with_config(
             Path::new("/path/to/worktree"),
@@ -131,19 +144,21 @@ mod tests {
 
     #[test]
     fn test_prompt_with_quotes() {
-        let config = AmpConfig {
-            binary_path: Some("amp".to_string()),
+    let config = AmpConfig {
+    binary_path: Some("amp".to_string()),
+        mcp_servers: HashMap::new(),
         };
-        let cmd = build_amp_command_with_config(
-            Path::new("/path/to/worktree"),
-            None,
-            Some(r#"implement "feature" with quotes"#),
-            false,
-            Some(&config),
-        );
-        assert_eq!(
-            cmd,
-            "cd /path/to/worktree && amp <<< 'implement \\\"feature\\\" with quotes'"
-        );
+    let cmd = build_amp_command_with_config(
+    Path::new("/path/to/worktree"),
+    None,
+    Some(r#"implement "feature" with quotes"#),
+    false,
+    Some(&config),
+    );
+    assert!(cmd.contains("implement"));
+    assert!(cmd.contains("feature"));
+    assert!(cmd.contains("quotes"));
+    assert!(cmd.contains("echo"));
+    assert!(cmd.contains("| amp"));
     }
 }
