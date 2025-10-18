@@ -381,6 +381,18 @@ impl SettingsService {
 
         Ok(agent_name.to_string())
     }
+
+    pub fn get_amp_mcp_servers(&self) -> HashMap<String, McpServerConfig> {
+        self.settings.amp_mcp_servers.clone()
+    }
+
+    pub fn set_amp_mcp_servers(
+        &mut self,
+        mcp_servers: HashMap<String, McpServerConfig>,
+    ) -> Result<(), SettingsServiceError> {
+        self.settings.amp_mcp_servers = mcp_servers;
+        self.save()
+    }
 }
 
 #[cfg(test)]

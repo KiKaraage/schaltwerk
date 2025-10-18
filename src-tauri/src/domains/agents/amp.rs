@@ -1,10 +1,12 @@
 use super::format_binary_invocation;
+use crate::domains::settings::types::McpServerConfig;
 use std::collections::HashMap;
 use std::path::Path;
 
 #[derive(Debug, Clone, Default)]
 pub struct AmpConfig {
     pub binary_path: Option<String>,
+    pub mcp_servers: HashMap<String, McpServerConfig>,
 }
 
 // Simple function to return binary name for external callers
@@ -42,10 +44,42 @@ pub fn build_amp_command_with_config(
     };
     let binary_invocation = format_binary_invocation(binary_name);
     let cwd_quoted = format_binary_invocation(&worktree_path.display().to_string());
-    let mut cmd = format!("cd {cwd_quoted} && {binary_invocation}");
 
-    if skip_permissions {
-        cmd.push_str(" --dangerously-allow-all");
+    let mut cmd = format!("cd {cwd_quoted}");
+
+    // Add MCP server setup commands if configured
+    if let Some(cfg) = config {
+        for (server_name, server_config) in &cfg.mcp_servers {
+            cmd.push_str(" && ");
+            cmd.push_str(&binary_invocation);
+            cmd.push_str(" mcp add ");
+            cmd.push_str(server_name);
+
+            match server_config {
+                crate::domains::settings::types::McpServerConfig::Local { command, args, env } => {
+                    cmd.push_str(" -- ");
+                    cmd.push_str(&format_binary_invocation(command));
+                    for arg in args {
+                        cmd.push(' ');
+                        cmd.push_str(&format_binary_invocation(arg));
+                    }
+                    // Note: env vars for local MCP servers would need to be set in the environment
+                    // For now, we'll skip env vars as they're complex to handle in a single command
+                    let _ = env; // TODO: handle env vars for local MCP servers
+                }
+                crate::domains::settings::types::McpServerConfig::Remote { url, headers } => {
+                    cmd.push(' ');
+                    cmd.push_str(url);
+                    for (header_name, header_value) in headers {
+                        cmd.push_str(" --header \"");
+                        cmd.push_str(header_name);
+                        cmd.push('=');
+                        cmd.push_str(header_value);
+                        cmd.push('"');
+                    }
+                }
+            }
+        }
     }
 
     cmd.push_str(" && ");

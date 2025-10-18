@@ -2199,6 +2199,7 @@ impl SessionManager {
         session_name: &str,
         force_restart: bool,
         binary_paths: &HashMap<String, String>,
+        amp_mcp_servers: Option<&HashMap<String, crate::domains::settings::McpServerConfig>>,
     ) -> Result<AgentLaunchSpec> {
         let session = self.db_manager.get_session_by_name(session_name)?;
         let skip_permissions = session
@@ -2500,6 +2501,39 @@ impl SessionManager {
             ) {
                 return Ok(spec);
             }
+        }
+
+        // Special handling for Amp with MCP servers
+        if agent_type == "amp" {
+            self.cache_manager
+                .mark_session_prompted(&session.worktree_path);
+            let prompt_to_use = session.initial_prompt.as_deref();
+
+            let binary_path = self.utils.get_effective_binary_path_with_override(
+                &agent_type,
+                binary_paths.get(&agent_type).map(|s| s.as_str()),
+            );
+
+            // Get MCP servers from parameter
+            let mcp_servers = amp_mcp_servers.unwrap_or(&HashMap::new()).clone();
+
+            let config = crate::domains::agents::amp::AmpConfig {
+                binary_path: Some(binary_path.clone()),
+                mcp_servers,
+            };
+
+            let command = crate::domains::agents::amp::build_amp_command_with_config(
+                &session.worktree_path,
+                None,
+                prompt_to_use,
+                skip_permissions,
+                Some(&config),
+            );
+
+            return Ok(crate::domains::agents::AgentLaunchSpec::new(
+                command,
+                session.worktree_path.clone(),
+            ));
         }
 
         // For all other agents, use the registry directly

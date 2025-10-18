@@ -217,6 +217,7 @@ impl AgentAdapter for AmpAdapter {
                     .unwrap_or(&ctx.manifest.default_binary_path)
                     .to_string(),
             ),
+            mcp_servers: HashMap::new(),
         };
         let command = amp::build_amp_command_with_config(
             ctx.worktree_path,

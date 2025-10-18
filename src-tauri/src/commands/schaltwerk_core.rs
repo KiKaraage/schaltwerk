@@ -1123,11 +1123,24 @@ pub async fn schaltwerk_core_start_claude_with_restart(
         std::collections::HashMap::new()
     };
 
+    // Get MCP servers for Amp
+    let amp_mcp_servers = if agent_type == "amp" {
+        if let Some(settings_manager) = SETTINGS_MANAGER.get() {
+            let settings = settings_manager.lock().await;
+            Some(settings.get_amp_mcp_servers())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let spec = manager
         .start_claude_in_session_with_restart_and_binary(
             &session_name,
             force_restart,
             &binary_paths,
+            amp_mcp_servers.as_ref(),
         )
         .map_err(|e| {
             log::error!("Failed to build {agent_type} command for session {session_name}: {e}");
