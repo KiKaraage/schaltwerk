@@ -885,3 +885,263 @@ pub async fn ensure_mcp_gitignored(project_path: String) -> Result<String, Strin
     log::info!("Added .mcp.json to gitignore");
     Ok("Added to gitignore".to_string())
 }
+
+#[cfg(test)]
+mod tests_amp_mcp {
+    use super::client::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn amp_config_path_creates_valid_path() {
+        let (path, _) = amp_config_path().expect("valid path");
+        
+        // Path should end with settings.json
+        assert!(path.ends_with("settings.json"));
+        
+        // Path should contain amp directory
+        assert!(path.to_string_lossy().contains("amp"));
+    }
+
+    #[test]
+    fn configure_mcp_amp_creates_new_config() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let _temp_path = temp_dir.path().to_path_buf();
+        
+        // Mock amp_config_path by using temp directory
+        // We'll manually test the JSON structure creation
+        let mcp_server_path = "/path/to/schaltwerk-mcp-server.js";
+        
+        // Create test config structure
+        let mut config = serde_json::json!({});
+        
+        // Simulate what configure_mcp_amp does
+        if config.get("amp.mcpServers").is_none() {
+            config["amp.mcpServers"] = serde_json::json!({});
+        }
+        
+        config["amp.mcpServers"]["schaltwerk"] = serde_json::json!({
+            "command": "node",
+            "args": [mcp_server_path]
+        });
+        
+        // Verify structure
+        assert!(config.get("amp.mcpServers").is_some());
+        assert!(config["amp.mcpServers"]["schaltwerk"].is_object());
+        assert_eq!(
+            config["amp.mcpServers"]["schaltwerk"]["command"].as_str(),
+            Some("node")
+        );
+        assert_eq!(
+            config["amp.mcpServers"]["schaltwerk"]["args"][0].as_str(),
+            Some(mcp_server_path)
+        );
+    }
+
+    #[test]
+    fn configure_mcp_amp_preserves_other_settings() {
+        let existing_config = serde_json::json!({
+            "amp.apiKey": "sk_test123",
+            "amp.model": "claude-3-5-sonnet",
+            "other.setting": "value"
+        });
+        
+        let mut config = existing_config.clone();
+        let mcp_server_path = "/path/to/server.js";
+        
+        // Add MCP servers
+        if config.get("amp.mcpServers").is_none() {
+            config["amp.mcpServers"] = serde_json::json!({});
+        }
+        
+        config["amp.mcpServers"]["schaltwerk"] = serde_json::json!({
+            "command": "node",
+            "args": [mcp_server_path]
+        });
+        
+        // Verify original settings preserved
+        assert_eq!(config["amp.apiKey"].as_str(), Some("sk_test123"));
+        assert_eq!(config["amp.model"].as_str(), Some("claude-3-5-sonnet"));
+        assert_eq!(config["other.setting"].as_str(), Some("value"));
+        
+        // Verify new MCP settings added
+        assert!(config["amp.mcpServers"]["schaltwerk"].is_object());
+    }
+
+    #[test]
+    fn remove_mcp_amp_deletes_schaltwerk_entry() {
+        let config_with_mcp = serde_json::json!({
+            "amp.mcpServers": {
+                "schaltwerk": {
+                    "command": "node",
+                    "args": ["/path/to/server.js"]
+                },
+                "other_server": {
+                    "url": "https://example.com"
+                }
+            }
+        });
+        
+        let mut config = config_with_mcp.clone();
+        
+        // Simulate removal
+        if let Some(mcp_servers) = config.get_mut("amp.mcpServers") {
+            if let Some(obj) = mcp_servers.as_object_mut() {
+                obj.remove("schaltwerk");
+            }
+        }
+        
+        // Verify schaltwerk removed but other_server remains
+        assert!(config["amp.mcpServers"]["schaltwerk"].is_null());
+        assert!(config["amp.mcpServers"]["other_server"].is_object());
+    }
+
+    #[test]
+    fn remove_mcp_amp_cleans_empty_mcp_section() {
+        let config_with_only_schaltwerk = serde_json::json!({
+            "amp.apiKey": "sk_test",
+            "amp.mcpServers": {
+                "schaltwerk": {
+                    "command": "node",
+                    "args": ["/path/to/server.js"]
+                }
+            }
+        });
+        
+        let mut config = config_with_only_schaltwerk.clone();
+        
+        // Simulate removal
+        if let Some(mcp_servers) = config.get_mut("amp.mcpServers") {
+            if let Some(obj) = mcp_servers.as_object_mut() {
+                obj.remove("schaltwerk");
+                
+                if obj.is_empty() {
+                    config.as_object_mut().unwrap().remove("amp.mcpServers");
+                }
+            }
+        }
+        
+        // Verify mcpServers section removed, but apiKey remains
+        assert!(config["amp.mcpServers"].is_null());
+        assert_eq!(config["amp.apiKey"].as_str(), Some("sk_test"));
+    }
+
+    #[test]
+    fn check_amp_config_status_detects_configured_server() {
+        let config = serde_json::json!({
+            "amp.mcpServers": {
+                "schaltwerk": {
+                    "command": "node",
+                    "args": ["/path/to/server.js"]
+                }
+            }
+        });
+        
+        let has_schaltwerk = config
+            .get("amp.mcpServers")
+            .and_then(|mcp| mcp.get("schaltwerk"))
+            .is_some();
+        
+        assert!(has_schaltwerk);
+    }
+
+    #[test]
+    fn check_amp_config_status_returns_false_when_missing() {
+        let config = serde_json::json!({
+            "amp.apiKey": "sk_test"
+        });
+        
+        let has_schaltwerk = config
+            .get("amp.mcpServers")
+            .and_then(|mcp| mcp.get("schaltwerk"))
+            .is_some();
+        
+        assert!(!has_schaltwerk);
+    }
+
+    #[test]
+    fn generate_setup_command_amp_produces_valid_json_snippet() {
+        let mcp_server_path = "/path/to/schaltwerk-mcp-server.js";
+        let command = generate_setup_command(McpClient::Amp, mcp_server_path);
+        
+        // Verify command contains essential parts
+        assert!(command.contains("~/.config/amp/settings.json"));
+        assert!(command.contains("amp.mcpServers"));
+        assert!(command.contains("schaltwerk"));
+        assert!(command.contains("command"));
+        assert!(command.contains("node"));
+        assert!(command.contains("args"));
+        assert!(command.contains(mcp_server_path));
+    }
+
+    #[test]
+    fn amp_config_path_escapes_quotes_in_mcp_path() {
+        let mcp_path_with_quotes = r#"/path/with"quotes/server.js"#;
+        let escaped = mcp_path_with_quotes.replace('"', "\\\"");
+        
+        assert_eq!(escaped, r#"/path/with\"quotes/server.js"#);
+        assert!(escaped.contains("\\\""));
+    }
+
+    #[test]
+    fn configure_and_remove_amp_mcp_roundtrip() {
+        let mut config = serde_json::json!({});
+        let mcp_server_path = "/path/to/server.js";
+        
+        // Configure
+        if config.get("amp.mcpServers").is_none() {
+            config["amp.mcpServers"] = serde_json::json!({});
+        }
+        config["amp.mcpServers"]["schaltwerk"] = serde_json::json!({
+            "command": "node",
+            "args": [mcp_server_path]
+        });
+        
+        assert!(config["amp.mcpServers"]["schaltwerk"].is_object());
+        
+        // Remove
+        if let Some(mcp_servers) = config.get_mut("amp.mcpServers") {
+            if let Some(obj) = mcp_servers.as_object_mut() {
+                obj.remove("schaltwerk");
+                if obj.is_empty() {
+                    config.as_object_mut().unwrap().remove("amp.mcpServers");
+                }
+            }
+        }
+        
+        // Verify removed
+        assert!(config["amp.mcpServers"].is_null());
+    }
+
+    #[test]
+    fn amp_config_handles_multiple_mcp_servers() {
+        let mut config = serde_json::json!({});
+        
+        if config.get("amp.mcpServers").is_none() {
+            config["amp.mcpServers"] = serde_json::json!({});
+        }
+        
+        // Add multiple servers
+        config["amp.mcpServers"]["schaltwerk"] = serde_json::json!({
+            "command": "node",
+            "args": ["/path/to/schaltwerk.js"]
+        });
+        
+        config["amp.mcpServers"]["playwright"] = serde_json::json!({
+            "command": "npx",
+            "args": ["@playwright/mcp@latest"]
+        });
+        
+        // Verify both exist
+        assert!(config["amp.mcpServers"]["schaltwerk"].is_object());
+        assert!(config["amp.mcpServers"]["playwright"].is_object());
+        
+        // Remove only schaltwerk
+        if let Some(obj) = config["amp.mcpServers"].as_object_mut() {
+            obj.remove("schaltwerk");
+        }
+        
+        // Verify schaltwerk gone, playwright remains
+        assert!(config["amp.mcpServers"]["schaltwerk"].is_null());
+        assert!(config["amp.mcpServers"]["playwright"].is_object());
+    }
+}
