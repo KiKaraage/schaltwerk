@@ -27,6 +27,7 @@ pub struct AgentCliArgs {
     pub codex: String,
     pub droid: String,
     pub qwen: String,
+    #[serde(default)]
     pub amp: String,
 }
 
@@ -38,6 +39,7 @@ pub struct AgentInitialCommands {
     pub codex: String,
     pub droid: String,
     pub qwen: String,
+    #[serde(default)]
     pub amp: String,
 }
 
@@ -49,6 +51,7 @@ pub struct AgentEnvVars {
     pub codex: HashMap<String, String>,
     pub droid: HashMap<String, String>,
     pub qwen: HashMap<String, String>,
+    #[serde(default)]
     pub amp: HashMap<String, String>,
     pub terminal: HashMap<String, String>,
 }
@@ -146,6 +149,7 @@ pub struct AgentBinaryConfigs {
     pub codex: Option<AgentBinaryConfig>,
     pub droid: Option<AgentBinaryConfig>,
     pub qwen: Option<AgentBinaryConfig>,
+    #[serde(default)]
     pub amp: Option<AgentBinaryConfig>,
 }
 
