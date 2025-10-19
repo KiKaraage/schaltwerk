@@ -2199,7 +2199,7 @@ impl SessionManager {
         session_name: &str,
         force_restart: bool,
         binary_paths: &HashMap<String, String>,
-        amp_mcp_servers: Option<&HashMap<String, crate::domains::settings::McpServerConfig>>,
+        _amp_mcp_servers: Option<&HashMap<String, crate::domains::settings::McpServerConfig>>,
     ) -> Result<AgentLaunchSpec> {
         let session = self.db_manager.get_session_by_name(session_name)?;
         let skip_permissions = session
