@@ -5,8 +5,6 @@ use schaltwerk::services::ServiceHandles;
 use serde::Serialize;
 use tauri::State;
 
-
-
 #[tauri::command]
 pub async fn create_terminal(
     services: State<'_, ServiceHandles>,
