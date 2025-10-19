@@ -148,6 +148,8 @@ pub fn sanitize_control_sequences(input: &[u8]) -> SanitizedOutput {
                             responses.push(SequenceResponse::Immediate(
                                 b"\x1b]11;rgb:1e/1e/1e\x07".to_vec(),
                             ));
+                        } else if text.starts_with("8;") {
+                            data.extend_from_slice(&input[i..term_idx + terminator_len]);
                         } else {
                             log::debug!("Dropping OSC sequence {text:?}");
                         }
@@ -252,5 +254,25 @@ mod tests {
             result.responses[0],
             SequenceResponse::Immediate(b"\x1b]11;rgb:1e/1e/1e\x07".to_vec()),
         );
+    }
+
+    #[test]
+    fn passes_through_osc_8_hyperlinks_with_bel_terminator() {
+        let result = sanitize_control_sequences(b"pre\x1b]8;;https://example.com\x07linktext\x1b]8;;\x07post");
+
+        assert_eq!(result.data, b"pre\x1b]8;;https://example.com\x07linktext\x1b]8;;\x07post");
+        assert!(result.remainder.is_none());
+        assert_eq!(result.cursor_queries, 0);
+        assert!(result.responses.is_empty());
+    }
+
+    #[test]
+    fn passes_through_osc_8_hyperlinks_with_st_terminator() {
+        let result = sanitize_control_sequences(b"pre\x1b]8;id=123;https://example.com\x1b\\linktext\x1b]8;;\x1b\\post");
+
+        assert_eq!(result.data, b"pre\x1b]8;id=123;https://example.com\x1b\\linktext\x1b]8;;\x1b\\post");
+        assert!(result.remainder.is_none());
+        assert_eq!(result.cursor_queries, 0);
+        assert!(result.responses.is_empty());
     }
 }
