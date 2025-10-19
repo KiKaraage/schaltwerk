@@ -1873,6 +1873,11 @@ pub async fn schaltwerk_core_create_and_start_spec_session(
         )
         .map_err(|e| format!("Failed to create and start spec session: {e}"))?;
 
+    // Spawn thread watcher for Amp sessions to capture thread ID on first run
+    if let Err(e) = manager.spawn_amp_thread_watcher(&name) {
+        log::warn!("Failed to spawn amp thread watcher for session '{name}': {e}");
+    }
+
     // Emit event with actual sessions list
     log::info!("Queueing sessions refresh after creating and starting spec session");
     events::request_sessions_refreshed(&app, events::SessionsRefreshReason::SpecSync);
@@ -1908,6 +1913,11 @@ pub async fn schaltwerk_core_start_spec_session(
             skip_permissions,
         )
         .map_err(|e| format!("Failed to start spec session: {e}"))?;
+
+    // Spawn thread watcher for Amp sessions to capture thread ID on first run
+    if let Err(e) = manager.spawn_amp_thread_watcher(&name) {
+        log::warn!("Failed to spawn amp thread watcher for session '{name}': {e}");
+    }
 
     // Check if AI renaming should be triggered for spec-derived sessions
     // First, get the session info to check if it has auto-generation potential
