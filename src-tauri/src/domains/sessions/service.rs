@@ -128,6 +128,7 @@ mod service_unified_tests {
             spec_content: None,
             session_state: SessionState::Running,
             resume_allowed: true,
+            amp_thread_id: None,
         }
     }
 
@@ -1450,6 +1451,7 @@ impl SessionManager {
             spec_content: None,
             session_state: SessionState::Running,
             resume_allowed: true,
+            amp_thread_id: None,
         };
 
         let repo_was_empty = !git::repository_has_commits(&self.repo_path).unwrap_or(true);
@@ -2929,6 +2931,7 @@ impl SessionManager {
             spec_content: Some(spec_content.to_string()),
             session_state: SessionState::Spec,
             resume_allowed: true,
+            amp_thread_id: None,
         };
 
         self.db_manager.create_session(&session)?;
@@ -2997,6 +3000,7 @@ impl SessionManager {
             spec_content: Some(spec_content.to_string()),
             session_state: SessionState::Spec,
             resume_allowed: true,
+            amp_thread_id: None,
         };
 
         if let Err(e) = self.db_manager.create_session(&session) {
@@ -3295,6 +3299,51 @@ impl SessionManager {
     pub fn update_session_state(&self, session_name: &str, state: SessionState) -> Result<()> {
         let session = self.db_manager.get_session_by_name(session_name)?;
         self.db_manager.update_session_state(&session.id, state)?;
+        Ok(())
+    }
+
+    pub fn spawn_amp_thread_watcher(&self, session_name: &str) -> Result<()> {
+        let session = self.db_manager.get_session_by_name(session_name)?;
+
+        if session.original_agent_type.as_deref() != Some("amp") {
+            return Ok(());
+        }
+
+        if session.amp_thread_id.is_some() {
+            log::debug!(
+                "Session '{session_name}' already has amp_thread_id stored; skipping watcher"
+            );
+            return Ok(());
+        }
+
+        let session_id = session.id.clone();
+        let session_name = session_name.to_string();
+        let db_manager = self.db_manager.clone();
+
+        tokio::spawn(async move {
+            log::info!(
+                "Amp thread watcher spawned for session '{session_name}' (id: {session_id})"
+            );
+
+            if let Some(thread_id) =
+                crate::domains::agents::amp::watch_amp_thread_creation(30).await
+            {
+                log::info!(
+                    "Amp thread watcher: Detected thread '{thread_id}' for session '{session_name}'"
+                );
+
+                if let Err(e) = db_manager.set_session_amp_thread_id(&session_id, &thread_id) {
+                    log::error!(
+                        "Failed to store amp_thread_id '{thread_id}' for session '{session_name}': {e}"
+                    );
+                }
+            } else {
+                log::warn!(
+                    "Amp thread watcher timeout for session '{session_name}': no new thread detected"
+                );
+            }
+        });
+
         Ok(())
     }
 
