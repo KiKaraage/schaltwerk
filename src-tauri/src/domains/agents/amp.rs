@@ -219,6 +219,7 @@ pub fn build_amp_command_with_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::path::Path;
 
     #[test]
@@ -358,6 +359,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_watch_amp_thread_creation_detects_new_thread() {
         use std::fs::File;
         use std::io::Write;
@@ -398,6 +400,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_watch_amp_thread_creation_timeout() {
         use tempfile::TempDir;
 
@@ -428,6 +431,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_watch_amp_thread_creation_empty_directory() {
         use tempfile::TempDir;
 
@@ -451,6 +455,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_watch_amp_thread_creation_ignores_non_json() {
         use std::fs::File;
         use std::io::Write;
