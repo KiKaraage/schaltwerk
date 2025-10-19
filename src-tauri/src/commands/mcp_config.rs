@@ -27,6 +27,8 @@ mod client {
         OpenCode,
         #[serde(rename = "amp")]
         Amp,
+        #[serde(rename = "droid")]
+        Droid,
     }
 
     impl McpClient {
@@ -36,6 +38,7 @@ mod client {
                 Self::Codex => "codex",
                 Self::OpenCode => "opencode",
                 Self::Amp => "amp",
+                Self::Droid => "droid",
             }
         }
     }
@@ -227,6 +230,7 @@ mod client {
             McpClient::Codex => configure_mcp_codex(mcp_server_path),
             McpClient::OpenCode => configure_mcp_opencode(project_path, mcp_server_path),
             McpClient::Amp => configure_mcp_amp(mcp_server_path),
+            McpClient::Droid => configure_mcp_droid(mcp_server_path),
         }
     }
 
@@ -319,6 +323,7 @@ mod client {
             McpClient::Codex => remove_mcp_codex(),
             McpClient::OpenCode => remove_mcp_opencode(project_path),
             McpClient::Amp => remove_mcp_amp(),
+            McpClient::Droid => remove_mcp_droid(),
         }
     }
 
@@ -377,6 +382,10 @@ mod client {
             ),
             McpClient::Amp => format!(
                 "Add to ~/.config/amp/settings.json:\n{{\n  \"amp.mcpServers\": {{\n    \"schaltwerk\": {{\n      \"command\": \"node\",\n      \"args\": [\"{}\"]\n    }}\n  }}\n}}",
+                mcp_server_path.replace('"', "\\\"")
+            ),
+            McpClient::Droid => format!(
+                "Add to ~/.factory/mcp.json:\n{{\n  \"mcpServers\": {{\n    \"schaltwerk\": {{\n      \"type\": \"stdio\",\n      \"command\": \"node\",\n      \"args\": [\"{}\"]\n    }}\n  }}\n}}",
                 mcp_server_path.replace('"', "\\\"")
             ),
         }
@@ -448,6 +457,30 @@ mod client {
         {
             let home = dirs::home_dir().ok_or("Could not determine home directory")?;
             let path = home.join(".config/amp/settings.json");
+            Ok((path, false))
+        }
+    }
+
+    pub fn droid_config_path() -> Result<(PathBuf, bool), String> {
+        #[cfg(target_os = "windows")]
+        {
+            let userprofile = std::env::var("USERPROFILE")
+                .map_err(|_| "USERPROFILE environment variable not found".to_string())?;
+            let path = PathBuf::from(userprofile).join(".factory").join("mcp.json");
+            Ok((path, true))
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+            let path = home.join(".factory").join("mcp.json");
+            Ok((path, false))
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+            let path = home.join(".factory").join("mcp.json");
             Ok((path, false))
         }
     }
@@ -611,6 +644,73 @@ mod client {
 
         Ok("Removed schaltwerk MCP from Amp config".to_string())
     }
+
+    pub fn configure_mcp_droid(mcp_server_path: &str) -> Result<String, String> {
+        let (config_path, _) = droid_config_path()?;
+
+        let mut config: serde_json::Value = if config_path.exists() {
+            let content = fs::read_to_string(&config_path)
+                .map_err(|e| format!("Failed to read Factory Droid config: {e}"))?;
+            serde_json::from_str(&content)
+                .map_err(|e| format!("Failed to parse Factory Droid config JSON: {e}"))?
+        } else {
+            serde_json::json!({})
+        };
+
+        if config.get("mcpServers").is_none() {
+            config["mcpServers"] = serde_json::json!({});
+        }
+
+        config["mcpServers"]["schaltwerk"] = serde_json::json!({
+            "type": "stdio",
+            "command": "node",
+            "args": [mcp_server_path],
+            "disabled": false
+        });
+
+        if let Some(parent) = config_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create Factory Droid config dir: {e}"))?;
+        }
+
+        let content = serde_json::to_string_pretty(&config)
+            .map_err(|e| format!("Failed to serialize Factory Droid config: {e}"))?;
+        fs::write(&config_path, content)
+            .map_err(|e| format!("Failed to write Factory Droid config: {e}"))?;
+
+        log::info!("Wrote Factory Droid MCP config at {}", config_path.display());
+        Ok("Factory Droid MCP configured in ~/.factory/mcp.json".to_string())
+    }
+
+    pub fn remove_mcp_droid() -> Result<String, String> {
+        let (config_path, _) = droid_config_path()?;
+
+        if !config_path.exists() {
+            return Ok("Factory Droid config not found".to_string());
+        }
+
+        let content = fs::read_to_string(&config_path)
+            .map_err(|e| format!("Failed to read Factory Droid config: {e}"))?;
+        let mut config: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse Factory Droid config JSON: {e}"))?;
+
+        if let Some(mcp_servers) = config.get_mut("mcpServers") {
+            if let Some(obj) = mcp_servers.as_object_mut() {
+                obj.remove("schaltwerk");
+
+                if obj.is_empty() {
+                    config.as_object_mut().unwrap().remove("mcpServers");
+                }
+            }
+        }
+
+        let updated_content = serde_json::to_string_pretty(&config)
+            .map_err(|e| format!("Failed to serialize Factory Droid config: {e}"))?;
+        fs::write(&config_path, updated_content)
+            .map_err(|e| format!("Failed to update Factory Droid config: {e}"))?;
+
+        Ok("Removed schaltwerk MCP from Factory Droid config".to_string())
+    }
 }
 
 fn detect_mcp_server_location(exe_path: &std::path::Path) -> Result<(PathBuf, bool), String> {
@@ -689,6 +789,7 @@ fn parse_client_or_default(client: Option<String>) -> client::McpClient {
         Some("codex") => client::McpClient::Codex,
         Some("opencode") => client::McpClient::OpenCode,
         Some("amp") => client::McpClient::Amp,
+        Some("droid") => client::McpClient::Droid,
         _ => client::McpClient::Claude,
     }
 }
@@ -740,6 +841,29 @@ fn check_amp_config_status() -> bool {
     }
 }
 
+fn check_droid_config_status() -> bool {
+    if let Ok((config_path, _)) = client::droid_config_path() {
+        if config_path.exists() {
+            std::fs::read_to_string(config_path)
+                .map(|content| {
+                    serde_json::from_str::<serde_json::Value>(&content)
+                        .map(|config| {
+                            config
+                                .get("mcpServers")
+                                .and_then(|mcp| mcp.get("schaltwerk"))
+                                .is_some()
+                        })
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false)
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
 fn check_mcp_configuration_status(project_path: &str, client: client::McpClient) -> bool {
     match client {
         client::McpClient::Claude => {
@@ -767,6 +891,7 @@ fn check_mcp_configuration_status(project_path: &str, client: client::McpClient)
         }
         client::McpClient::OpenCode => check_opencode_config_status(project_path),
         client::McpClient::Amp => check_amp_config_status(),
+        client::McpClient::Droid => check_droid_config_status(),
     }
 }
 
