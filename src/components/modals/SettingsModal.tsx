@@ -1341,10 +1341,10 @@ fi`}
 
             <div className="flex-1 overflow-y-auto p-6">
                 <div className="space-y-6">
-                     {/* MCP Configuration for Claude/Codex/OpenCode/Amp */}
-                     {projectPath && (activeAgentTab === 'claude' || activeAgentTab === 'codex' || activeAgentTab === 'opencode' || activeAgentTab === 'amp') && (
+                     {/* MCP Configuration for Claude/Codex/OpenCode/Amp/Droid */}
+                     {projectPath && (activeAgentTab === 'claude' || activeAgentTab === 'codex' || activeAgentTab === 'opencode' || activeAgentTab === 'amp' || activeAgentTab === 'droid') && (
                          <div>
-                             <MCPConfigPanel projectPath={projectPath} agent={activeAgentTab as 'claude' | 'codex' | 'opencode' | 'amp'} />
+                             <MCPConfigPanel projectPath={projectPath} agent={activeAgentTab as 'claude' | 'codex' | 'opencode' | 'amp' | 'droid'} />
                          </div>
                      )}
 
