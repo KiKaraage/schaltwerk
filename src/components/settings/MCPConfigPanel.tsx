@@ -327,6 +327,10 @@ export function MCPConfigPanel({ projectPath, agent }: Props) {
                              ? (<>
                                  {`{\n  "mcp": {\n    "schaltwerk": {\n      "type": "local",\n      "command": ["node", "${status.mcp_server_path}"],\n      "enabled": true\n    }\n  }\n}`}
                                </>)
+                             : agent === 'amp'
+                             ? (<>
+                                 {`"amp.mcpServers": {\n  "schaltwerk": {\n    "command": "node",\n    "args": ["${status.mcp_server_path}"]\n  }\n}`}
+                               </>)
                              : (<>
                                  {agent} mcp add --transport stdio --scope project schaltwerk node "{status.mcp_server_path}"
                                </>)}

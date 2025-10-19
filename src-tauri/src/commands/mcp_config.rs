@@ -226,6 +226,7 @@ mod client {
             }
             McpClient::Codex => configure_mcp_codex(mcp_server_path),
             McpClient::OpenCode => configure_mcp_opencode(project_path, mcp_server_path),
+            McpClient::Amp => configure_mcp_amp(mcp_server_path),
         }
     }
 
@@ -317,6 +318,7 @@ mod client {
             }
             McpClient::Codex => remove_mcp_codex(),
             McpClient::OpenCode => remove_mcp_opencode(project_path),
+            McpClient::Amp => remove_mcp_amp(),
         }
     }
 
@@ -373,6 +375,10 @@ mod client {
                 "Add to opencode.json:\n{{\n  \"mcp\": {{\n    \"schaltwerk\": {{\n      \"type\": \"local\",\n      \"command\": [\"node\", \"{}\"],\n      \"enabled\": true\n    }}\n  }}\n}}",
                 mcp_server_path.replace('"', "\\\"")
             ),
+            McpClient::Amp => format!(
+                "Add to ~/.config/amp/settings.json:\n{{\n  \"amp.mcpServers\": {{\n    \"schaltwerk\": {{\n      \"command\": \"node\",\n      \"args\": [\"{}\"]\n    }}\n  }}\n}}",
+                mcp_server_path.replace('"', "\\\"")
+            ),
         }
     }
 
@@ -420,6 +426,30 @@ mod client {
         let global_config = home.join(".opencode").join("config.json");
         let exists = global_config.exists();
         Ok((global_config, !exists))
+    }
+
+    pub fn amp_config_path() -> Result<(PathBuf, bool), String> {
+        #[cfg(target_os = "windows")]
+        {
+            let appdata = std::env::var("APPDATA")
+                .map_err(|_| "APPDATA environment variable not found".to_string())?;
+            let path = PathBuf::from(appdata).join("amp").join("settings.json");
+            Ok((path, true))
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+            let path = home.join(".config/amp/settings.json");
+            Ok((path, false))
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+            let path = home.join(".config/amp/settings.json");
+            Ok((path, false))
+        }
     }
 
     pub fn configure_mcp_opencode(
@@ -508,6 +538,78 @@ mod client {
             .map_err(|e| format!("Failed to update OpenCode config: {e}"))?;
 
         Ok("Removed schaltwerk MCP from OpenCode config".to_string())
+    }
+
+    pub fn configure_mcp_amp(mcp_server_path: &str) -> Result<String, String> {
+        let (config_path, _) = amp_config_path()?;
+
+        // Read existing config or create new one
+        let mut config: serde_json::Value = if config_path.exists() {
+            let content = fs::read_to_string(&config_path)
+                .map_err(|e| format!("Failed to read Amp config: {e}"))?;
+            serde_json::from_str(&content)
+                .map_err(|e| format!("Failed to parse Amp config JSON: {e}"))?
+        } else {
+            serde_json::json!({})
+        };
+
+        // Ensure amp.mcpServers object exists
+        if config.get("amp.mcpServers").is_none() {
+            config["amp.mcpServers"] = serde_json::json!({});
+        }
+
+        // Add or update schaltwerk server
+        config["amp.mcpServers"]["schaltwerk"] = serde_json::json!({
+            "command": "node",
+            "args": [mcp_server_path]
+        });
+
+        // Create parent directory if needed
+        if let Some(parent) = config_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create Amp config dir: {e}"))?;
+        }
+
+        // Write back with pretty formatting
+        let content = serde_json::to_string_pretty(&config)
+            .map_err(|e| format!("Failed to serialize Amp config: {e}"))?;
+        fs::write(&config_path, content)
+            .map_err(|e| format!("Failed to write Amp config: {e}"))?;
+
+        log::info!("Wrote Amp MCP config at {}", config_path.display());
+        Ok("Amp MCP configured in ~/.config/amp/settings.json".to_string())
+    }
+
+    pub fn remove_mcp_amp() -> Result<String, String> {
+        let (config_path, _) = amp_config_path()?;
+
+        if !config_path.exists() {
+            return Ok("Amp config not found".to_string());
+        }
+
+        let content = fs::read_to_string(&config_path)
+            .map_err(|e| format!("Failed to read Amp config: {e}"))?;
+        let mut config: serde_json::Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse Amp config JSON: {e}"))?;
+
+        // Remove schaltwerk from amp.mcpServers
+        if let Some(mcp_servers) = config.get_mut("amp.mcpServers") {
+            if let Some(obj) = mcp_servers.as_object_mut() {
+                obj.remove("schaltwerk");
+
+                // If no MCP servers left, remove the section
+                if obj.is_empty() {
+                    config.as_object_mut().unwrap().remove("amp.mcpServers");
+                }
+            }
+        }
+
+        let updated_content = serde_json::to_string_pretty(&config)
+            .map_err(|e| format!("Failed to serialize Amp config: {e}"))?;
+        fs::write(&config_path, updated_content)
+            .map_err(|e| format!("Failed to update Amp config: {e}"))?;
+
+        Ok("Removed schaltwerk MCP from Amp config".to_string())
     }
 }
 
@@ -615,6 +717,29 @@ fn check_opencode_config_status(project_path: &str) -> bool {
     }
 }
 
+fn check_amp_config_status() -> bool {
+    if let Ok((config_path, _)) = client::amp_config_path() {
+        if config_path.exists() {
+            std::fs::read_to_string(config_path)
+                .map(|content| {
+                    serde_json::from_str::<serde_json::Value>(&content)
+                        .map(|config| {
+                            config
+                                .get("amp.mcpServers")
+                                .and_then(|mcp| mcp.get("schaltwerk"))
+                                .is_some()
+                        })
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false)
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
 fn check_mcp_configuration_status(project_path: &str, client: client::McpClient) -> bool {
     match client {
         client::McpClient::Claude => {
@@ -641,6 +766,7 @@ fn check_mcp_configuration_status(project_path: &str, client: client::McpClient)
             }
         }
         client::McpClient::OpenCode => check_opencode_config_status(project_path),
+        client::McpClient::Amp => check_amp_config_status(),
     }
 }
 
