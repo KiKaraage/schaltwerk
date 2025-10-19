@@ -2514,12 +2514,8 @@ impl SessionManager {
                 binary_paths.get(&agent_type).map(|s| s.as_str()),
             );
 
-            // Get MCP servers from parameter
-            let mcp_servers = amp_mcp_servers.unwrap_or(&HashMap::new()).clone();
-
             let config = crate::domains::agents::amp::AmpConfig {
                 binary_path: Some(binary_path.clone()),
-                mcp_servers,
             };
 
             let command = crate::domains::agents::amp::build_amp_command_with_config(

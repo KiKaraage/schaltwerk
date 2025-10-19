@@ -226,10 +226,6 @@ mod client {
             }
             McpClient::Codex => configure_mcp_codex(mcp_server_path),
             McpClient::OpenCode => configure_mcp_opencode(project_path, mcp_server_path),
-            McpClient::Amp => {
-                // Amp MCP configuration is handled through CLI commands, not file configuration
-                Ok("Amp MCP servers are configured via CLI commands. Use 'amp mcp add' to configure servers.".to_string())
-            }
         }
     }
 
@@ -321,10 +317,6 @@ mod client {
             }
             McpClient::Codex => remove_mcp_codex(),
             McpClient::OpenCode => remove_mcp_opencode(project_path),
-            McpClient::Amp => {
-                // Amp MCP configuration is handled through CLI commands, not file configuration
-                Ok("Amp MCP servers are managed via CLI commands. Use 'amp mcp remove' to remove servers.".to_string())
-            }
         }
     }
 
@@ -381,10 +373,6 @@ mod client {
                 "Add to opencode.json:\n{{\n  \"mcp\": {{\n    \"schaltwerk\": {{\n      \"type\": \"local\",\n      \"command\": [\"node\", \"{}\"],\n      \"enabled\": true\n    }}\n  }}\n}}",
                 mcp_server_path.replace('"', "\\\"")
             ),
-            McpClient::Amp => {
-                // Amp MCP configuration is handled through CLI commands
-                "Amp MCP servers are configured via CLI commands. Use 'amp mcp add <name> <url>' to configure servers.".to_string()
-            }
         }
     }
 
@@ -653,12 +641,6 @@ fn check_mcp_configuration_status(project_path: &str, client: client::McpClient)
             }
         }
         client::McpClient::OpenCode => check_opencode_config_status(project_path),
-        client::McpClient::Amp => {
-            // Amp MCP configuration is handled through Schaltwerk settings, not file-based
-            // For UI purposes, we could check if any MCP servers are configured in settings
-            // For now, return false as the UI will handle this differently
-            false
-        }
     }
 }
 
