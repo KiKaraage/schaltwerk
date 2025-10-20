@@ -5,8 +5,6 @@ use schaltwerk::services::ServiceHandles;
 use serde::Serialize;
 use tauri::State;
 
-
-
 #[tauri::command]
 pub async fn create_terminal(
     services: State<'_, ServiceHandles>,
@@ -159,41 +157,4 @@ pub async fn get_all_terminal_activity(
     services: State<'_, ServiceHandles>,
 ) -> Result<Vec<(String, u64)>, String> {
     services.terminals.get_all_terminal_activity().await
-}
-
-#[tauri::command]
-pub async fn register_session_terminals(
-    services: State<'_, ServiceHandles>,
-    project_id: String,
-    session_id: Option<String>,
-    terminal_ids: Vec<String>,
-) -> Result<(), String> {
-    services
-        .terminals
-        .register_session_terminals(project_id, session_id, terminal_ids)
-        .await
-}
-
-#[tauri::command]
-pub async fn suspend_session_terminals(
-    services: State<'_, ServiceHandles>,
-    project_id: String,
-    session_id: Option<String>,
-) -> Result<(), String> {
-    services
-        .terminals
-        .suspend_session_terminals(project_id, session_id)
-        .await
-}
-
-#[tauri::command]
-pub async fn resume_session_terminals(
-    services: State<'_, ServiceHandles>,
-    project_id: String,
-    session_id: Option<String>,
-) -> Result<(), String> {
-    services
-        .terminals
-        .resume_session_terminals(project_id, session_id)
-        .await
 }
